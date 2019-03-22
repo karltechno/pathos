@@ -1,0 +1,31 @@
+#pragma once
+#include <kt/Platform.h>
+#include <stdint.h>
+
+namespace app
+{
+
+struct WindowedApp;
+
+struct WindowHandle
+{
+	void* nwh;
+};
+
+struct WindowInitParams
+{
+	char const* m_name = nullptr;
+	
+	WindowedApp* m_app = nullptr;
+
+	uint32_t m_width = 0;
+	uint32_t m_height = 0;
+
+	bool m_windowed = false;
+};
+
+WindowHandle CreatePlatformWindow(WindowInitParams const& _params);
+
+void PumpMessageLoop(WindowHandle _hndl);
+
+}

@@ -1,0 +1,12 @@
+function(add_pathos_lib name sources)
+    message("Adding pathos engine lib: ${name}")
+    add_library(${name} STATIC ${sources})
+    target_link_libraries(${name} kt)
+    set_target_properties(${name} PROPERTIES FOLDER pathos_libs)
+endfunction()
+
+function(add_pathos_exe name sources)
+    message("Adding pathos exe: ${name}")
+    add_executable(${name} ${sources})
+    target_link_libraries(${name} kt)
+endfunction()
