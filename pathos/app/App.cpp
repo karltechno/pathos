@@ -5,15 +5,16 @@
 #include <kt/Macros.h>
 #include <kt/Timer.h>
 #include <kt/Logging.h>
+#include "gpu/d3d12/GPUDevice_D3D12.h"
 
 namespace app
 {
 
-WindowedApp::WindowedApp()
+GraphicsApp::GraphicsApp()
 {
 }
 
-void WindowedApp::Go(int _argc, char** _argv)
+void GraphicsApp::Go(int _argc, char** _argv)
 {
 	KT_UNUSED2(_argc, _argv);
 	
@@ -26,12 +27,15 @@ void WindowedApp::Go(int _argc, char** _argv)
 
 	m_window = CreatePlatformWindow(params);
 
-	if (!input::Init(m_window.nwh, [](void* _ctx, input::Event const& _ev) { ((WindowedApp*)_ctx)->HandleInputEvent(_ev); }, this))
+	if (!input::Init(m_window.nwh, [](void* _ctx, input::Event const& _ev) { ((GraphicsApp*)_ctx)->HandleInputEvent(_ev); }, this))
 	{
 		KT_ASSERT(false);
 		KT_LOG_ERROR("Failed to initialise input system, exiting.");
 		return;
 	}
+
+	gpu::Device_D3D12 device;
+	device.Init(m_window.nwh, true);
 
 	Setup();
 
@@ -54,12 +58,12 @@ void WindowedApp::Go(int _argc, char** _argv)
 	input::Shutdown();
 }
 
-void WindowedApp::RequestShutdown()
+void GraphicsApp::RequestShutdown()
 {
 	m_keepAlive = false;
 }
 
-void* WindowedApp::NativeWindowHandle() const
+void* GraphicsApp::NativeWindowHandle() const
 {
 	return m_window.nwh;
 }

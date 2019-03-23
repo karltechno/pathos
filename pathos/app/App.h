@@ -9,10 +9,10 @@ struct Event;
 namespace app
 {
 
-struct WindowedApp
+struct GraphicsApp
 {
-	WindowedApp();
-	virtual ~WindowedApp() {}
+	GraphicsApp();
+	virtual ~GraphicsApp() {}
 	
 	void Go(int _argc, char** _argv);
 	void RequestShutdown();

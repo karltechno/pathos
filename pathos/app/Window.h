@@ -5,7 +5,7 @@
 namespace app
 {
 
-struct WindowedApp;
+struct GraphicsApp;
 
 struct WindowHandle
 {
@@ -16,7 +16,7 @@ struct WindowInitParams
 {
 	char const* m_name = nullptr;
 	
-	WindowedApp* m_app = nullptr;
+	GraphicsApp* m_app = nullptr;
 
 	uint32_t m_width = 0;
 	uint32_t m_height = 0;
