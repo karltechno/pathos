@@ -12,7 +12,8 @@ if(WIN32)
 		"d3d12/CommandQueue.h" 
         "d3d12/CommandQueue.cpp"
         "d3d12/DescriptorHeap.cpp"
-		"d3d12/DescriptorHeap.h"                        
+		"d3d12/DescriptorHeap.h"   
+		"d3d12/D3D12_Types.h"                     
 	)
 
 endif()
@@ -20,5 +21,5 @@ endif()
 add_pathos_lib(gpu "${GPU_SOURCES}")
 
 if(WIN32)
-	target_link_libraries(gpu d3d12 dxgi)
+	target_link_libraries(gpu d3d12 dxgi dxguid)
 endif()

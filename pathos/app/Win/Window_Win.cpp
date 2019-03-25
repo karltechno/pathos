@@ -1,5 +1,6 @@
 #include <App/Window.h>
 #include <input/Win/Input_Win.h>
+#include <App/App.h>
 
 #include <kt/Macros.h>
 
@@ -27,7 +28,8 @@ static LRESULT CALLBACK App_WindowProc(HWND _hwnd, UINT _msg, WPARAM _wparam, LP
 
 		case WM_CLOSE:
 		{
-			// Todo:
+			app::GraphicsApp* app = (app::GraphicsApp*)::GetWindowLongPtrA(_hwnd, GWLP_USERDATA);
+			app->RequestShutdown();
 		} break;
 	}
 

@@ -16,8 +16,9 @@ static D3D12_COMMAND_LIST_TYPE FenceToQueueType(uint64_t _val)
 	return D3D12_COMMAND_LIST_TYPE(_val >> 56ull);
 }
 
-void CommandQueue_D3D12::Init(ID3D12Device* _dev, D3D12_COMMAND_LIST_TYPE _ty)
+void CommandQueue_D3D12::Init(ID3D12Device* _dev, CommandQueueManager_D3D12* _manager, D3D12_COMMAND_LIST_TYPE _ty)
 {
+	m_manager = _manager;
 	m_queueType = _ty;
 	m_nextFenceVal = ShiftFenceMask(_ty) + 1;
 	m_lastCompletedFenceVal = ShiftFenceMask(_ty);
@@ -48,19 +49,22 @@ void CommandQueue_D3D12::Shutdown()
 	if (m_waitEvent) { ::CloseHandle(m_waitEvent); m_waitEvent = INVALID_HANDLE_VALUE; }
 }
 
-void CommandQueue_D3D12::InsertWaitForFence(uint64_t _fenceVal)
+uint64_t CommandQueue_D3D12::InsertAndIncrementFence()
 {
-	D3D_CHECK(m_commandQueue->Wait(m_fence, _fenceVal));
+	D3D_CHECK(m_commandQueue->Signal(m_fence, m_nextFenceVal));
+	return m_nextFenceVal++;
 }
 
-void CommandQueue_D3D12::InsertWaitForOtherQueueFence(CommandQueue_D3D12& _other, uint64_t _fenceVal)
+void CommandQueue_D3D12::WaitForFenceGPU(uint64_t _fenceVal)
 {
-	D3D_CHECK(m_commandQueue->Wait(_other.D3DFence(), _fenceVal));
+	CommandQueue_D3D12& queue = m_manager->QueueByType(FenceToQueueType(_fenceVal)).D3DFence();
+	KT_ASSERT(&queue != this);
+	D3D_CHECK(m_commandQueue->Wait(queue.D3DFence(), _fenceVal));
 }
 
-void CommandQueue_D3D12::InsertWaitForOtherQueue(CommandQueue_D3D12& _other)
+void CommandQueue_D3D12::WaitForQueueGPU(CommandQueue_D3D12& _other)
 {
-	D3D_CHECK(m_commandQueue->Wait(_other.D3DFence(), _other.NextFenceValue()))
+	D3D_CHECK(m_commandQueue->Wait(_other.D3DFence(), _other.NextFenceValue() - 1u));
 }
 
 uint64_t CommandQueue_D3D12::ExecuteCommandLists(ID3D12CommandList** _lists, uint32_t _numLists)
@@ -72,7 +76,7 @@ uint64_t CommandQueue_D3D12::ExecuteCommandLists(ID3D12CommandList** _lists, uin
 	}
 	m_commandQueue->ExecuteCommandLists(_numLists, _lists);
 	m_commandQueue->Signal(m_fence, m_nextFenceVal);
-	++m_nextFenceVal;
+	return ++m_nextFenceVal;
 }
 
 bool CommandQueue_D3D12::HasFenceCompleted(uint64_t _fenceVal)
@@ -112,16 +116,26 @@ void CommandQueue_D3D12::WaitForFenceBlockingCPU(uint64_t _fenceVal)
 	}
 }
 
+void CommandQueue_D3D12::FlushBlockingCPU()
+{
+	WaitForFenceBlockingCPU(m_nextFenceVal - 1);
+}
+
 ID3D12Fence* CommandQueue_D3D12::D3DFence()
 {
 	return m_fence;
 }
 
+ID3D12CommandQueue* CommandQueue_D3D12::D3DCommandQueue()
+{
+	return m_commandQueue;
+}
+
 void CommandQueueManager_D3D12::Init(ID3D12Device* _dev)
 {
-	m_computeQueue.Init(_dev, D3D12_COMMAND_LIST_TYPE_COMPUTE);
-	m_graphicsQueue.Init(_dev, D3D12_COMMAND_LIST_TYPE_DIRECT);
-	m_copyQueue.Init(_dev, D3D12_COMMAND_LIST_TYPE_COPY);
+	m_computeQueue.Init(_dev, this, D3D12_COMMAND_LIST_TYPE_COMPUTE);
+	m_graphicsQueue.Init(_dev, this, D3D12_COMMAND_LIST_TYPE_DIRECT);
+	m_copyQueue.Init(_dev, this, D3D12_COMMAND_LIST_TYPE_COPY);
 }
 
 void CommandQueueManager_D3D12::Shutdown()
@@ -145,9 +159,14 @@ CommandQueue_D3D12& CommandQueueManager_D3D12::QueueByType(D3D12_COMMAND_LIST_TY
 	KT_UNREACHABLE;
 }
 
-bool CommandQueueManager_D3D12::HasFenceCompleted(uint64_t _fence)
+bool CommandQueueManager_D3D12::HasFenceCompleted(uint64_t _fenceVal)
 {
-	return QueueByType(FenceToQueueType(_fence)).HasFenceCompleted(_fence);
+	return QueueByType(FenceToQueueType(_fenceVal)).HasFenceCompleted(_fenceVal);
+}
+
+void CommandQueueManager_D3D12::WaitForFenceBlockingCPU(uint64_t _fenceVal)
+{
+	return QueueByType(FenceToQueueType(_fenceVal)).WaitForFenceBlockingCPU(_fenceVal);
 }
 
 void CommandQueueManager_D3D12::FlushAllBlockingCPU()

@@ -6,6 +6,8 @@ namespace gpu
 
 struct Fence { uint64_t val; };
 
-struct Resource;
+struct GPUPtr { uint64_t ptr; };
+struct CPUPtr { uintptr_t ptr; };
+
 
 }

@@ -8,12 +8,13 @@ namespace gpu
 class CommandQueue_D3D12
 {
 public:
-	void Init(ID3D12Device* _dev, D3D12_COMMAND_LIST_TYPE _ty);
+	void Init(ID3D12Device* _dev, CommandQueueManager_D3D12* _manager, D3D12_COMMAND_LIST_TYPE _ty);
 	void Shutdown();
 
-	void InsertWaitForFence(uint64_t _fenceValVal);
-	void InsertWaitForOtherQueueFence(CommandQueue_D3D12& _other, uint64_t _fenceVal);
-	void InsertWaitForOtherQueue(CommandQueue_D3D12& _other);
+	uint64_t InsertAndIncrementFence();
+
+	void WaitForFenceGPU(uint64_t _fenceVal);
+	void WaitForQueueGPU(CommandQueue_D3D12& _other);
 
 	uint64_t ExecuteCommandLists(ID3D12CommandList** _lists, uint32_t _numLists);
 
@@ -26,8 +27,11 @@ public:
 	void FlushBlockingCPU();
 
 	ID3D12Fence* D3DFence();
+	ID3D12CommandQueue* D3DCommandQueue();
 
 private:
+	CommandQueueManager_D3D12* m_manager = nullptr;
+
 	ID3D12CommandQueue* m_commandQueue = nullptr;
 	D3D12_COMMAND_LIST_TYPE m_queueType;
 
@@ -50,7 +54,8 @@ public:
 
 	CommandQueue_D3D12& QueueByType(D3D12_COMMAND_LIST_TYPE _ty);
 
-	bool HasFenceCompleted(uint64_t _fence);
+	bool HasFenceCompleted(uint64_t _fenceVal);
+	void WaitForFenceBlockingCPU(uint64_t _fenceVal);
 	void FlushAllBlockingCPU();
 
 private:

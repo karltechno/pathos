@@ -1,14 +1,12 @@
-#include <d3d12.h>
-#include <guiddef.h>
-
 #include <string.h>
 
 #include <kt/Macros.h>
 
-constexpr GUID c_d3dDebugObjectName = { 0x429b8c22, 0x9188, 0x4b0c, { 0x87, 0x42, 0xac, 0xb0, 0xbf, 0x85, 0xc2, 0x00 } };
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 
-#define D3D_SET_DEBUG_NAME(_obj, _name) \
-	(_obj)->SetPrivateData(c_d3dDebugObjectName, UINT(strlen(_name)), _name)
+#include <d3d12.h>
+#include <guiddef.h>
 
 #if KT_DEBUG
 	#define D3D_CHECK(_expr) \
@@ -19,6 +17,13 @@ constexpr GUID c_d3dDebugObjectName = { 0x429b8c22, 0x9188, 0x4b0c, { 0x87, 0x42
 #else
 	#define D3D_CHECK(_expr) _expr
 #endif
+
+#define D3D_SET_DEBUG_NAME(_obj, _name) \
+	KT_MACRO_BLOCK_BEGIN \
+		wchar_t buff[256]; \
+		::MultiByteToWideChar(CP_UTF8, 0, _name, -1, buff, KT_ARRAY_COUNT(buff)); \
+		D3D_CHECK((_obj)->SetName(buff)); \
+	KT_MACRO_BLOCK_END 
 
 namespace gpu
 {

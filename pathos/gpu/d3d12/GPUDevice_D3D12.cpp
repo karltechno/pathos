@@ -10,6 +10,8 @@
 
 #include <d3d12.h>
 #include <dxgi1_6.h>
+#include <dxgidebug.h>
+
 
 namespace gpu
 {
@@ -48,18 +50,17 @@ static IDXGIAdapter4* GetBestAdaptor(IDXGIFactory4* _dxgiFactory)
 
 bool Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 {
-	KT_UNUSED(_nativeWindowHandle);
+	m_withDebugLayer = _useDebugLayer;
 
 	if (_useDebugLayer)
 	{
-		HRESULT hr;
 		ID3D12Debug* d3dDebug = nullptr;
-		hr = ::D3D12GetDebugInterface(__uuidof(ID3D12Debug), (void**)&d3dDebug);
+		D3D_CHECK(::D3D12GetDebugInterface(__uuidof(ID3D12Debug), (void**)&d3dDebug));
 		KT_ASSERT(d3dDebug);
 		d3dDebug->EnableDebugLayer();
 	}
 
-	IDXGIFactory4* dxgiFactory = nullptr;
+
 	UINT createFlags = 0;
 
 	if (_useDebugLayer)
@@ -68,10 +69,12 @@ bool Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 
 	}
 
+	IDXGIFactory4* dxgiFactory = nullptr;
 	D3D_CHECK(CreateDXGIFactory2(createFlags, __uuidof(IDXGIFactory4), (void**)&dxgiFactory));
-	KT_SCOPE_EXIT(dxgiFactory->Release());
+	KT_SCOPE_EXIT(SafeReleaseDX(dxgiFactory));
 
 	IDXGIAdapter4* bestAdaptor = GetBestAdaptor(dxgiFactory);
+	KT_SCOPE_EXIT(SafeReleaseDX(bestAdaptor));
 	if (!bestAdaptor)
 	{
 		KT_LOG_ERROR("Failed to find appropriate IDXGIAdapator! Can't init d3d12.");
@@ -90,14 +93,13 @@ bool Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 
 	KT_LOG_INFO("Using graphics adaptor: %s, Vendor ID: %u, Device ID: %u", nameUtf8, desc.VendorId, desc.DeviceId);
 
-	HRESULT hr = ::D3D12CreateDevice(bestAdaptor, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_device));
+	HRESULT const hr = ::D3D12CreateDevice(bestAdaptor, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_device));
+
 	if (!SUCCEEDED(hr))
 	{
 		KT_LOG_ERROR("D3D12CreateDevice failed! (HRESULT: %#x)", hr);
 		return false;
 	}
-
-	SafeReleaseDX(bestAdaptor);
 
 	if (_useDebugLayer)
 	{
@@ -117,8 +119,6 @@ bool Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 
 	// Swapchain
 	{
-		D3D_CHECK(CreateDXGIFactory2(createFlags, __uuidof(IDXGIFactory4), (void**)&dxgiFactory));
-
 		RECT r;
 		::GetClientRect(HWND(_nativeWindowHandle), &r);
 
@@ -137,8 +137,33 @@ bool Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 		swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
 
-		dxgiFactory->CreateSwapChainForHwnd(m_device, HWND(_nativeWindowHandle), &swapChainDesc, nullptr, nullptr, &m_swapChain);
-		ID3D12GraphicsCommandList *l;
+		D3D_CHECK(dxgiFactory->CreateSwapChainForHwnd(m_commandQueueManager.GraphicsQueue().D3DCommandQueue(), HWND(_nativeWindowHandle), &swapChainDesc, nullptr, nullptr, &m_swapChain));
+	}
+
+	// Heaps
+	{
+		m_rtvHeap.Init(m_device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 64, false, "Main RTV Heap");
+		m_dsvHeap.Init(m_device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 64, false, "Main DSV Heap");
+
+		m_stagingHeap.Init(m_device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1024, false, "CBV/SRV/UAV Staging Heap");
+
+		uint32_t heapNum = 1;
+
+		for (LinearDescriptorHeap_D3D12& heap : m_frameLinearHeaps)
+		{
+			kt::String64 str;
+			str.AppendFmt("CBV/SRV/UAV Linear Heap %u", heapNum++);
+			heap.Init(m_device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1024, true, str.Data());
+		}
+	}
+
+	{
+		for (uint32_t i = 0; i < c_d3dBufferedFrames; ++i)
+		{
+			D3D_CHECK(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_backBuffers[i].m_resource)));
+			m_backBuffers[i].m_rtv = m_rtvHeap.AllocOne();
+			m_device->CreateRenderTargetView(m_backBuffers[i].m_resource, nullptr, D3D12_CPU_DESCRIPTOR_HANDLE{ m_backBuffers[i].m_rtv.ptr });
+		}
 	}
 
 	return true;
@@ -150,6 +175,35 @@ void Device_D3D12::Shutdown()
 	SafeReleaseDX(m_swapChain);
 	
 	m_commandQueueManager.Shutdown();
+
+	m_rtvHeap.Shutdown();
+	m_dsvHeap.Shutdown();
+	m_stagingHeap.Shutdown();
+
+	for (LinearDescriptorHeap_D3D12& heap : m_frameLinearHeaps)
+	{
+		heap.Shutdown();
+	}
+
+	for (RenderTarget_D3D12& rt : m_backBuffers)
+	{
+		SafeReleaseDX(rt.m_resource);
+		if (rt.m_rtv.ptr)
+		{
+			m_rtvHeap.Free(rt.m_rtv);
+		}
+	}
+}
+
+void Device_D3D12::Present()
+{
+	// Todo: vsync
+	D3D_CHECK(m_swapChain->Present(0, 0));
+
+	m_frameFences[m_cpuFrameIdx] = m_commandQueueManager.GraphicsQueue().InsertAndIncrementFence();
+
+	m_cpuFrameIdx = (m_cpuFrameIdx + 1) % gpu::c_d3dBufferedFrames;
+	m_commandQueueManager.WaitForFenceBlockingCPU(m_frameFences[m_cpuFrameIdx]);
 }
 
 }

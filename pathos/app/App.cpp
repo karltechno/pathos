@@ -54,6 +54,7 @@ void GraphicsApp::Go(int _argc, char** _argv)
 	} while (m_keepAlive);
 
 	Shutdown();
+	device.Shutdown();
 
 	input::Shutdown();
 }
