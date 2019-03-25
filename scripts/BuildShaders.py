@@ -23,6 +23,9 @@ def log_verbose(msg):
     if do_log_verbose:
         log(msg)
 
+def hash_path_for_shader(shader_path):
+    return shader_path + '.hash'
+
 def calc_shader_digest(shader_path, shader_src_dir, include_hashes):
     hasher = hashlib.sha256()
 
@@ -52,7 +55,7 @@ def calc_shader_digest(shader_path, shader_src_dir, include_hashes):
     return hasher.digest()
 
 def determine_rebuild_shader(shader_path, shader_base_dir, include_hashes, shaders_to_rebuild):
-    hash_file_path = shader_path + '.hash'
+    hash_file_path = hash_path_for_shader(shader_path) 
 
     old_hash = ''
 
@@ -62,7 +65,6 @@ def determine_rebuild_shader(shader_path, shader_base_dir, include_hashes, shade
             old_hash = binascii.a2b_hex(old_hash_hex)
     except:
         log("No hash file found for shader {}".format(shader_path))
-        shaders_to_rebuild.append(shader_path)
 
     new_hash = calc_shader_digest(shader_path, shader_base_dir, include_hashes)
     
@@ -94,6 +96,11 @@ def get_shader_profile_arg(shader_path):
         return '-Tcs_6_0'
 
     raise ValueError('Unexpected shader extension {}'.format(ext))
+
+def invalidate_shader_hash(shader_path):
+    path = hash_path_for_shader(shader_path)
+    if os.path.exists(path):
+        os.remove(path)
 
 def main():
     arsparser = argparse.ArgumentParser(description='Build shaders.')
@@ -129,6 +136,7 @@ def main():
         proc_call = subprocess.run(dxc_args, stderr=subprocess.STDOUT)
         if not proc_call.returncode == 0:
             log('DXC Failed (return code: {})'.format(proc_call.returncode))
+            invalidate_shader_hash(shader)
         else:
             num_rebuilt += 1
 
