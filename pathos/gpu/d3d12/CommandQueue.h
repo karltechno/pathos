@@ -1,13 +1,46 @@
 #pragma once
+#include <kt/Array.h>
+#include <kt/Macros.h>
+
 #include <d3d12.h>
 #include <stdint.h>
 
 namespace gpu
 {
 
+class CommandQueueManager_D3D12;
+
+class CommandAllocatorPool_D3D12
+{
+	KT_NO_COPY(CommandAllocatorPool_D3D12);
+public:
+	CommandAllocatorPool_D3D12() = default;
+
+	void Init(ID3D12Device* _dev, D3D12_COMMAND_LIST_TYPE _ty);
+	void Shutdown();
+
+	ID3D12CommandAllocator* AcquireAllocator(uint64_t _curFenceVal);
+	void ReleaseAllocator(ID3D12CommandAllocator* _allocator, uint64_t _fenceVal);
+
+private:
+	struct AllocatorAndFence
+	{
+		ID3D12CommandAllocator* m_allocator;
+		uint64_t m_fenceVal;
+	};
+
+	ID3D12Device* m_device = nullptr;
+	D3D12_COMMAND_LIST_TYPE m_type;
+
+	kt::InplaceArray<AllocatorAndFence, 32> m_pool;
+};
+
 class CommandQueue_D3D12
 {
+	KT_NO_COPY(CommandQueue_D3D12);
 public:
+	CommandQueue_D3D12() = default;
+
 	void Init(ID3D12Device* _dev, CommandQueueManager_D3D12* _manager, D3D12_COMMAND_LIST_TYPE _ty);
 	void Shutdown();
 
@@ -17,6 +50,9 @@ public:
 	void WaitForQueueGPU(CommandQueue_D3D12& _other);
 
 	uint64_t ExecuteCommandLists(ID3D12CommandList** _lists, uint32_t _numLists);
+
+	ID3D12CommandAllocator* AcquireAllocator();
+	void ReleaseAllocator(ID3D12CommandAllocator* _allocator, uint64_t _fenceVal);
 
 	bool HasFenceCompleted(uint64_t _fenceVal);
 
@@ -30,6 +66,8 @@ public:
 	ID3D12CommandQueue* D3DCommandQueue();
 
 private:
+	CommandAllocatorPool_D3D12 m_allocatorPool;
+
 	CommandQueueManager_D3D12* m_manager = nullptr;
 
 	ID3D12CommandQueue* m_commandQueue = nullptr;
@@ -44,7 +82,10 @@ private:
 
 class CommandQueueManager_D3D12
 {
+	KT_NO_COPY(CommandQueueManager_D3D12);
 public:
+	CommandQueueManager_D3D12() = default;
+
 	void Init(ID3D12Device* _dev);
 	void Shutdown();
 

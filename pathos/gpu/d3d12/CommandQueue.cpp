@@ -18,6 +18,8 @@ static D3D12_COMMAND_LIST_TYPE FenceToQueueType(uint64_t _val)
 
 void CommandQueue_D3D12::Init(ID3D12Device* _dev, CommandQueueManager_D3D12* _manager, D3D12_COMMAND_LIST_TYPE _ty)
 {
+	m_allocatorPool.Init(_dev, _ty);
+
 	m_manager = _manager;
 	m_queueType = _ty;
 	m_nextFenceVal = ShiftFenceMask(_ty) + 1;
@@ -43,6 +45,8 @@ void CommandQueue_D3D12::Init(ID3D12Device* _dev, CommandQueueManager_D3D12* _ma
 
 void CommandQueue_D3D12::Shutdown()
 {
+	m_allocatorPool.Shutdown();
+
 	SafeReleaseDX(m_commandQueue);
 	SafeReleaseDX(m_fence);
 
@@ -57,7 +61,7 @@ uint64_t CommandQueue_D3D12::InsertAndIncrementFence()
 
 void CommandQueue_D3D12::WaitForFenceGPU(uint64_t _fenceVal)
 {
-	CommandQueue_D3D12& queue = m_manager->QueueByType(FenceToQueueType(_fenceVal)).D3DFence();
+	CommandQueue_D3D12& queue = m_manager->QueueByType(FenceToQueueType(_fenceVal));
 	KT_ASSERT(&queue != this);
 	D3D_CHECK(m_commandQueue->Wait(queue.D3DFence(), _fenceVal));
 }
@@ -77,6 +81,16 @@ uint64_t CommandQueue_D3D12::ExecuteCommandLists(ID3D12CommandList** _lists, uin
 	m_commandQueue->ExecuteCommandLists(_numLists, _lists);
 	m_commandQueue->Signal(m_fence, m_nextFenceVal);
 	return ++m_nextFenceVal;
+}
+
+ID3D12CommandAllocator* CommandQueue_D3D12::AcquireAllocator()
+{
+	return m_allocatorPool.AcquireAllocator(CurrentFenceValue());
+}
+
+void CommandQueue_D3D12::ReleaseAllocator(ID3D12CommandAllocator* _allocator, uint64_t _fenceVal)
+{
+	m_allocatorPool.ReleaseAllocator(_allocator, _fenceVal);
 }
 
 bool CommandQueue_D3D12::HasFenceCompleted(uint64_t _fenceVal)
@@ -174,6 +188,62 @@ void CommandQueueManager_D3D12::FlushAllBlockingCPU()
 	m_copyQueue.FlushBlockingCPU();
 	m_computeQueue.FlushBlockingCPU();
 	m_graphicsQueue.FlushBlockingCPU();
+}
+
+
+void CommandAllocatorPool_D3D12::Init(ID3D12Device* _dev, D3D12_COMMAND_LIST_TYPE _ty)
+{
+	m_device = _dev;
+	m_type = _ty;
+}
+
+
+void CommandAllocatorPool_D3D12::Shutdown()
+{
+	for (AllocatorAndFence& allocator : m_pool)
+	{
+		SafeReleaseDX(allocator.m_allocator);
+	}
+	m_pool.ClearAndFree();
+	m_device = nullptr;
+}
+
+ID3D12CommandAllocator* CommandAllocatorPool_D3D12::AcquireAllocator(uint64_t _curFenceVal)
+{
+
+	for (uint32_t i = 0; i < m_pool.Size(); ++i)
+	{
+		AllocatorAndFence& entry = m_pool[i];
+
+		if (entry.m_fenceVal <= _curFenceVal)
+		{
+			ID3D12CommandAllocator* allocator = entry.m_allocator;
+			m_pool.Erase(i);
+			D3D_CHECK(allocator->Reset());
+			return allocator;
+		}
+	}
+
+	ID3D12CommandAllocator* allocator = nullptr;
+
+	// Make a new one.
+	D3D_CHECK(m_device->CreateCommandAllocator(m_type, IID_PPV_ARGS(&allocator)));
+	D3D_CHECK(allocator->Reset());
+
+	return allocator;
+}
+
+void CommandAllocatorPool_D3D12::ReleaseAllocator(ID3D12CommandAllocator* _allocator, uint64_t _fenceVal)
+{
+#if KT_DEBUG
+	for (AllocatorAndFence const& entry : m_pool)
+	{
+		KT_ASSERT(entry.m_allocator != _allocator);
+	}
+#endif
+	KT_ASSERT(FenceToQueueType(_fenceVal) == m_type);
+
+	m_pool.PushBack(AllocatorAndFence{ _allocator, _fenceVal });
 }
 
 }

@@ -195,15 +195,47 @@ void Device_D3D12::Shutdown()
 	}
 }
 
+void Device_D3D12::TestOneFrame()
+{
+	ID3D12CommandAllocator* allocator = m_commandQueueManager.GraphicsQueue().AcquireAllocator();
+	ID3D12CommandList* list;
+	D3D_CHECK(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&list)));
+	ID3D12GraphicsCommandList* gfxList = (ID3D12GraphicsCommandList*)list;
+
+	{
+		D3D12_RESOURCE_BARRIER barrier = {};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier.Transition.pResource = m_backBuffers[m_cpuFrameIdx].m_resource;
+		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+		gfxList->ResourceBarrier(1, &barrier);
+	}
+
+	FLOAT rgba[4] = { 0.0f, 1.0f, 0.0f, 1.0f };
+	gfxList->ClearRenderTargetView(D3D12_CPU_DESCRIPTOR_HANDLE{ m_backBuffers[m_cpuFrameIdx].m_rtv.ptr }, rgba, 0, nullptr);
+	
+	{
+		D3D12_RESOURCE_BARRIER barrier = {};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier.Transition.pResource = m_backBuffers[m_cpuFrameIdx].m_resource;
+		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+		gfxList->ResourceBarrier(1, &barrier);
+	}
+
+	uint64_t const fence = m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(&list, 1);
+	m_commandQueueManager.GraphicsQueue().ReleaseAllocator(allocator, fence);
+	gfxList->Release();
+	
+	Present();
+}
+
 void Device_D3D12::Present()
 {
 	// Todo: vsync
 	D3D_CHECK(m_swapChain->Present(0, 0));
 
-	m_frameFences[m_cpuFrameIdx] = m_commandQueueManager.GraphicsQueue().InsertAndIncrementFence();
-
 	m_cpuFrameIdx = (m_cpuFrameIdx + 1) % gpu::c_d3dBufferedFrames;
-	m_commandQueueManager.WaitForFenceBlockingCPU(m_frameFences[m_cpuFrameIdx]);
 }
 
 }

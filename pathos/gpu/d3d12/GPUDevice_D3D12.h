@@ -24,6 +24,8 @@ public:
 
 	CommandQueueManager_D3D12& CommandQueueManager() { return m_commandQueueManager; }
 
+	void TestOneFrame();
+
 	void Present();
 
 private:
@@ -41,8 +43,6 @@ private:
 	LinearDescriptorHeap_D3D12 m_frameLinearHeaps[c_d3dBufferedFrames];
 
 	RenderTarget_D3D12 m_backBuffers[c_d3dBufferedFrames];
-
-	uint64_t m_frameFences[c_d3dBufferedFrames] = {};
 
 	uint32_t m_cpuFrameIdx = 0;
 
