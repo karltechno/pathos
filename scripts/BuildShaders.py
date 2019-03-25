@@ -5,10 +5,12 @@ import os
 import re
 import argparse
 import binascii
+import subprocess
 
 compiled_shader_extensions = ['.vertex', '.pixel', '.compute']
 
 do_log_verbose = False
+force_rebuild = False
 
 # todo: relative/system.
 # https://www.wihlidal.com/blog/pipeline/2018-10-04-parsing-shader-includes/
@@ -20,7 +22,6 @@ def log(msg):
 def log_verbose(msg):
     if do_log_verbose:
         log(msg)
-
 
 def calc_shader_digest(shader_path, shader_src_dir, include_hashes):
     hasher = hashlib.sha256()
@@ -50,7 +51,7 @@ def calc_shader_digest(shader_path, shader_src_dir, include_hashes):
                    
     return hasher.digest()
 
-def handle_shader(shader_path, shader_base_dir, include_hashes, shaders_to_rebuild):
+def determine_rebuild_shader(shader_path, shader_base_dir, include_hashes, shaders_to_rebuild):
     hash_file_path = shader_path + '.hash'
 
     old_hash = ''
@@ -65,7 +66,7 @@ def handle_shader(shader_path, shader_base_dir, include_hashes, shaders_to_rebui
 
     new_hash = calc_shader_digest(shader_path, shader_base_dir, include_hashes)
     
-    if old_hash != new_hash:
+    if old_hash != new_hash or force_rebuild:
         log("Shader hash for {} changed.".format(shader_path))
         shaders_to_rebuild.append(shader_path)
         with open(hash_file_path, 'w') as hash_file:
@@ -81,28 +82,52 @@ def parse_shader_tree(shader_src_dir, shaders_to_rebuild):
             path_to_shader = os.path.join(dirName, filename)
             if os.path.splitext(filename)[1] in compiled_shader_extensions:
                 log_verbose('Checking shader {}'.format(path_to_shader))
-                handle_shader(path_to_shader, shader_src_dir, include_hashes, shaders_to_rebuild)
+                determine_rebuild_shader(path_to_shader, shader_src_dir, include_hashes, shaders_to_rebuild)
         
+def get_shader_profile_arg(shader_path):
+    ext = os.path.splitext(shader_path)[1].lower()
+    if ext == '.vertex':
+        return '-Tvs_6_0'
+    elif ext == '.pixel':
+        return '-Tps_6_0'
+    elif ext == '.compute':
+        return '-Tcs_6_0'
+
+    raise ValueError('Unexpected shader extension {}'.format(ext))
 
 def main():
     arsparser = argparse.ArgumentParser(description='Build shaders.')
     arsparser.add_argument('--verbose', action='store_true')
+    arsparser.add_argument('--force-rebuild', action='store_true')
+
     args = arsparser.parse_args()
 
     global do_log_verbose
+    global force_rebuild
     do_log_verbose = args.verbose
+    force_rebuild = args.force_rebuild
 
     script_dir = os.path.dirname(__file__) 
     pathos_base = os.path.normpath(os.path.join(script_dir, '../'))
-    shader_src_dir = os.path.join(pathos_base, 'assets/shaders/')
-    shader_out_dir = os.path.join(pathos_base, 'run_tree/shaders/')
+    shader_src_dir = os.path.normpath(os.path.join(pathos_base, 'assets/shaders/'))
+    shader_out_dir = os.path.normpath(os.path.join(pathos_base, 'run_tree/shaders/'))
+
+    dxc_exe_path = os.path.normpath(os.path.join(pathos_base, 'tools/dxc.exe'))
 
     shaders_to_rebuild = []
     parse_shader_tree(shader_src_dir, shaders_to_rebuild)
-
     for shader in shaders_to_rebuild:
-        log("Rebuilding shader: {}".format(shader))
+        shader_out_path = os.path.abspath(os.path.join(shader_out_dir, os.path.basename(shader))) + '.cso"'
+        log("\nRebuilding shader: {}".format(shader))
+        # requires python 3.5
 
+        dxc_args = [dxc_exe_path, get_shader_profile_arg(shader), '-Emain', '-Fo{}'.format(shader_out_path), os.path.abspath(shader)]
+        log('Running DXC: ' + ''.join('{} '.format(v) for v in dxc_args))
+        proc_call = subprocess.run(dxc_args, stderr=subprocess.STDOUT)
+        if not proc_call.returncode == 0:
+            log('DXC Failed (return {})'.format(proc_call.returncode))
+
+    print('\nRebuilt {} shaders.'.format(len(shaders_to_rebuild)))
 
 
 if __name__ == "__main__":
