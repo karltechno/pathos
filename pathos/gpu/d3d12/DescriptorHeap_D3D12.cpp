@@ -1,7 +1,7 @@
 #include <kt/Macros.h>
 
-#include "DescriptorHeap.h"
-#include "D3D12_Utils.h"
+#include "DescriptorHeap_D3D12.h"
+#include "Utils_D3D12.h"
 
 namespace gpu
 {

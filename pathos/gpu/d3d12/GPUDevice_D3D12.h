@@ -3,9 +3,9 @@
 
 #include <kt/Strings.h>
 
-#include "CommandQueue.h"
-#include "DescriptorHeap.h"
-#include "D3D12_Types.h"
+#include "CommandQueue_D3D12.h"
+#include "DescriptorHeap_D3D12.h"
+#include "Types_D3D12.h"
 
 struct ID3D12Device2;
 struct IDXGISwapChain4;

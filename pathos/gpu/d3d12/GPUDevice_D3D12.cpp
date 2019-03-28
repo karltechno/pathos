@@ -1,5 +1,5 @@
 #include "GPUDevice_D3D12.h"
-#include "D3D12_Utils.h"
+#include "Utils_D3D12.h"
 
 #include <kt/Macros.h>
 #include <kt/Logging.h>

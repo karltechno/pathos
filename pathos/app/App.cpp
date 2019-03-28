@@ -48,6 +48,10 @@ void GraphicsApp::Go(int _argc, char** _argv)
 		PumpMessageLoop(m_window);
 		input::Tick(dt);
 		Tick(dt);
+
+		// HACK
+		device.TestOneFrame();
+
 		kt::TimePoint const now = kt::TimePoint::Now();
 		tickTime = now - lastFrameStart;
 		lastFrameStart = now;

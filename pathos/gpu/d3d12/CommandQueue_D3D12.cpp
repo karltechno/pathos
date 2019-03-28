@@ -1,5 +1,5 @@
-#include "CommandQueue.h"
-#include "D3D12_Utils.h"
+#include "CommandQueue_D3D12.h"
+#include "Utils_D3D12.h"
 
 #include <kt/Strings.h>
 

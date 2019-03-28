@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.8)
+
 set(GPU_SOURCES
     "GPUDevice.cpp"
     "GPUDevice.h"
@@ -5,17 +7,16 @@ set(GPU_SOURCES
 )
 
 if(WIN32)
-    list(APPEND GPU_SOURCES 
+    list(APPEND  GPU_SOURCES
 		"d3d12/GPUDevice_D3D12.h" 
 		"d3d12/GPUDevice_D3D12.cpp" 
-		"d3d12/D3D12_Utils.h" 
-		"d3d12/CommandQueue.h" 
-        "d3d12/CommandQueue.cpp"
-        "d3d12/DescriptorHeap.cpp"
-		"d3d12/DescriptorHeap.h"   
-		"d3d12/D3D12_Types.h"                     
+		"d3d12/Utils_D3D12.h" 
+		"d3d12/CommandQueue_D3D12.h" 
+        "d3d12/CommandQueue_D3D12.cpp"
+        "d3d12/DescriptorHeap_D3D12.cpp"
+		"d3d12/DescriptorHeap_D3D12.h"   
+		"d3d12/Types_D3D12.h"                     
 	)
-
 endif()
 
 add_pathos_lib(gpu "${GPU_SOURCES}")
