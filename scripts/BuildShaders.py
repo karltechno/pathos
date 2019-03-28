@@ -140,7 +140,7 @@ def main():
         else:
             num_rebuilt += 1
 
-    print('\nRebuilt {} shaders ({} failed)'.format(num_rebuilt, len(shaders_to_rebuild) - num_rebuilt))
+    log('\nRebuilt {} shaders ({} failed)'.format(num_rebuilt, len(shaders_to_rebuild) - num_rebuilt))
 
 
 if __name__ == "__main__":
