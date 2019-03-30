@@ -28,8 +28,13 @@ public:
 
 	void Present();
 
+	void DebugCreateGraphicsPSO();
+
 private:
 	kt::String256 m_deviceName;
+
+	ID3D12PipelineState* m_debugPsoTest = nullptr;
+	ID3D12RootSignature* m_debugRootSig = nullptr;
 
 	ID3D12Device2* m_device = nullptr;
 	IDXGISwapChain1* m_swapChain = nullptr;

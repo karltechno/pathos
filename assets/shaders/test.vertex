@@ -1,7 +1,6 @@
 #include "lib/RootSigs.hlsli"
 #include "lib/ShaderOutput.hlsli"
 
-[RootSignature(PATHOS_GFX_RSIG)]
 VSOut_PosUV main(uint vid : SV_VertexID)
 {
     VSOut_PosUV ret; 
