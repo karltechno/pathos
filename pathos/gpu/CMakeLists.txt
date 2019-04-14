@@ -2,10 +2,10 @@ cmake_minimum_required(VERSION 3.8)
 
 set(GPU_SOURCES
 	"CommandContext.h"
-	"CommandContext.cpp"
 	"GPUDevice.h"
 	"HandleRef.h"
 	"Types.h"
+	"Types.cpp"
 	"FormatConversion.h"
 )
 

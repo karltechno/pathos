@@ -52,7 +52,7 @@ struct AllocatedObjectBase_D3D12
 
 struct AllocatedBuffer_D3D12 : AllocatedObjectBase_D3D12
 {
-	bool Init(BufferDesc const& _desc, char const* _debugName);
+	bool Init(BufferDesc const& _desc, char const* _debugName = nullptr);
 	void Destroy();
 
 	gpu::BufferDesc m_desc;
@@ -82,6 +82,7 @@ struct AllocatedBuffer_D3D12 : AllocatedObjectBase_D3D12
 
 struct AllocatedTexture_D3D12 : AllocatedObjectBase_D3D12
 {
+	bool Init(TextureDesc const& _desc, D3D12_RESOURCE_STATES _initialState = D3D12_RESOURCE_STATE_COMMON, char const* _debugName = nullptr);
 	void InitFromBackbuffer(ID3D12Resource* _res, gpu::Format _format, uint32_t _height, uint32_t _width);
 	void Destroy();
 
@@ -196,6 +197,8 @@ struct Device_D3D12
 	IDXGISwapChain1* m_swapChain = nullptr;
 	
 	gpu::TextureRef m_backBuffers[c_d3dBufferedFrames];
+
+	gpu::TextureRef m_backbufferDepth;
 
 	CommandQueueManager_D3D12 m_commandQueueManager;
 

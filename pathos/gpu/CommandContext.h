@@ -6,10 +6,6 @@
 namespace gpu
 {
 
-#if KT_PLATFORM_WINDOWS // TODO: Replace with D3D12 macro.
-class CommandContext_D3D12;
-using CommandContextImpl = CommandContext_D3D12;
-#endif
 
 enum class CommandListFlags : uint32_t
 {
@@ -24,42 +20,35 @@ enum class CommandListFlags : uint32_t
 
 KT_ENUM_CLASS_FLAG_OPERATORS(CommandListFlags);
 
-struct CommandContext
+namespace cmd
 {
-	KT_NO_COPY(CommandContext);
 
-	CommandContext(CommandListFlags _type, CommandContextImpl* _impl);
-	~CommandContext();
+#if KT_PLATFORM_WINDOWS // TODO: Replace with D3D12 macro.
+struct CommandContext_D3D12;
+using Context = CommandContext_D3D12;
+#endif
 
-	CommandContext(CommandContext&& _other)
-		: m_impl(_other.m_impl)
-		, m_typeFlags(_other.m_typeFlags)
-	{
-		_other.m_impl = nullptr;
-	}
+void End(Context* _ctx);
 
-	CommandContext& operator=(CommandContext&& _other)
-	{
-		m_impl = _other.m_impl;
-		m_typeFlags = _other.m_typeFlags;
-		_other.m_impl = nullptr;
-		return *this;
-	}
 
-	void SetGraphicsPSO(gpu::GraphicsPSOHandle _pso);
+void SetGraphicsPSO(Context* _ctx, gpu::GraphicsPSOHandle _pso);
 
-	void End();
+void SetVertexBuffer(Context* _ctx, uint32_t _streamIdx, gpu::BufferHandle _handle);
+void SetIndexBuffer(Context* _ctx, gpu::BufferHandle _handle);
 
-	void SetVertexBuffer(uint32_t _streamIdx, gpu::BufferHandle _handle);
-	void SetIndexBuffer(gpu::BufferHandle _handle);
+void SetRenderTarget(Context* _ctx, uint32_t _idx, gpu::TextureHandle _handle);
+void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle);
 
-	void DrawIndexedInstanced(gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startVtx, uint32_t _baseVtx, uint32_t _startInstance);
+void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startVtx, uint32_t _baseVtx, uint32_t _startInstance);
 
-	void ClearRenderTarget(gpu::TextureHandle _handle, float _color[4]);
+void ClearRenderTarget(Context* _ctx, gpu::TextureHandle _handle, float const _color[4]);
+void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth); // TODO: Stencil
 
-private:
-	CommandContextImpl* m_impl;
-	CommandListFlags m_typeFlags;
-};
+void UpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem);
+
+void SetScissorRect(Context* _ctx, gpu::Rect const& _rect);
+void SetViewport(Context* _ctx, gpu::Rect const& _rect, float _minDepth, float _maxDepth);
+
+}
 
 }

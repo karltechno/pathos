@@ -5,9 +5,9 @@
 #define GPU_FMT_ONE(_pathos, _dxgi)
 #define GPU_FMT_ALL \
 	GPU_FMT_ONE(gpu::Format::Unknown, DXGI_FORMAT_UNKNOWN) \
-	GPU_FMT_ONE(gpu::Format::R8G8B8A8_SNorm, DXGI_FORMAT_R8G8B8A8_SNORM) \
 	GPU_FMT_ONE(gpu::Format::R8G8B8A8_UNorm, DXGI_FORMAT_R8G8B8A8_UNORM) \
 	GPU_FMT_ONE(gpu::Format::R8G8B8A8_UNorm_SRGB, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) \
+	GPU_FMT_ONE(gpu::Format::R8G8B8A8_SNorm, DXGI_FORMAT_R8G8B8A8_SNORM) \
 	GPU_FMT_ONE(gpu::Format::R32_Float, DXGI_FORMAT_R32_FLOAT) \
 	GPU_FMT_ONE(gpu::Format::R32G32_Float, DXGI_FORMAT_R32G32_FLOAT) \
 	GPU_FMT_ONE(gpu::Format::R32G32B32_Float, DXGI_FORMAT_R32G32B32_FLOAT) \
@@ -62,7 +62,7 @@
 
 #define GPU_SEMANTIC_ONE(_pathos, _strD3d) 
 #define GPU_SEMANTIC_ALL \
-	GPU_SEMANTIC_ONE(gpu::VertexSemantic::Position, "SV_Position") \
+	GPU_SEMANTIC_ONE(gpu::VertexSemantic::Position, "Position") \
 	GPU_SEMANTIC_ONE(gpu::VertexSemantic::TexCoord, "Texcoord") \
 	GPU_SEMANTIC_ONE(gpu::VertexSemantic::Normal, "Normal") \
 	GPU_SEMANTIC_ONE(gpu::VertexSemantic::Tangent, "Tangent") \

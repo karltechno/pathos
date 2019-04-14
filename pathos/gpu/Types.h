@@ -1,6 +1,8 @@
 #pragma once
 #include <kt/kt.h>
+#include <kt/Vec2.h>
 #include <kt/Handles.h>
+
 #include <string.h>
 
 
@@ -51,8 +53,8 @@ enum class Format : uint32_t
 {
 	Unknown,
 	R8G8B8A8_UNorm,
-	R8G8B8A8_SNorm,
 	R8G8B8A8_UNorm_SRGB,
+	R8G8B8A8_SNorm,
 
 	R32_Float,
 	R32G32_Float,
@@ -67,15 +69,7 @@ enum class Format : uint32_t
 	Num_Format
 };
 
-enum class ResourceType : uint32_t
-{
-	Buffer,
-	Texture1D,
-	Texture2D,
-	Texture3D,
-
-	Num_ResourceType
-};
+bool IsDepthFormat(Format _fmt);
 
 enum class BufferFlags : uint32_t
 {
@@ -92,17 +86,44 @@ enum class BufferFlags : uint32_t
 
 KT_ENUM_CLASS_FLAG_OPERATORS(BufferFlags);
 
+enum class TextureType : uint32_t
+{
+	Texture1D,
+	Texture2D,
+	Texture3D,
+
+	Num_ResourceType
+};
+
+enum class TextureUsageFlags
+{
+	None = 0x0,
+
+	ShaderResource = 0x1,
+	UnorderedAccess = 0x2,
+	RenderTarget = 0x4,
+	DepthStencil = 0x8,
+};
+
+KT_ENUM_CLASS_FLAG_OPERATORS(TextureUsageFlags);
+
 // Texture description.
 struct TextureDesc
 {
+	static TextureDesc Desc1D(uint32_t _width, TextureUsageFlags _flags, Format _fmt);
+	static TextureDesc Desc2D(uint32_t _width, uint32_t _height, TextureUsageFlags _flags, Format _fmt);
+	static TextureDesc Desc3D(uint32_t _width, uint32_t _height, uint32_t _depth, TextureUsageFlags _flags, Format _fmt);
+
+	TextureType m_type = TextureType::Num_ResourceType;
+	Format m_format = Format::Num_Format;
+	TextureUsageFlags m_usageFlags = TextureUsageFlags::None;
+
 	uint32_t m_width = 0;
 	uint32_t m_height = 0;
 	uint32_t m_depth = 0;
 
 	uint32_t m_mipLevels = 1;
 	uint32_t m_arraySlices = 1;
-
-	Format m_format = Format::Num_Format;
 };
 
 // Buffer description
@@ -331,6 +352,18 @@ struct GraphicsPSODesc
 	uint32_t m_numRenderTargets = 1;
 
 	Format m_depthFormat = Format::Unknown;
+};
+
+struct Rect
+{
+	Rect() = default;
+	Rect(float _width, float _height)
+		: m_topLeft(0.0f)
+		, m_bottomRight(_width, _height)
+	{}
+
+	kt::Vec2 m_topLeft;
+	kt::Vec2 m_bottomRight;
 };
 
 }

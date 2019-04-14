@@ -12,16 +12,19 @@ void Shutdown();
 void BeginFrame();
 void EndFrame();
 
-gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc);
-gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc);
+gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, char const* _debugName = nullptr);
+gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc, char const* _debugName = nullptr);
+
+void GetSwapchainDimensions(uint32_t& o_width, uint32_t& o_height);
 
 gpu::GraphicsPSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc);
 
 gpu::ShaderHandle CreateShader(gpu::ShaderType _type, gpu::ShaderBytecode const& _byteCode);
 
-gpu::CommandContext CreateGraphicsContext();
+gpu::cmd::Context* CreateGraphicsContext();
 
 gpu::TextureHandle CurrentBackbuffer();
+gpu::TextureHandle BackbufferDepth();
 
 void AddRef(gpu::BufferHandle _handle);
 void AddRef(gpu::TextureHandle _handle);

@@ -215,7 +215,6 @@ void CommandAllocatorPool_D3D12::Shutdown()
 
 ID3D12CommandAllocator* CommandAllocatorPool_D3D12::AcquireAllocator(uint64_t _curFenceVal)
 {
-
 	for (uint32_t i = 0; i < m_pool.Size(); ++i)
 	{
 		AllocatorAndFence& entry = m_pool[i];
