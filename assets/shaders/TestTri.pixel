@@ -1,0 +1,13 @@
+#include "lib/ShaderOutput.hlsli"
+
+// struct TestData
+// {
+//     float4 time;
+// };
+
+// ConstantBuffer<TestData> g_data : register(b0);
+
+float4 main(in VSOut_PosUV _input) : SV_Target
+{
+    return float4(_input.uv.xy, 0.0, 1.0);
+}

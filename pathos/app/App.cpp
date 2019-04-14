@@ -1,11 +1,24 @@
 #include "App.h"
 
-#include "input/Input.h"
+#include <gpu/GPUDevice.h>
+#include <input/Input.h>
 
 #include <kt/Macros.h>
 #include <kt/Timer.h>
 #include <kt/Logging.h>
-#include "gpu/d3d12/GPUDevice_D3D12.h"
+#include <kt/Vec3.h>
+
+//static kt::Vec3 const s_testTriVerts[] =
+//{
+//	{ 0.0f, 1.0f, 0.0f },
+//	{ 1.0f, -1.0f, 0.0f },
+//	{ -1.0f, -1.0f, 0.0f },
+//};
+//
+//static uint16_t const s_testIndicies[] =
+//{
+//	0, 1, 2
+//};
 
 namespace app
 {
@@ -34,8 +47,7 @@ void GraphicsApp::Go(int _argc, char** _argv)
 		return;
 	}
 
-	gpu::Device_D3D12 device;
-	device.Init(m_window.nwh, true);
+	gpu::Init(m_window.nwh);
 
 	Setup();
 
@@ -44,22 +56,35 @@ void GraphicsApp::Go(int _argc, char** _argv)
 
 	do 
 	{
+		gpu::BeginFrame();
+
 		float const dt = float(tickTime.Milliseconds());
 		PumpMessageLoop(m_window);
 		input::Tick(dt);
 		Tick(dt);
 
-		// HACK
-		device.TestOneFrame();
+
+		{
+			gpu::CommandContext ctx = gpu::CreateGraphicsContext();
+
+			gpu::TextureHandle backbuffer = gpu::CurrentBackbuffer();
+
+			float col[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
+			ctx.ClearRenderTarget(backbuffer, col);
+			ctx.End();
+		}
+
 
 		kt::TimePoint const now = kt::TimePoint::Now();
 		tickTime = now - lastFrameStart;
 		lastFrameStart = now;
+
+		gpu::EndFrame();
 	} while (m_keepAlive);
 
 	Shutdown();
-	device.Shutdown();
 
+	gpu::Shutdown();
 	input::Shutdown();
 }
 

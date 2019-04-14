@@ -1,17 +1,19 @@
 #pragma once
 #include <gpu/Types.h>
 
-struct ID3D12Resource;
+#include <d3d12.h>
 
 namespace gpu
 {
 
-struct RenderTarget_D3D12
-{
-	ID3D12Resource* m_resource = nullptr;
+DXGI_FORMAT ToDXGIFormat(gpu::Format _fmt);
+D3D12_BLEND ToD3DBlend(gpu::BlendMode _mode);
+D3D12_BLEND_OP ToD3DBlendOP(gpu::BlendOp _op);
+D3D12_COMPARISON_FUNC ToD3DCmpFn(gpu::ComparisonFn _fn);
+D3D_PRIMITIVE_TOPOLOGY ToD3DPrimType(gpu::PrimitiveType _prim);
+char const* ToD3DSemanticStr(gpu::VertexSemantic _sem);
 
-	gpu::CPUPtr m_rtv = { 0 };
-	gpu::CPUPtr m_srv = { 0 };
-};
+constexpr uint32_t c_d3dBufferedFrames = 3u;
+
 
 }

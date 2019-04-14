@@ -1,6 +1,6 @@
-#include <App/Window.h>
+#include <app/Window.h>
 #include <input/Win/Input_Win.h>
-#include <App/App.h>
+#include <app/App.h>
 
 #include <kt/Macros.h>
 
@@ -58,8 +58,8 @@ WindowHandle CreatePlatformWindow(WindowInitParams const& _params)
 		KT_ASSERT(atom);
 	}
 
-	int const realScreenWidth = ::GetSystemMetrics(SM_CXSCREEN);
-	int const realScreenHeight = ::GetSystemMetrics(SM_CYSCREEN);
+	//int const realScreenWidth = ::GetSystemMetrics(SM_CXSCREEN);
+	//int const realScreenHeight = ::GetSystemMetrics(SM_CYSCREEN);
 
 	RECT windowRect = { 0, 0, LONG(_params.m_width), LONG(_params.m_height) };
 	::AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);

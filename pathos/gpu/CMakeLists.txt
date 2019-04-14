@@ -1,13 +1,18 @@
 cmake_minimum_required(VERSION 3.8)
 
 set(GPU_SOURCES
-    "GPUDevice.cpp"
-    "GPUDevice.h"
-    "Types.h"
+	"CommandContext.h"
+	"CommandContext.cpp"
+	"GPUDevice.h"
+	"HandleRef.h"
+	"Types.h"
+	"FormatConversion.h"
 )
 
 if(WIN32)
-    list(APPEND  GPU_SOURCES
+	list(APPEND  GPU_SOURCES
+		"d3d12/CommandContext_D3D12.h"
+		"d3d12/CommandContext_D3D12.cpp"
 		"d3d12/GPUDevice_D3D12.h" 
 		"d3d12/GPUDevice_D3D12.cpp" 
 		"d3d12/Utils_D3D12.h" 
@@ -15,7 +20,8 @@ if(WIN32)
         "d3d12/CommandQueue_D3D12.cpp"
         "d3d12/DescriptorHeap_D3D12.cpp"
 		"d3d12/DescriptorHeap_D3D12.h"   
-		"d3d12/Types_D3D12.h"                     
+		"d3d12/Types_D3D12.h"
+		"d3d12/Types_D3D12.cpp"                  
 	)
 endif()
 

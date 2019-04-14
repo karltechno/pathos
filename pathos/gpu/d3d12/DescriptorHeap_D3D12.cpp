@@ -31,25 +31,29 @@ void DescriptorHeap_D3D12::Shutdown()
 	SafeReleaseDX(m_heap);
 }
 
-gpu::CPUPtr DescriptorHeap_D3D12::IndexToCPUPtr(uint32_t _idx) const
+D3D12_CPU_DESCRIPTOR_HANDLE DescriptorHeap_D3D12::IndexToCPUPtr(uint32_t _idx) const
 {
 	KT_ASSERT(_idx < m_maxDescriptors);
-	return gpu::CPUPtr{ m_heapStartCPU.ptr + _idx * m_descriptorIncrementSize };
+	D3D12_CPU_DESCRIPTOR_HANDLE ret = m_heapStartCPU;
+	ret.ptr += _idx * m_descriptorIncrementSize;
+	return ret;
 }
 
-gpu::GPUPtr DescriptorHeap_D3D12::IndexToGPUPtr(uint32_t _idx) const
+D3D12_GPU_DESCRIPTOR_HANDLE DescriptorHeap_D3D12::IndexToGPUPtr(uint32_t _idx) const
 {
 	KT_ASSERT(_idx < m_maxDescriptors);
-	return gpu::GPUPtr{ m_heapStartCPU.ptr + _idx * m_descriptorIncrementSize };
+	D3D12_GPU_DESCRIPTOR_HANDLE ret = m_heapStartGPU;
+	ret.ptr += _idx * m_descriptorIncrementSize;
+	return ret;
 }
 
-uint32_t DescriptorHeap_D3D12::CPUPtrToIndex(gpu::CPUPtr _ptr) const
+uint32_t DescriptorHeap_D3D12::CPUPtrToIndex(D3D12_CPU_DESCRIPTOR_HANDLE _ptr) const
 {
 	KT_ASSERT(IsFrom(_ptr));
 	return uint32_t((_ptr.ptr - m_heapStartCPU.ptr) / m_descriptorIncrementSize);
 }
 
-bool DescriptorHeap_D3D12::IsFrom(gpu::CPUPtr _ptr) const
+bool DescriptorHeap_D3D12::IsFrom(D3D12_CPU_DESCRIPTOR_HANDLE _ptr) const
 {
 	return _ptr.ptr > m_heapStartCPU.ptr && _ptr.ptr < (m_heapStartCPU.ptr + m_maxDescriptors * m_descriptorIncrementSize);
 }
@@ -70,16 +74,15 @@ void FreeListDescriptorHeap_D3D12::Shutdown()
 	m_freeList.ClearAndFree();
 }
 
-gpu::CPUPtr FreeListDescriptorHeap_D3D12::AllocOne()
+D3D12_CPU_DESCRIPTOR_HANDLE FreeListDescriptorHeap_D3D12::AllocOne()
 {
 	KT_ASSERT(m_freeList.Size() != 0);
-
-	gpu::CPUPtr ptr = { m_heap.IndexToCPUPtr(m_freeList.Back()) };
+	D3D12_CPU_DESCRIPTOR_HANDLE ret = m_heap.IndexToCPUPtr(m_freeList.Back());
 	m_freeList.PopBack();
-	return ptr;
+	return ret;
 }
 
-void FreeListDescriptorHeap_D3D12::Free(gpu::CPUPtr _ptr)
+void FreeListDescriptorHeap_D3D12::Free(D3D12_CPU_DESCRIPTOR_HANDLE _ptr)
 {
 	// Todo: GC?
 	KT_ASSERT(m_heap.IsFrom(_ptr));
@@ -99,7 +102,7 @@ void LinearDescriptorHeap_D3D12::Shutdown()
 	m_numAllocated = 0;
 }
 
-void LinearDescriptorHeap_D3D12::Alloc(uint32_t _num, gpu::CPUPtr& o_cpuBase, gpu::GPUPtr& o_gpuBase)
+void LinearDescriptorHeap_D3D12::Alloc(uint32_t _num, D3D12_CPU_DESCRIPTOR_HANDLE& o_cpuBase, D3D12_GPU_DESCRIPTOR_HANDLE& o_gpuBase)
 {
 	KT_ASSERT(m_numAllocated + _num <= m_heap.MaxDescriptors());
 	o_cpuBase = m_heap.IndexToCPUPtr(m_numAllocated);

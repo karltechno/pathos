@@ -104,13 +104,18 @@ bool CommandQueue_D3D12::HasFenceCompleted(uint64_t _fenceVal)
 	return _fenceVal <= m_lastCompletedFenceVal;
 }
 
+uint64_t CommandQueue_D3D12::LastPostedFenceValue() const
+{
+	return m_nextFenceVal - 1;
+}
+
 uint64_t CommandQueue_D3D12::CurrentFenceValue()
 {
 	m_lastCompletedFenceVal = kt::Max<uint64_t>(m_lastCompletedFenceVal, m_fence->GetCompletedValue());
 	return m_lastCompletedFenceVal;
 }
 
-uint64_t CommandQueue_D3D12::NextFenceValue()
+uint64_t CommandQueue_D3D12::NextFenceValue() const
 {
 	return m_nextFenceVal;
 }

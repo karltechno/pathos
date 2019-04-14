@@ -56,8 +56,10 @@ public:
 
 	bool HasFenceCompleted(uint64_t _fenceVal);
 
+	uint64_t LastPostedFenceValue() const;
+
 	uint64_t CurrentFenceValue();
-	uint64_t NextFenceValue();
+	uint64_t NextFenceValue() const;
 
 	void WaitForFenceBlockingCPU(uint64_t _fenceVal);
 	void FlushBlockingCPU();

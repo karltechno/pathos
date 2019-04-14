@@ -1,0 +1,9 @@
+#include "lib/ShaderOutput.hlsli"
+
+VSOut_PosUV main(float3 inPos : POSITION)
+{
+    VSOut_PosUV ret;
+    ret.pos = float4(inPos, 1.0);
+    ret.uv = inPos.xy * 0.5 + 0.5;
+    return ret;
+}

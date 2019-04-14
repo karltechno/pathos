@@ -1,5 +1,5 @@
 #pragma once
-#include <Input/Input.h>
+#include <input/Input.h>
 
 namespace input
 {

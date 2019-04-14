@@ -11,7 +11,7 @@ namespace input
 namespace win
 {
 
-using XInputGetStateFn =  DWORD (WINAPI)(DWORD, XINPUT_STATE*);
+using XInputGetStateFn =  DWORD (WINAPI*)(DWORD, XINPUT_STATE*);
 
 
 struct XInputGamepad
@@ -24,7 +24,7 @@ struct XInputGamepad
 struct Context
 {
 	XInputGamepad m_pads[input::c_maxGamepads];
-	XInputGetStateFn* m_getStateFn;
+	XInputGetStateFn m_getStateFn;
 	HMODULE m_xinputDll = 0;
 
 	input::EventCallback m_eventCb = nullptr;
@@ -168,7 +168,7 @@ bool Init(void* _nativeWindowHandle, input::EventCallback _callback, void* _even
 		return false;
 	}
 
-	s_ctx.m_getStateFn = (XInputGetStateFn*)::GetProcAddress(s_ctx.m_xinputDll, "XInputGetState");
+	s_ctx.m_getStateFn = (XInputGetStateFn)::GetProcAddress(s_ctx.m_xinputDll, "XInputGetState");
 
 	if (!s_ctx.m_getStateFn)
 	{

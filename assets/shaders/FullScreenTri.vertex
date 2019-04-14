@@ -1,4 +1,3 @@
-#include "lib/RootSigs.hlsli"
 #include "lib/ShaderOutput.hlsli"
 
 VSOut_PosUV main(uint vid : SV_VertexID)
