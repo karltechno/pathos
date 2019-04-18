@@ -55,6 +55,8 @@ struct AllocatedBuffer_D3D12 : AllocatedObjectBase_D3D12
 	bool Init(BufferDesc const& _desc, char const* _debugName = nullptr);
 	void Destroy();
 
+	void UpdateViews();
+
 	gpu::BufferDesc m_desc;
 
 	ID3D12Resource* m_res = nullptr;
@@ -66,8 +68,9 @@ struct AllocatedBuffer_D3D12 : AllocatedObjectBase_D3D12
 	D3D12_GPU_VIRTUAL_ADDRESS m_gpuAddress = 0;
 
 	// Descriptors
-	D3D12_CPU_DESCRIPTOR_HANDLE m_srv;
-	D3D12_CPU_DESCRIPTOR_HANDLE m_uav;
+	D3D12_CPU_DESCRIPTOR_HANDLE m_srv = {};
+	D3D12_CPU_DESCRIPTOR_HANDLE m_uav = {};
+	D3D12_CPU_DESCRIPTOR_HANDLE m_cbv = {};
 
 	// Current state.
 	D3D12_RESOURCE_STATES m_state = D3D12_RESOURCE_STATE_COMMON;
@@ -91,13 +94,13 @@ struct AllocatedTexture_D3D12 : AllocatedObjectBase_D3D12
 
 	D3D12_GPU_VIRTUAL_ADDRESS m_gpuAddress = 0;
 
-	D3D12_CPU_DESCRIPTOR_HANDLE m_srv;
-	D3D12_CPU_DESCRIPTOR_HANDLE m_rtv;
-	D3D12_CPU_DESCRIPTOR_HANDLE m_dsv;
+	D3D12_CPU_DESCRIPTOR_HANDLE m_srv = {};
+	D3D12_CPU_DESCRIPTOR_HANDLE m_rtv = {};
+	D3D12_CPU_DESCRIPTOR_HANDLE m_dsv = {};
 
 	D3D12_RESOURCE_STATES m_state = D3D12_RESOURCE_STATE_COMMON;
 
-	bool m_ownsResource;
+	bool m_ownsResource = false;
 };
 
 struct AllocatedShader_D3D12;
@@ -155,6 +158,8 @@ private:
 	FrameUploadPagePool_D3D12* m_pagePool;
 };
 
+
+
 struct Device_D3D12
 {
 	KT_NO_COPY(Device_D3D12);
@@ -205,6 +210,8 @@ struct Device_D3D12
 	FreeListDescriptorHeap_D3D12 m_rtvHeap;
 	FreeListDescriptorHeap_D3D12 m_dsvHeap;
 	FreeListDescriptorHeap_D3D12 m_stagingHeap;
+
+	D3D12_CPU_DESCRIPTOR_HANDLE m_nullCbv;
 
 	FrameUploadPagePool_D3D12 m_uploadPagePool;
 

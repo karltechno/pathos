@@ -9,6 +9,12 @@
 namespace gpu
 {
 
+uint32_t constexpr c_cbvTableSize = 16;
+uint32_t constexpr c_srvTableSize = 16;
+uint32_t constexpr c_uavTableSize = 16;
+
+uint32_t constexpr c_numShaderSpaces = 1;
+
 template <typename Tag>
 struct TaggedHandle : kt::VersionedHandle
 {
@@ -272,14 +278,14 @@ struct DepthStencilDesc
 		m_stencilEnable = 0;
 	}
 
-	uint8_t m_depthEnable	: 1;
-	uint8_t m_depthWrite	: 1;
+	uint8_t m_depthEnable		: 1;
+	uint8_t m_depthWrite		: 1;
 	ComparisonFn m_depthFn		: c_cmpFnBits;
 
 	// Todo: Stencil..
-	uint8_t m_stencilEnable	: 1;
-	uint8_t m_stencilReadMask;
-	uint8_t m_stencilWriteMask;
+	uint8_t m_stencilEnable		: 1;
+	uint8_t m_stencilReadMask	= 0xFF;
+	uint8_t m_stencilWriteMask	= 0xFF;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -322,6 +328,22 @@ static_assert(uint32_t(BlendOp::Num_BlendOp) <= (1 << c_blendOpBits), "BlendOp p
 
 struct BlendDesc
 {
+	BlendDesc()
+	{
+		m_blendEnable = 0;
+		m_alphaToCoverageEnable = 0;
+
+		m_srcBlend = BlendMode::One;
+		m_destBlend = BlendMode::Zero;
+		m_blendOp = BlendOp::Add;
+
+		m_srcAlpha = BlendMode::One;
+		m_destAlpha = BlendMode::Zero;
+		m_blendOpAlpha = BlendOp::Add;
+	}
+
+	static BlendDesc Opaque();
+
 	uint32_t m_blendEnable : 1;
 	uint32_t m_alphaToCoverageEnable : 1;
 

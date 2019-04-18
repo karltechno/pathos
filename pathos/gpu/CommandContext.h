@@ -30,7 +30,6 @@ using Context = CommandContext_D3D12;
 
 void End(Context* _ctx);
 
-
 void SetGraphicsPSO(Context* _ctx, gpu::GraphicsPSOHandle _pso);
 
 void SetVertexBuffer(Context* _ctx, uint32_t _streamIdx, gpu::BufferHandle _handle);
@@ -38,6 +37,11 @@ void SetIndexBuffer(Context* _ctx, gpu::BufferHandle _handle);
 
 void SetRenderTarget(Context* _ctx, uint32_t _idx, gpu::TextureHandle _handle);
 void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle);
+
+void SetConstantBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space);
+void SetShaderResource(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space);
+void SetShaderResource(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space);
+
 
 void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startVtx, uint32_t _baseVtx, uint32_t _startInstance);
 

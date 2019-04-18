@@ -37,6 +37,16 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, char const* _debugName
 
 	m_state = D3D12_RESOURCE_STATE_COPY_DEST;
 
+	if (!!(_desc.m_flags & BufferFlags::Constant))
+	{
+		m_cbv = g_device->m_stagingHeap.AllocOne();
+	}
+
+	if (!!(_desc.m_flags & BufferFlags::UnorderedAccess))
+	{
+		m_uav = g_device->m_stagingHeap.AllocOne();
+	}
+
 	if (!(_desc.m_flags & BufferFlags::Transient))
 	{
 		m_ownsResource = true;
@@ -64,6 +74,8 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, char const* _debugName
 
 		m_gpuAddress = m_res->GetGPUVirtualAddress();
 		m_offset = 0;
+
+		UpdateViews();
 	}
 
 	AllocatedObjectBase_D3D12::Init(_debugName);
@@ -96,10 +108,28 @@ void AllocatedBuffer_D3D12::Destroy()
 		m_uav.ptr = 0;
 	}
 
+	if (m_cbv.ptr)
+	{
+		g_device->m_stagingHeap.Free(m_cbv);
+		m_cbv.ptr = 0;
+	}
+
 	m_mappedCpuData = nullptr;
 	m_lastFrameTouched = 0xFFFFFFFF;
 }
 
+
+void AllocatedBuffer_D3D12::UpdateViews()
+{
+	if (!!(m_desc.m_flags & BufferFlags::Constant))
+	{
+		KT_ASSERT(m_cbv.ptr);
+		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
+		cbvDesc.BufferLocation = m_gpuAddress;
+		cbvDesc.SizeInBytes = m_desc.m_sizeInBytes;
+		g_device->m_d3dDev->CreateConstantBufferView(&cbvDesc, m_cbv);
+	}
+}
 
 struct AllocatedShader_D3D12 : AllocatedObjectBase_D3D12
 {
@@ -550,10 +580,9 @@ static ID3D12RootSignature* CreateGraphicsRootSignature(ID3D12Device* _dev)
 {
 	D3D12_ROOT_SIGNATURE_DESC desc = {};
 
-	D3D12_STATIC_SAMPLER_DESC samplers[3] = {};
+	D3D12_STATIC_SAMPLER_DESC samplers[4] = {};
 
 	desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
 
 	// Point clamp
 	{
@@ -579,9 +608,9 @@ static ID3D12RootSignature* CreateGraphicsRootSignature(ID3D12Device* _dev)
 		samplers[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 	}
 
-	// Bilinear wrap
+	// Linear clamp
 	{
-		samplers[2].AddressU = samplers[0].AddressV = samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		samplers[2].AddressU = samplers[0].AddressV = samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 		samplers[2].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 		samplers[2].MinLOD = 0.0f;
 		samplers[2].MaxLOD = D3D12_FLOAT32_MAX;
@@ -591,18 +620,68 @@ static ID3D12RootSignature* CreateGraphicsRootSignature(ID3D12Device* _dev)
 		samplers[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 	}
 
-
-	D3D12_ROOT_PARAMETER params[1];
-
-
+	// Linear wrap
 	{
-		params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-		params[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-		params[0].Descriptor.RegisterSpace = 0;
-		params[0].Descriptor.ShaderRegister = 0;
-		desc.pParameters = params;
-		desc.NumParameters = KT_ARRAY_COUNT(params);
+		samplers[3].AddressU = samplers[0].AddressV = samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		samplers[3].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+		samplers[3].MinLOD = 0.0f;
+		samplers[3].MaxLOD = D3D12_FLOAT32_MAX;
+		samplers[3].MipLODBias = 0.0f;
+		samplers[3].RegisterSpace = 0;
+		samplers[3].ShaderRegister = 0;
+		samplers[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 	}
+
+	D3D12_ROOT_PARAMETER tables[3 * c_numShaderSpaces];
+	D3D12_DESCRIPTOR_RANGE ranges[3 * c_numShaderSpaces];
+
+	desc.pParameters = tables;
+	desc.NumParameters = KT_ARRAY_COUNT(tables);
+
+	// One dumb global root sig for now.
+	// CBV Table (b0 - b16) space0
+	// SRV Table (t0 - t16) space0
+	// UAV Table (u0 - u16) space0
+	// CBV Table (b0 - b16) space1
+	// SRV Table (t0 - t16) space1
+	// UAV Table (u0 - u16) space1
+
+	for (uint32_t i = 0; i < c_numShaderSpaces; ++i)
+	{
+		ranges[i * 3].BaseShaderRegister = 0;
+		ranges[i * 3].NumDescriptors = c_cbvTableSize;
+		ranges[i * 3].OffsetInDescriptorsFromTableStart = 0;
+		ranges[i * 3].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+		ranges[i * 3].RegisterSpace = i;
+
+		ranges[i * 3 + 1].BaseShaderRegister = 0;
+		ranges[i * 3 + 1].NumDescriptors = c_srvTableSize;
+		ranges[i * 3 + 1].OffsetInDescriptorsFromTableStart = 0;
+		ranges[i * 3 + 1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		ranges[i * 3 + 1].RegisterSpace = i;
+
+		ranges[i * 3 + 2].BaseShaderRegister = 0;
+		ranges[i * 3 + 2].NumDescriptors = c_uavTableSize;
+		ranges[i * 3 + 2].OffsetInDescriptorsFromTableStart = 0;
+		ranges[i * 3 + 2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+		ranges[i * 3 + 2].RegisterSpace = i;
+
+		tables[i * 3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		tables[i * 3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		tables[i * 3].DescriptorTable.pDescriptorRanges = &ranges[i * 3];
+		tables[i * 3].DescriptorTable.NumDescriptorRanges = 1;
+
+		tables[i * 3 + 1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		tables[i * 3 + 1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		tables[i * 3 + 1].DescriptorTable.pDescriptorRanges = &ranges[i * 3 + 1];
+		tables[i * 3 + 1].DescriptorTable.NumDescriptorRanges = 1;
+
+		tables[i * 3 + 2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		tables[i * 3 + 2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		tables[i * 3 + 2].DescriptorTable.pDescriptorRanges = &ranges[i * 3 + 2];
+		tables[i * 3 + 2].DescriptorTable.NumDescriptorRanges = 1;
+	}
+
 
 	ID3DBlob* rootBlob;
 	ID3DBlob* errBlob;
@@ -752,6 +831,9 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 
 	gpu::TextureDesc const depthDesc = gpu::TextureDesc::Desc2D(m_swapChainWidth, m_swapChainHeight, TextureUsageFlags::DepthStencil, Format::D32_Float);
 	m_backbufferDepth.AcquireNoRef(gpu::CreateTexture(depthDesc, "Backbuffer Depth"));
+
+	m_nullCbv = m_stagingHeap.AllocOne();
+	m_d3dDev->CreateConstantBufferView(nullptr, m_nullCbv);
 }
 
 Device_D3D12::Device_D3D12()

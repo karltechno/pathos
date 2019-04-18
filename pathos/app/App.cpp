@@ -7,6 +7,7 @@
 #include <kt/Timer.h>
 #include <kt/Logging.h>
 #include <kt/Vec3.h>
+#include <kt/Vec4.h>
 
 #include <stdio.h>
 
@@ -106,6 +107,18 @@ void GraphicsApp::Go(int _argc, char** _argv)
 	vertexBufferDesc.m_strideInBytes = sizeof(kt::Vec3);
 	vertexBufferDesc.m_sizeInBytes = sizeof(s_testTriVerts);
 
+	struct KT_ALIGNAS(256) DummyCbuffer
+	{
+		kt::Vec4 myVec4;
+	} myCbuffer;
+
+	myCbuffer.myVec4 = kt::Vec4(0.0f);
+
+	gpu::BufferDesc constantBufferDesc;
+	constantBufferDesc.m_flags = gpu::BufferFlags::Constant | gpu::BufferFlags::Transient;
+	constantBufferDesc.m_sizeInBytes = sizeof(DummyCbuffer);
+	gpu::BufferHandle constantBuffer = gpu::CreateBuffer(constantBufferDesc);
+
 	gpu::BufferHandle vertexBuffer = gpu::CreateBuffer(vertexBufferDesc);
 
 	gpu::GraphicsPSOHandle psoHandle = gpu::CreateGraphicsPSO(psoDesc);
@@ -123,7 +136,7 @@ void GraphicsApp::Go(int _argc, char** _argv)
 		input::Tick(dt);
 		Tick(dt);
 
-
+		myCbuffer.myVec4 += kt::Vec4(dt);
 		{
 			gpu::cmd::Context* ctx = gpu::CreateGraphicsContext();
 
@@ -136,7 +149,8 @@ void GraphicsApp::Go(int _argc, char** _argv)
 			gpu::cmd::SetVertexBuffer(ctx, 0, vertexBuffer);
 			gpu::cmd::UpdateTransientBuffer(ctx, vertexBuffer, s_testTriVerts);
 			gpu::cmd::UpdateTransientBuffer(ctx, indexBuffer, s_testIndicies);
-
+			gpu::cmd::UpdateTransientBuffer(ctx, constantBuffer, &myCbuffer);
+			gpu::cmd::SetConstantBuffer(ctx, constantBuffer, 0, 0);
 			uint32_t width, height;
 			gpu::GetSwapchainDimensions(width, height);
 
@@ -169,6 +183,7 @@ void GraphicsApp::Go(int _argc, char** _argv)
 	gpu::Release(psoHandle);
 	gpu::Release(pixelHandle);
 	gpu::Release(vertexHandle);
+	gpu::Release(constantBuffer);
 
 	gpu::Shutdown();
 	input::Shutdown();

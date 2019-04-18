@@ -3,6 +3,7 @@
 #include "CommandContext_D3D12.h"
 #include "Utils_D3D12.h"
 #include "GPUDevice_D3D12.h"
+#include "DescriptorHeap_D3D12.h"
 
 #include <d3d12.h>
 
@@ -42,9 +43,21 @@ CommandContext_D3D12::CommandContext_D3D12(D3D12_COMMAND_LIST_TYPE _type, Device
 		m_cmdListFlags = CommandListFlags::Copy;
 	}
 
+	m_descriptorAllocator = &_dev->m_framesResources->m_descriptorHeap;
 	m_cmdAllocator = _dev->m_commandQueueManager.QueueByType(m_type).AcquireAllocator();
 	// TODO: Is it expensive to keep creating command lists (its obviously worth pooling allocators.
 	D3D_CHECK(m_device->m_d3dDev->CreateCommandList(1, _type, m_cmdAllocator, nullptr, IID_PPV_ARGS(&m_cmdList)));
+
+	for (uint32_t i = 0; i < KT_ARRAY_COUNT(m_dirtyDescriptors); ++i)
+	{
+		m_dirtyDescriptors[i] = DirtyDescriptorFlags::All;
+	}
+
+	ID3D12DescriptorHeap* heap = m_descriptorAllocator->m_heap.m_heap;
+	m_cmdList->SetDescriptorHeaps(1, &heap);
+
+	// TODO: HACK
+	m_cmdList->SetGraphicsRootSignature(m_device->m_debugRootSig);
 }
 
 CommandContext_D3D12::~CommandContext_D3D12()
@@ -112,6 +125,7 @@ void UpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, void const*
 	KT_ASSERT(res->m_mappedCpuData);
 	memcpy(res->m_mappedCpuData, _mem, size);
 	res->m_lastFrameTouched = _ctx->m_device->m_frameCounter;
+	res->UpdateViews();
 }
 
 void SetGraphicsPSO(Context* _ctx, gpu::GraphicsPSOHandle _pso)
@@ -193,7 +207,6 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags _dispatchType)
 			KT_ASSERT(pso);
 			m_state.m_numRenderTargets = pso->m_psoDesc.m_numRenderTargets;
 			m_cmdList->SetPipelineState(pso->m_pso);
-			m_cmdList->SetGraphicsRootSignature(m_device->m_debugRootSig);
 		}
 
 		if (!!(m_dirtyFlags & DirtyStateFlags::IndexBuffer))
@@ -202,9 +215,9 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags _dispatchType)
 			if (m_state.m_indexBuffer.IsValid())
 			{
 				AllocatedBuffer_D3D12* idxBuff = m_device->m_bufferHandles.Lookup(m_state.m_indexBuffer);
+				KT_ASSERT(idxBuff);
 				CHECK_TRANSIENT_TOUCHED_THIS_FRAME(this, idxBuff);
 
-				KT_ASSERT(idxBuff);
 				idxView.BufferLocation = idxBuff->m_gpuAddress;
 				idxView.Format = ToDXGIFormat(idxBuff->m_desc.m_format);
 				idxView.SizeInBytes = idxBuff->m_desc.m_sizeInBytes;
@@ -227,14 +240,9 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags _dispatchType)
 					maxCount = i + 1;
 
 					AllocatedBuffer_D3D12* bufferRes = m_device->m_bufferHandles.Lookup(m_state.m_vertexStreams[i]);
+					KT_ASSERT(bufferRes);
 					KT_ASSERT(!!(bufferRes->m_desc.m_flags & BufferFlags::Vertex));
 					CHECK_TRANSIENT_TOUCHED_THIS_FRAME(this, bufferRes);
-
-					if (!!(bufferRes->m_desc.m_flags & BufferFlags::Transient))
-					{
-						KT_ASSERT(bufferRes->m_lastFrameTouched == m_device->m_frameCounter
-								  && "Transient resources must be update the frame they are used.");
-					}
 
 					bufferViews[i].BufferLocation = bufferRes->m_gpuAddress;
 					bufferViews[i].SizeInBytes = bufferRes->m_desc.m_sizeInBytes;
@@ -267,12 +275,73 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags _dispatchType)
 			}
 			m_cmdList->OMSetRenderTargets(numRenderTargets, rtvs, FALSE, &dsv);
 		}
+	}
 
+	if (!!(_dispatchType & (CommandListFlags::Compute | CommandListFlags::Graphics)))
+	{
+		for (uint32_t spaceIdx = 0; spaceIdx < gpu::c_numShaderSpaces; ++spaceIdx)
+		{
+			DirtyDescriptorFlags const dirtyDescriptors = m_dirtyDescriptors[spaceIdx];
+			if (dirtyDescriptors == DirtyDescriptorFlags::None)
+			{
+				continue;
+			}
+
+			if (!!(dirtyDescriptors & DirtyDescriptorFlags::CBV))
+			{
+				D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptors[gpu::c_cbvTableSize];
+				for (uint32_t i = 0; i < gpu::c_cbvTableSize; ++i)
+				{
+					gpu::BufferRef const& bufRef = m_state.m_cbvs[spaceIdx][i];
+					if (!bufRef.IsValid())
+					{
+						cpuDescriptors[i] = m_device->m_nullCbv;
+					}
+					else
+					{
+						AllocatedBuffer_D3D12* buf = m_device->m_bufferHandles.Lookup(bufRef);
+						KT_ASSERT(buf);
+						KT_ASSERT(buf->m_cbv.ptr);
+						cpuDescriptors[i] = buf->m_cbv;
+					}
+				}
+
+				UINT sourceSizes[gpu::c_cbvTableSize];
+				for (UINT& u : sourceSizes) { u = 1; }
+
+				D3D12_GPU_DESCRIPTOR_HANDLE tableDestGpu;
+				D3D12_CPU_DESCRIPTOR_HANDLE tableDestCpu;
+				UINT const destSize = gpu::c_cbvTableSize;
+				m_descriptorAllocator->Alloc(gpu::c_cbvTableSize, tableDestCpu, tableDestGpu);
+				m_device->m_d3dDev->CopyDescriptors(1, &tableDestCpu, &destSize, gpu::c_cbvTableSize, cpuDescriptors, sourceSizes, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+				if (!!(_dispatchType & CommandListFlags::Graphics))
+				{
+					// TODO: Hardcoded root offset.
+					m_cmdList->SetGraphicsRootDescriptorTable(0 + 3 * spaceIdx, tableDestGpu);
+				}
+				else
+				{
+					m_cmdList->SetComputeRootDescriptorTable(0 + 3 * spaceIdx, tableDestGpu);
+				}
+
+			}
+		}
 	}
 
 	m_dirtyFlags = DirtyStateFlags::None;
 }
 
+
+void SetConstantBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space)
+{
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags::Compute);
+	if (_ctx->m_state.m_cbvs[_space][_idx].Handle() != _handle)
+	{
+		_ctx->m_state.m_cbvs[_space][_idx] = _handle;
+		_ctx->m_dirtyDescriptors[_space] |= DirtyDescriptorFlags::CBV;
+	}
+}
 
 void SetScissorRect(Context* _ctx, gpu::Rect const& _rect)
 {
@@ -296,7 +365,7 @@ void SetViewport(Context* _ctx, gpu::Rect const& _rect, float _minDepth, float _
 
 	vp.Height = kt::Abs(_rect.m_topLeft.y - _rect.m_bottomRight.y);
 	vp.Width = kt::Abs(_rect.m_bottomRight.x - _rect.m_topLeft.x);
-	
+
 	vp.MinDepth = _minDepth;
 	vp.MaxDepth = _maxDepth;
 

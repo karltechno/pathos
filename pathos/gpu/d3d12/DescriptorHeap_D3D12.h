@@ -9,9 +9,8 @@
 namespace gpu
 {
 
-class DescriptorHeap_D3D12
+struct DescriptorHeap_D3D12
 {
-public:
 	void Init(ID3D12Device* _dev, D3D12_DESCRIPTOR_HEAP_TYPE _ty, uint32_t _maxDescriptors, bool _shaderVisible, char const* _debugName);
 	void Shutdown();
 
@@ -27,12 +26,7 @@ public:
 
 	bool IsFrom(D3D12_CPU_DESCRIPTOR_HANDLE _ptr) const;
 
-	ID3D12DescriptorHeap* D3DDescriptorHeap()
-	{
-		return m_heap;
-	}
 
-private:
 	ID3D12DescriptorHeap* m_heap = nullptr;
 	D3D12_DESCRIPTOR_HEAP_TYPE m_type;
 
@@ -45,24 +39,22 @@ private:
 	bool m_shaderVisible = false;
 };
 
-class FreeListDescriptorHeap_D3D12
+struct FreeListDescriptorHeap_D3D12
 {
-public:
 	void Init(ID3D12Device* _dev, D3D12_DESCRIPTOR_HEAP_TYPE _ty, uint32_t _maxDescriptors, bool _shaderVisible, char const* _debugName);
 	void Shutdown();
 
 	D3D12_CPU_DESCRIPTOR_HANDLE AllocOne();
 	void Free(D3D12_CPU_DESCRIPTOR_HANDLE _ptr);
 
+	DescriptorHeap_D3D12 m_heap;
+
 private:
 	kt::Array<uint32_t> m_freeList;
-
-	DescriptorHeap_D3D12 m_heap;
 };
 
-class LinearDescriptorHeap_D3D12
+struct LinearDescriptorHeap_D3D12
 {
-public:
 	void Init(ID3D12Device* _dev, D3D12_DESCRIPTOR_HEAP_TYPE _ty, uint32_t _maxDescriptors, bool _shaderVisible, char const* _debugName);
 	void Shutdown();
 
@@ -70,14 +62,9 @@ public:
 
 	void Clear();
 
-	ID3D12DescriptorHeap* D3DDescriptorHeap()
-	{
-		return m_heap.D3DDescriptorHeap();
-	}
-
-private:
 	DescriptorHeap_D3D12 m_heap;
 
+private:
 	uint32_t m_numAllocated = 0;
 };
 
