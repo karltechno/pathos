@@ -94,18 +94,19 @@ void GraphicsApp::Go(int _argc, char** _argv)
 	psoDesc.m_ps = pixelHandle;
 
 	gpu::BufferDesc indexBufferDesc;
-	indexBufferDesc.m_flags = gpu::BufferFlags::Index | gpu::BufferFlags::Transient;
+	indexBufferDesc.m_flags = gpu::BufferFlags::Index;
 	indexBufferDesc.m_format = gpu::Format::R16_Uint;
 	indexBufferDesc.m_strideInBytes = sizeof(uint16_t);
 	indexBufferDesc.m_sizeInBytes = sizeof(s_testIndicies);
 
-	gpu::BufferHandle indexBuffer = gpu::CreateBuffer(indexBufferDesc);
+	gpu::BufferHandle indexBuffer = gpu::CreateBuffer(indexBufferDesc, s_testIndicies);
 
 	gpu::BufferDesc vertexBufferDesc;
-	vertexBufferDesc.m_flags = gpu::BufferFlags::Vertex | gpu::BufferFlags::Transient;
+	vertexBufferDesc.m_flags = gpu::BufferFlags::Vertex;
 	vertexBufferDesc.m_format = gpu::Format::Unknown;
 	vertexBufferDesc.m_strideInBytes = sizeof(kt::Vec3);
 	vertexBufferDesc.m_sizeInBytes = sizeof(s_testTriVerts);
+	gpu::BufferHandle vertexBuffer = gpu::CreateBuffer(vertexBufferDesc, s_testTriVerts);
 
 	struct KT_ALIGNAS(256) DummyCbuffer
 	{
@@ -119,7 +120,6 @@ void GraphicsApp::Go(int _argc, char** _argv)
 	constantBufferDesc.m_sizeInBytes = sizeof(DummyCbuffer);
 	gpu::BufferHandle constantBuffer = gpu::CreateBuffer(constantBufferDesc);
 
-	gpu::BufferHandle vertexBuffer = gpu::CreateBuffer(vertexBufferDesc);
 
 	gpu::GraphicsPSOHandle psoHandle = gpu::CreateGraphicsPSO(psoDesc);
 	KT_UNUSED(psoHandle);
@@ -138,7 +138,7 @@ void GraphicsApp::Go(int _argc, char** _argv)
 
 		myCbuffer.myVec4 += kt::Vec4(dt);
 		{
-			gpu::cmd::Context* ctx = gpu::CreateGraphicsContext();
+			gpu::cmd::Context* ctx = gpu::cmd::Begin(gpu::cmd::ContextType::Graphics);
 
 			gpu::TextureHandle backbuffer = gpu::CurrentBackbuffer();
 			gpu::TextureHandle depth = gpu::BackbufferDepth();
@@ -147,9 +147,8 @@ void GraphicsApp::Go(int _argc, char** _argv)
 
 			gpu::cmd::SetIndexBuffer(ctx, indexBuffer);
 			gpu::cmd::SetVertexBuffer(ctx, 0, vertexBuffer);
-			gpu::cmd::UpdateTransientBuffer(ctx, vertexBuffer, s_testTriVerts);
-			gpu::cmd::UpdateTransientBuffer(ctx, indexBuffer, s_testIndicies);
 			gpu::cmd::UpdateTransientBuffer(ctx, constantBuffer, &myCbuffer);
+
 			gpu::cmd::SetConstantBuffer(ctx, constantBuffer, 0, 0);
 			uint32_t width, height;
 			gpu::GetSwapchainDimensions(width, height);

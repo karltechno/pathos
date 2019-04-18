@@ -29,13 +29,81 @@ namespace gpu
 
 Device_D3D12* g_device = nullptr;
 
-bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, char const* _debugName)
+static uint32_t GetBufferAlign(gpu::BufferDesc const& _desc)
+{
+	if (!!(_desc.m_flags & gpu::BufferFlags::Constant))
+	{
+		return D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
+	}
+	else
+	{
+		return 8; // Anything better ?
+	}
+}
+
+static void CopyInitialResourceData(ID3D12Resource* _resource, void const* _data, uint32_t _size, D3D12_RESOURCE_STATES _beforeState, D3D12_RESOURCE_STATES _afterState)
+{
+	ID3D12Resource* srcRes;
+	D3D12_GPU_VIRTUAL_ADDRESS addr; 
+	uint64_t offest;
+	void* cpuPtr;
+	g_device->GetFrameResources()->m_uploadAllocator.Alloc(srcRes, addr, offest, cpuPtr, _size, 16); // TODO: Any other align needed?
+	memcpy(cpuPtr, _data, _size);
+
+	ID3D12CommandAllocator* allocator = g_device->m_commandQueueManager.GraphicsQueue().AcquireAllocator();
+	KT_SCOPE_EXIT(allocator->Release());
+	// TODO: Pool lists
+	ID3D12CommandList* listBase;
+	// TODO: Use direct queue for now, need to work out synchronization and use copy queue.
+	D3D_CHECK(g_device->m_d3dDev->CreateCommandList(1, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&listBase)));
+	ID3D12GraphicsCommandList* list = (ID3D12GraphicsCommandList*)listBase;
+	list->CopyBufferRegion(_resource, 0, srcRes, offest, _size);
+	
+	if (_beforeState != _afterState)
+	{
+		D3D12_RESOURCE_BARRIER barrier{};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier.Transition.pResource = _resource;
+		barrier.Transition.StateBefore = _beforeState;
+		barrier.Transition.StateAfter = _afterState;
+		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		list->ResourceBarrier(1, &barrier);
+	}
+
+	g_device->m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(&listBase, 1);
+}
+
+bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, void const* _initialData, char const* _debugName)
 {
 	KT_ASSERT(!m_res);
 
 	m_desc = _desc;
 
-	m_state = D3D12_RESOURCE_STATE_COPY_DEST;
+	D3D12_RESOURCE_STATES bestInitialState = D3D12_RESOURCE_STATE_COMMON;
+	if (!!(_desc.m_flags & (BufferFlags::Constant | BufferFlags::Vertex)))
+	{
+		bestInitialState = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+	}
+	else if (!!(_desc.m_flags & BufferFlags::Index))
+	{
+		bestInitialState = D3D12_RESOURCE_STATE_INDEX_BUFFER;
+	}
+	else if (!!(_desc.m_flags & BufferFlags::ShaderResource))
+	{
+		bestInitialState = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	}
+	else if (!!(_desc.m_flags & BufferFlags::UnorderedAccess))
+	{
+		bestInitialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+	}
+
+	D3D12_RESOURCE_STATES const creationState = _initialData ? D3D12_RESOURCE_STATE_COPY_DEST : bestInitialState;
+
+	m_state = bestInitialState;
+	if (_initialData)
+	{
+		m_state = D3D12_RESOURCE_STATE_COPY_DEST;
+	}
 
 	if (!!(_desc.m_flags & BufferFlags::Constant))
 	{
@@ -66,7 +134,7 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, char const* _debugName
 		desc.SampleDesc.Quality = 0;
 		desc.Width = _desc.m_sizeInBytes;
 
-		if (!SUCCEEDED(g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &desc, m_state, nullptr, IID_PPV_ARGS(&m_res))))
+		if (!SUCCEEDED(g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &desc, creationState, nullptr, IID_PPV_ARGS(&m_res))))
 		{
 			KT_LOG_ERROR("CreateCommittedResource failed to create buffer size %u.", _desc.m_sizeInBytes);
 			return false;
@@ -84,6 +152,24 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, char const* _debugName
 	{
 		D3D_SET_DEBUG_NAME(m_res, m_debugName.Data());
 	}
+
+	if (_initialData)
+	{
+		if (!!(_desc.m_flags & BufferFlags::Transient))
+		{
+			// Transient with initial data.
+			g_device->GetFrameResources()->m_uploadAllocator.Alloc(*this);
+			KT_ASSERT(m_mappedCpuData);
+			memcpy(m_mappedCpuData, _initialData, _desc.m_sizeInBytes);
+			UpdateViews();
+		}
+		else
+		{
+			KT_ASSERT(m_res);
+			CopyInitialResourceData(m_res, _initialData, _desc.m_sizeInBytes, creationState, m_state);
+		}
+	}
+
 	return true;
 }
 
@@ -124,10 +210,24 @@ void AllocatedBuffer_D3D12::UpdateViews()
 	if (!!(m_desc.m_flags & BufferFlags::Constant))
 	{
 		KT_ASSERT(m_cbv.ptr);
-		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
+		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc{};
 		cbvDesc.BufferLocation = m_gpuAddress;
 		cbvDesc.SizeInBytes = m_desc.m_sizeInBytes;
 		g_device->m_d3dDev->CreateConstantBufferView(&cbvDesc, m_cbv);
+	}
+
+	if (!!(m_desc.m_flags & BufferFlags::ShaderResource))
+	{
+		KT_ASSERT(m_srv.ptr);
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		srvDesc.Format = ToDXGIFormat(m_desc.m_format);
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = m_desc.m_strideInBytes / m_desc.m_sizeInBytes;
+		srvDesc.Buffer.StructureByteStride = m_desc.m_strideInBytes;
+		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+		g_device->m_d3dDev->CreateShaderResourceView(m_res, &srvDesc, m_srv);
 	}
 }
 
@@ -242,12 +342,36 @@ void AllocatedGraphicsPSO_D3D12::Init(ID3D12Device* _device, gpu::GraphicsPSODes
 	AllocatedObjectBase_D3D12::Init(nullptr);
 }
 
-bool AllocatedTexture_D3D12::Init(TextureDesc const& _desc, D3D12_RESOURCE_STATES _initialState /* = D3D12_RESOURCE_STATE_COMMON */, char const* _debugName /* = nullptr */)
+bool AllocatedTexture_D3D12::Init(TextureDesc const& _desc, void const* _initialData, char const* _debugName /* = nullptr */)
 {
 	KT_ASSERT(!m_res);
 	m_desc = _desc;
 
 	m_ownsResource = true;
+
+	D3D12_RESOURCE_STATES bestInitialState = D3D12_RESOURCE_STATE_COMMON;
+
+	// TODO: Something better?
+	if (!!(_desc.m_usageFlags & TextureUsageFlags::DepthStencil))
+	{
+		bestInitialState = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+	}
+	else if (!!(_desc.m_usageFlags & TextureUsageFlags::RenderTarget))
+	{
+		bestInitialState = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	}
+	else if (!!(_desc.m_usageFlags & TextureUsageFlags::ShaderResource))
+	{
+		bestInitialState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+	}
+	else if (!!(_desc.m_usageFlags & TextureUsageFlags::UnorderedAccess))
+	{
+		bestInitialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+	}
+
+	m_state = bestInitialState;
+
+	D3D12_RESOURCE_STATES const creationState = _initialData ? D3D12_RESOURCE_STATE_COPY_DEST : bestInitialState;
 
 	D3D12_RESOURCE_DESC d3dDesc = {};
 
@@ -324,8 +448,7 @@ bool AllocatedTexture_D3D12::Init(TextureDesc const& _desc, D3D12_RESOURCE_STATE
 		depthClear.DepthStencil.Depth = 1.0f; // TODO: Selectable for reverse Z?
 	}
 
-	m_state = _initialState;
-	HRESULT const hr = g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &d3dDesc, _initialState, pClearVal, IID_PPV_ARGS(&m_res));
+	HRESULT const hr = g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &d3dDesc, creationState, pClearVal, IID_PPV_ARGS(&m_res));
 	if (!SUCCEEDED(hr))
 	{
 		KT_LOG_ERROR("CreateCommittedResource failed (HRESULT: %u)", hr);
@@ -355,6 +478,12 @@ bool AllocatedTexture_D3D12::Init(TextureDesc const& _desc, D3D12_RESOURCE_STATE
 	if (m_res)
 	{
 		D3D_SET_DEBUG_NAME(m_res, m_debugName.Data());
+	}
+
+	if (_initialData)
+	{
+		// TODO:
+		//CopyInitialResourceData(m_res, _initialData, _
 	}
 
 	return true;
@@ -538,9 +667,9 @@ void FrameUploadAllocator_D3D12::Alloc(ID3D12Resource*& o_res, D3D12_GPU_VIRTUAL
 	} while (false);
 }
 
-void FrameUploadAllocator_D3D12::Alloc(AllocatedBuffer_D3D12& o_res, uint32_t _size, uint32_t _align)
+void FrameUploadAllocator_D3D12::Alloc(AllocatedBuffer_D3D12& o_res)
 {
-	Alloc(o_res.m_res, o_res.m_gpuAddress, o_res.m_offset, o_res.m_mappedCpuData, _size, _align);
+	Alloc(o_res.m_res, o_res.m_gpuAddress, o_res.m_offset, o_res.m_mappedCpuData, o_res.m_desc.m_sizeInBytes, GetBufferAlign(o_res.m_desc));
 	o_res.m_ownsResource = false;
 	o_res.m_state = D3D12_RESOURCE_STATE_GENERIC_READ;
 }
@@ -790,7 +919,7 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		swapChainDesc.SampleDesc.Quality = 0;
 		swapChainDesc.SampleDesc.Count = 1;
 		swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-		swapChainDesc.BufferCount = gpu::c_d3dBufferedFrames;
+		swapChainDesc.BufferCount = gpu::c_maxBufferedFrames;
 		swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 		swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
 
@@ -809,7 +938,12 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 
 	m_uploadPagePool.Init(m_d3dDev);
 
-	for (uint32_t i = 0; i < c_d3dBufferedFrames; ++i)
+	uint32_t constexpr c_totalCbvSrvUavDescriptors = 4096 * 4;
+
+	m_cbvsrvuavHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, c_totalCbvSrvUavDescriptors, true, "CBV/SRV/UAV GPU Heap");
+	m_descriptorcbvsrvuavRingBuffer.Init(&m_cbvsrvuavHeap, 0, c_totalCbvSrvUavDescriptors);
+
+	for (uint32_t i = 0; i < c_maxBufferedFrames; ++i)
 	{
 		// Create back buffer
 		AllocatedTexture_D3D12* backbufferData;
@@ -818,11 +952,6 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		D3D_CHECK(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&backbufferRes)));
 		backbufferData->InitFromBackbuffer(backbufferRes, Format::R8G8B8A8_UNorm, m_swapChainHeight, m_swapChainWidth);
 
-		// Linear descriptor heap.
-		kt::String64 str;
-		str.AppendFmt("CBV/SRV/UAV Linear Heap Frame: %u", i);
-		m_framesResources[i].m_descriptorHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1024, true, str.Data());
-
 		m_framesResources[i].m_uploadAllocator.Init(&m_uploadPagePool);
 	}
 
@@ -830,7 +959,7 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 	m_debugRootSig = CreateGraphicsRootSignature(m_d3dDev);
 
 	gpu::TextureDesc const depthDesc = gpu::TextureDesc::Desc2D(m_swapChainWidth, m_swapChainHeight, TextureUsageFlags::DepthStencil, Format::D32_Float);
-	m_backbufferDepth.AcquireNoRef(gpu::CreateTexture(depthDesc, "Backbuffer Depth"));
+	m_backbufferDepth.AcquireNoRef(gpu::CreateTexture(depthDesc, nullptr, "Backbuffer Depth"));
 
 	m_nullCbv = m_stagingHeap.AllocOne();
 	m_d3dDev->CreateConstantBufferView(nullptr, m_nullCbv);
@@ -856,14 +985,13 @@ Device_D3D12::~Device_D3D12()
 
 	m_psoCache.Clear();
 
-	// Process all deferred deletions
 
 	KT_ASSERT(m_psoHandles.NumAllocated() == 0);
 	KT_ASSERT(m_textureHandles.NumAllocated() == 0);
 	KT_ASSERT(m_bufferHandles.NumAllocated() == 0);
 	KT_ASSERT(m_shaderHandles.NumAllocated() == 0);
 
-	// TODO: Clear handles
+	// TODO: state check/clear handles if not unallocated.
 
 	m_commandQueueManager.Shutdown();
 
@@ -871,17 +999,18 @@ Device_D3D12::~Device_D3D12()
 	m_dsvHeap.Shutdown();
 	m_stagingHeap.Shutdown();
 
-	for (uint32_t i = 0; i < c_d3dBufferedFrames; ++i)
+	// Process all deferred deletions, need to clear handles/flush pso etc first so any pending deletions are pushed.
+	for (uint32_t i = 0; i < c_maxBufferedFrames; ++i)
 	{
 		FrameResources& frame = m_framesResources[i];
 		frame.ClearOnBeginFrame();
-		frame.m_descriptorHeap.Shutdown();
 		frame.m_uploadAllocator.Shutdown();
 	}
 
 	m_uploadPagePool.Shutdown();
+	m_cbvsrvuavHeap.Shutdown();
 
-	// Release d3d objects.
+	// Release final d3d objects.
 	SafeReleaseDX(m_d3dDev);
 	SafeReleaseDX(m_swapChain);
 
@@ -889,7 +1018,7 @@ Device_D3D12::~Device_D3D12()
 	SafeReleaseDX(m_debugPsoTest);
 }
 
-gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, char const* _debugName)
+gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initialData, char const* _debugName)
 {
 	AllocatedBuffer_D3D12* res;
 	gpu::BufferHandle const handle = g_device->m_bufferHandles.Alloc(res);
@@ -898,7 +1027,7 @@ gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, char const* _debugN
 		return gpu::BufferHandle{};
 	}
 
-	if (!res->Init(_desc, _debugName))
+	if (!res->Init(_desc, _initialData, _debugName))
 	{
 		g_device->m_bufferHandles.Free(handle);
 		return gpu::BufferHandle{};
@@ -907,7 +1036,7 @@ gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, char const* _debugN
 	return gpu::BufferHandle{ handle };
 }
 
-gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc, char const* _debugName)
+gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc, void const* _initialData, char const* _debugName)
 {
 	AllocatedTexture_D3D12* res;
 	kt::VersionedHandle const handle = g_device->m_textureHandles.Alloc(res);
@@ -916,10 +1045,7 @@ gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc, char const* _deb
 		return gpu::BufferHandle{};
 	}
 
-	D3D12_RESOURCE_STATES const intialState = !!(_desc.m_usageFlags & gpu::TextureUsageFlags::DepthStencil)
-		? (D3D12_RESOURCE_STATE_DEPTH_WRITE) : D3D12_RESOURCE_STATE_COMMON;
-
-	if (!res->Init(_desc, intialState, _debugName))
+	if (!res->Init(_desc, _initialData, _debugName))
 	{
 		g_device->m_bufferHandles.Free(handle);
 		return gpu::BufferHandle{};
@@ -1074,15 +1200,11 @@ void EndFrame()
 	g_device->EndFrame();
 }
 
-gpu::cmd::Context* CreateGraphicsContext()
-{
-	return new cmd::CommandContext_D3D12(D3D12_COMMAND_LIST_TYPE_DIRECT, g_device);
-}
-
 void Device_D3D12::BeginFrame()
 {
 	m_commandQueueManager.WaitForFenceBlockingCPU(m_frameFences[m_cpuFrameIdx]);
 	m_framesResources[m_cpuFrameIdx].ClearOnBeginFrame();
+	m_descriptorcbvsrvuavRingBuffer.OnBeginFrame(m_cpuFrameIdx);
 
 
 	AllocatedTexture_D3D12* backBuffer = m_textureHandles.Lookup(m_backBuffers[m_cpuFrameIdx]);
@@ -1132,10 +1254,12 @@ void Device_D3D12::EndFrame()
 	m_commandQueueManager.GraphicsQueue().ReleaseAllocator(allocator, fence);
 	gfxList->Release();
 
+	m_descriptorcbvsrvuavRingBuffer.OnEndOfFrame(m_cpuFrameIdx);
+
 	// Todo: vsync
 	D3D_CHECK(m_swapChain->Present(0, 0));
 	m_frameFences[m_cpuFrameIdx] = m_commandQueueManager.GraphicsQueue().LastPostedFenceValue();
-	m_cpuFrameIdx = (m_cpuFrameIdx + 1) % gpu::c_d3dBufferedFrames;
+	m_cpuFrameIdx = (m_cpuFrameIdx + 1) % gpu::c_maxBufferedFrames;
 	++m_frameCounter;
 }
 
@@ -1144,121 +1268,6 @@ void GetSwapchainDimensions(uint32_t& o_width, uint32_t& o_height)
 	o_width = g_device->m_swapChainWidth;
 	o_height = g_device->m_swapChainHeight;
 }
-
-
-
-//
-//void Device_D3D12::TestOneFrame()
-//{
-//	BeginFrame();
-//
-//	ID3D12CommandAllocator* allocator = m_commandQueueManager.GraphicsQueue().AcquireAllocator();
-//	ID3D12CommandList* list;
-//	D3D_CHECK(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&list)));
-//	ID3D12GraphicsCommandList* gfxList = (ID3D12GraphicsCommandList*)list;
-//
-//	{
-//		D3D12_RESOURCE_BARRIER barrier = {};
-//		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-//		barrier.Transition.pResource = m_backBuffers[m_cpuFrameIdx].m_resource;
-//		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-//		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-//		gfxList->ResourceBarrier(1, &barrier);
-//	}
-//
-//	// CBUFFER
-//	static float time = 0.0f;
-//
-//	struct CBuffer
-//	{
-//		kt::Vec4 time;
-//	};
-//
-//	FrameResources& frameRes = m_framesResources[m_cpuFrameIdx];
-//
-//	Resource_D3D12 cbufferRes;
-//	frameRes.m_uploadAllocator.Allocate(cbufferRes, 256);
-//
-//	CBuffer buf = { kt::Vec4(time) };
-//
-//	memcpy(cbufferRes.m_mappedCpuData, &buf, sizeof(CBuffer));
-//
-//	frameRes.m_descriptorHeap.Alloc(1, cbufferDescriptorCpu, cbufferDescriptorGpu);
-//	
-//	D3D12_CONSTANT_BUFFER_VIEW_DESC cbufferDesc;
-//	cbufferDesc.BufferLocation = cbufferRes.m_gpuAddress;
-//	cbufferDesc.SizeInBytes = 256;
-//
-//	m_device->CreateConstantBufferView(&cbufferDesc, D3D12_CPU_DESCRIPTOR_HANDLE{ cbufferDescriptorCpu.ptr });
-//
-//	time += 0.001f;
-//
-//	FLOAT rgba[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-//	gfxList->ClearRenderTargetView(D3D12_CPU_DESCRIPTOR_HANDLE{ m_backBuffers[m_cpuFrameIdx].m_rtv.ptr }, rgba, 0, nullptr);
-//
-//	gfxList->SetPipelineState(m_debugPsoTest);
-//	gfxList->SetGraphicsRootSignature(m_debugRootSig);
-//	auto rtv = D3D12_CPU_DESCRIPTOR_HANDLE{ m_backBuffers[m_cpuFrameIdx].m_rtv.ptr };
-//
-//	D3D12_VIEWPORT viewPort;
-//	viewPort.Width = 1280.0f;
-//	viewPort.Height = 720.0f;
-//	viewPort.MaxDepth = 1.0f;
-//	viewPort.MinDepth = 0.0f;
-//	viewPort.TopLeftX = 0.0f;
-//	viewPort.TopLeftY = 0.0f;
-//
-//	D3D12_RECT rect;
-//	rect.bottom = 720;
-//	rect.left = 0;
-//	rect.top = 0;
-//	rect.right = 1280;
-//
-//	gfxList->RSSetScissorRects(1, &rect);
-//	gfxList->RSSetViewports(1, &viewPort);
-
-//	D3D12_VERTEX_BUFFER_VIEW vtxView;
-//	vtxView.BufferLocation = m_testVertBuffer.m_gpuAddress;
-//	vtxView.SizeInBytes = m_testVertBuffer.m_desc.buffer.sizeInBytes;
-//	vtxView.StrideInBytes = sizeof(kt::Vec3);
-//
-//	D3D12_INDEX_BUFFER_VIEW idxView;
-//	idxView.BufferLocation = m_testIndexBuffer.m_gpuAddress;
-//	idxView.Format = DXGI_FORMAT_R16_UINT;
-//	idxView.SizeInBytes = m_testIndexBuffer.m_desc.buffer.sizeInBytes;
-//
-//	ID3D12DescriptorHeap* const heaps[] = { m_framesResources[m_cpuFrameIdx].m_descriptorHeap.D3DDescriptorHeap() };
-//
-//	gfxList->SetDescriptorHeaps(KT_ARRAY_COUNT(heaps), heaps);
-//	gfxList->SetGraphicsRootConstantBufferView(0, cbufferRes.m_gpuAddress);
-//
-//	gfxList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
-//	gfxList->IASetIndexBuffer(&idxView);
-//	gfxList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-//	gfxList->IASetVertexBuffers(0, 1, &vtxView);
-//	gfxList->DrawIndexedInstanced(3, 1, 0, 0, 0);
-//
-//
-//	{
-//		D3D12_RESOURCE_BARRIER barrier = {};
-//		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-//		barrier.Transition.pResource = m_backBuffers[m_cpuFrameIdx].m_resource;
-//		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-//		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-//		gfxList->ResourceBarrier(1, &barrier);
-//	}
-//
-//	uint64_t const fence = m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(&list, 1);
-//	m_commandQueueManager.GraphicsQueue().ReleaseAllocator(allocator, fence);
-//	gfxList->Release();
-//	
-//	m_frameFences[m_cpuFrameIdx] = fence;
-//
-//	EndFrame();
-//}
-
-
-
 
 void Device_D3D12::FrameResources::ClearOnBeginFrame()
 {
@@ -1271,7 +1280,6 @@ void Device_D3D12::FrameResources::ClearOnBeginFrame()
 
 	m_deferredDeletions.Clear();
 
-	m_descriptorHeap.Clear();
 	m_uploadAllocator.ClearOnBeginFrame();
 }
 

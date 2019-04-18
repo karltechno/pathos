@@ -52,7 +52,7 @@ struct AllocatedObjectBase_D3D12
 
 struct AllocatedBuffer_D3D12 : AllocatedObjectBase_D3D12
 {
-	bool Init(BufferDesc const& _desc, char const* _debugName = nullptr);
+	bool Init(BufferDesc const& _desc, void const* _initialData, char const* _debugName = nullptr);
 	void Destroy();
 
 	void UpdateViews();
@@ -85,7 +85,7 @@ struct AllocatedBuffer_D3D12 : AllocatedObjectBase_D3D12
 
 struct AllocatedTexture_D3D12 : AllocatedObjectBase_D3D12
 {
-	bool Init(TextureDesc const& _desc, D3D12_RESOURCE_STATES _initialState = D3D12_RESOURCE_STATE_COMMON, char const* _debugName = nullptr);
+	bool Init(TextureDesc const& _desc, void const* _initialData, char const* _debugName = nullptr);
 	void InitFromBackbuffer(ID3D12Resource* _res, gpu::Format _format, uint32_t _height, uint32_t _width);
 	void Destroy();
 
@@ -149,7 +149,7 @@ struct FrameUploadAllocator_D3D12
 	
 	void ClearOnBeginFrame();
 
-	void Alloc(AllocatedBuffer_D3D12& o_res, uint32_t _size, uint32_t _align);
+	void Alloc(AllocatedBuffer_D3D12& o_res);
 	void Alloc(ID3D12Resource*& o_res, D3D12_GPU_VIRTUAL_ADDRESS& o_addr, uint64_t& o_offest, void*& o_cpuPtr, uint32_t _size, uint32_t _align);
 
 private:
@@ -159,6 +159,7 @@ private:
 };
 
 
+extern Device_D3D12* g_device;
 
 struct Device_D3D12
 {
@@ -178,9 +179,7 @@ struct Device_D3D12
 	{
 		void ClearOnBeginFrame();
 
-		LinearDescriptorHeap_D3D12 m_descriptorHeap;
 		FrameUploadAllocator_D3D12 m_uploadAllocator;
-
 		kt::Array<ID3D12DeviceChild*> m_deferredDeletions;
 	};
 
@@ -201,7 +200,7 @@ struct Device_D3D12
 	ID3D12Device2* m_d3dDev = nullptr;
 	IDXGISwapChain1* m_swapChain = nullptr;
 	
-	gpu::TextureRef m_backBuffers[c_d3dBufferedFrames];
+	gpu::TextureRef m_backBuffers[c_maxBufferedFrames];
 
 	gpu::TextureRef m_backbufferDepth;
 
@@ -215,7 +214,10 @@ struct Device_D3D12
 
 	FrameUploadPagePool_D3D12 m_uploadPagePool;
 
-	FrameResources m_framesResources[c_d3dBufferedFrames];
+	FrameResources m_framesResources[c_maxBufferedFrames];
+
+	DescriptorHeap_D3D12 m_cbvsrvuavHeap;
+	RingBufferDescriptorHeap_D3D12 m_descriptorcbvsrvuavRingBuffer;
 
 	kt::VersionedHandlePool<AllocatedBuffer_D3D12>		m_bufferHandles;
 	kt::VersionedHandlePool<AllocatedTexture_D3D12>		m_textureHandles;
@@ -224,7 +226,7 @@ struct Device_D3D12
 
 	PSOCache m_psoCache;
 
-	uint64_t m_frameFences[c_d3dBufferedFrames] = {};
+	uint64_t m_frameFences[c_maxBufferedFrames] = {};
 
 	uint32_t m_cpuFrameIdx = 0;
 

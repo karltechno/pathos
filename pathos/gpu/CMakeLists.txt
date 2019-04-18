@@ -7,6 +7,8 @@ set(GPU_SOURCES
 	"Types.h"
 	"Types.cpp"
 	"FormatConversion.h"
+	"GPURingBuffer.h"
+	"GPURingBuffer.cpp"
 )
 
 if(WIN32)

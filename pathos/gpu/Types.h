@@ -15,6 +15,8 @@ uint32_t constexpr c_uavTableSize = 16;
 
 uint32_t constexpr c_numShaderSpaces = 1;
 
+uint32_t constexpr c_maxBufferedFrames = 3u;
+
 template <typename Tag>
 struct TaggedHandle : kt::VersionedHandle
 {
@@ -85,9 +87,10 @@ enum class BufferFlags : uint32_t
 	Index				= 0x2,	// Index buffer.
 
 	UnorderedAccess		= 0x4,	// UAV	
-	Constant			= 0x8,	// Constant buffer
+	ShaderResource		= 0x8,	// SRV
+	Constant			= 0x10,	// Constant buffer
 
-	Transient			= 0x10,	// Transient resource, must be updated the same frame it is used.
+	Transient			= 0x20,	// Transient resource, must be updated the same frame it is used.
 };
 
 KT_ENUM_CLASS_FLAG_OPERATORS(BufferFlags);

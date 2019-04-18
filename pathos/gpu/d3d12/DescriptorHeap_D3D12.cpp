@@ -90,29 +90,44 @@ void FreeListDescriptorHeap_D3D12::Free(D3D12_CPU_DESCRIPTOR_HANDLE _ptr)
 	m_freeList.PushBack(m_heap.CPUPtrToIndex(_ptr));
 }
 
-void LinearDescriptorHeap_D3D12::Init(ID3D12Device* _dev, D3D12_DESCRIPTOR_HEAP_TYPE _ty, uint32_t _maxDescriptors, bool _shaderVisible, char const* _debugName)
+
+void RingBufferDescriptorHeap_D3D12::Init(DescriptorHeap_D3D12* _baseHeap, uint64_t _rangeOffsetInBytes, uint64_t _numDescriptors)
 {
-	m_heap.Init(_dev, _ty, _maxDescriptors, _shaderVisible, _debugName);
-	m_numAllocated = 0;
+	m_ringBuffer.Init(_baseHeap->m_heapStartGPU.ptr + _rangeOffsetInBytes, _numDescriptors * _baseHeap->m_descriptorIncrementSize, (uint8_t*)_baseHeap->m_heapStartCPU.ptr);
+	m_handleIncrement = _baseHeap->m_descriptorIncrementSize;
+	for (uint64_t& i : m_endOfFrameHeads)
+	{
+		i = c_invalidEndOfFrameHead;
+	}
 }
 
-void LinearDescriptorHeap_D3D12::Shutdown()
+bool RingBufferDescriptorHeap_D3D12::Alloc(uint32_t _numDescriptors, D3D12_CPU_DESCRIPTOR_HANDLE& o_cpuBase, D3D12_GPU_DESCRIPTOR_HANDLE& o_gpuBase)
 {
-	m_heap.Shutdown();
-	m_numAllocated = 0;
+	uint8_t* cpuptr;
+	uint64_t gpuptr = m_ringBuffer.Alloc(_numDescriptors * m_handleIncrement, 1, &cpuptr);
+	if (!gpuptr)
+	{
+		KT_ASSERT(false);
+		return false;
+	}
+	
+	o_cpuBase.ptr = SIZE_T(cpuptr);
+	o_gpuBase.ptr = gpuptr;
+	return true;
 }
 
-void LinearDescriptorHeap_D3D12::Alloc(uint32_t _num, D3D12_CPU_DESCRIPTOR_HANDLE& o_cpuBase, D3D12_GPU_DESCRIPTOR_HANDLE& o_gpuBase)
+void RingBufferDescriptorHeap_D3D12::OnBeginFrame(uint32_t _frameIdx)
 {
-	KT_ASSERT(m_numAllocated + _num <= m_heap.MaxDescriptors());
-	o_cpuBase = m_heap.IndexToCPUPtr(m_numAllocated);
-	o_gpuBase = m_heap.IndexToGPUPtr(m_numAllocated);
-	m_numAllocated += _num;
+	if (m_endOfFrameHeads[_frameIdx] != c_invalidEndOfFrameHead)
+	{
+		m_ringBuffer.AdvanceTailToPreviousHead(m_endOfFrameHeads[_frameIdx]);
+		m_endOfFrameHeads[_frameIdx] = c_invalidEndOfFrameHead;
+	}
 }
 
-void LinearDescriptorHeap_D3D12::Clear()
+void RingBufferDescriptorHeap_D3D12::OnEndOfFrame(uint32_t _frameIdx)
 {
-	m_numAllocated = 0;
+	m_endOfFrameHeads[_frameIdx] = m_ringBuffer.CurrentHead();
 }
 
 }

@@ -25,39 +25,67 @@ namespace cmd
 {
 
 
-CommandContext_D3D12::CommandContext_D3D12(D3D12_COMMAND_LIST_TYPE _type, Device_D3D12* _dev)
+Context* Begin(ContextType _type)
+{
+	return new CommandContext_D3D12(_type, g_device);
+}
+
+ContextType GetContextType(Context* _ctx)
+{
+	return _ctx->m_ctxType;
+}
+
+CommandContext_D3D12::CommandContext_D3D12(ContextType _type, Device_D3D12* _dev)
 	: m_device(_dev)
-	, m_type(_type)
+	, m_ctxType(_type)
 {
 
-	if (_type == D3D12_COMMAND_LIST_TYPE_COMPUTE)
+	switch (_type)
 	{
-		m_cmdListFlags = CommandListFlags::ComputeQueueFlags;
-	}
-	else if (_type == D3D12_COMMAND_LIST_TYPE_DIRECT)
-	{
-		m_cmdListFlags = CommandListFlags::DirectQueueFlags;
-	}
-	else if (_type == D3D12_COMMAND_LIST_TYPE_COPY)
-	{
-		m_cmdListFlags = CommandListFlags::Copy;
+		case ContextType::Compute:
+		{
+			m_d3dType = D3D12_COMMAND_LIST_TYPE_COMPUTE;
+			m_cmdListFlags = CommandListFlags_D3D12::ComputeQueueFlags;
+
+		} break;
+
+		case ContextType::Graphics:
+		{
+			m_d3dType = D3D12_COMMAND_LIST_TYPE_DIRECT;
+			m_cmdListFlags = CommandListFlags_D3D12::DirectQueueFlags;
+		} break;
+
+		case ContextType::Copy:
+		{
+			m_d3dType = D3D12_COMMAND_LIST_TYPE_COPY;
+			m_cmdListFlags = CommandListFlags_D3D12::CopyQueueFlags;
+		} break;
+
+		default:
+		{
+			KT_ASSERT(false);
+			KT_UNREACHABLE;
+		}
 	}
 
-	m_descriptorAllocator = &_dev->m_framesResources->m_descriptorHeap;
-	m_cmdAllocator = _dev->m_commandQueueManager.QueueByType(m_type).AcquireAllocator();
-	// TODO: Is it expensive to keep creating command lists (its obviously worth pooling allocators.
-	D3D_CHECK(m_device->m_d3dDev->CreateCommandList(1, _type, m_cmdAllocator, nullptr, IID_PPV_ARGS(&m_cmdList)));
+
+	m_cmdAllocator = _dev->m_commandQueueManager.QueueByType(m_d3dType).AcquireAllocator();
+	// TODO: Is it expensive to keep creating command lists (its obviously worth pooling allocators).
+	D3D_CHECK(m_device->m_d3dDev->CreateCommandList(1, m_d3dType, m_cmdAllocator, nullptr, IID_PPV_ARGS(&m_cmdList)));
 
 	for (uint32_t i = 0; i < KT_ARRAY_COUNT(m_dirtyDescriptors); ++i)
 	{
 		m_dirtyDescriptors[i] = DirtyDescriptorFlags::All;
 	}
 
-	ID3D12DescriptorHeap* heap = m_descriptorAllocator->m_heap.m_heap;
+	ID3D12DescriptorHeap* heap = m_device->m_cbvsrvuavHeap.m_heap;
 	m_cmdList->SetDescriptorHeaps(1, &heap);
 
-	// TODO: HACK
-	m_cmdList->SetGraphicsRootSignature(m_device->m_debugRootSig);
+	if (m_d3dType == D3D12_COMMAND_LIST_TYPE_DIRECT)
+	{
+		// TODO: HACK
+		m_cmdList->SetGraphicsRootSignature(m_device->m_debugRootSig);
+	}
 }
 
 CommandContext_D3D12::~CommandContext_D3D12()
@@ -69,8 +97,8 @@ CommandContext_D3D12::~CommandContext_D3D12()
 void End(Context* _ctx)
 {
 	ID3D12CommandList* lists[] = { _ctx->m_cmdList };
-	uint64_t const fence = _ctx->m_device->m_commandQueueManager.QueueByType(_ctx->m_type).ExecuteCommandLists(lists, KT_ARRAY_COUNT(lists));
-	_ctx->m_device->m_commandQueueManager.QueueByType(_ctx->m_type).ReleaseAllocator(_ctx->m_cmdAllocator, fence);
+	uint64_t const fence = _ctx->m_device->m_commandQueueManager.QueueByType(_ctx->m_d3dType).ExecuteCommandLists(lists, KT_ARRAY_COUNT(lists));
+	_ctx->m_device->m_commandQueueManager.QueueByType(_ctx->m_d3dType).ReleaseAllocator(_ctx->m_cmdAllocator, fence);
 	_ctx->m_cmdAllocator = nullptr;
 
 	delete _ctx;
@@ -78,7 +106,7 @@ void End(Context* _ctx)
 
 void SetVertexBuffer(Context* _ctx, uint32_t _streamIdx, gpu::BufferHandle _handle)
 {
-	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags::Graphics);
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
 
 	KT_ASSERT(_streamIdx < gpu::c_maxVertexStreams);
 	if (_ctx->m_state.m_vertexStreams[_streamIdx].Handle() != _handle)
@@ -90,7 +118,7 @@ void SetVertexBuffer(Context* _ctx, uint32_t _streamIdx, gpu::BufferHandle _hand
 
 void SetIndexBuffer(Context* _ctx, gpu::BufferHandle _handle)
 {
-	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags::Graphics);
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
 
 	if (_ctx->m_state.m_indexBuffer.Handle() != _handle)
 	{
@@ -101,9 +129,9 @@ void SetIndexBuffer(Context* _ctx, gpu::BufferHandle _handle)
 
 void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startVtx, uint32_t _baseVtx, uint32_t _startInstance)
 {
-	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags::Graphics);
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
 
-	_ctx->ApplyStateChanges(CommandListFlags::Graphics);
+	_ctx->ApplyStateChanges(CommandListFlags_D3D12::Graphics);
 
 	_ctx->m_cmdList->IASetPrimitiveTopology(ToD3DPrimType(_prim));
 	_ctx->m_cmdList->DrawIndexedInstanced(_indexCount, _instanceCount, _startVtx, _baseVtx, _startInstance);
@@ -111,26 +139,23 @@ void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _ind
 
 void UpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem)
 {
-	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags::Copy);
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Copy);
 
 	KT_ASSERT(_ctx->m_device->m_bufferHandles.IsValid(_handle));
 	AllocatedBuffer_D3D12* res = _ctx->m_device->m_bufferHandles.Lookup(_handle);
 	KT_ASSERT(!!(res->m_desc.m_flags & BufferFlags::Transient));
 
-	uint32_t const size = res->m_desc.m_sizeInBytes;
-
-	// TODO: Alignment, copying to gpu mem, etc.
-	_ctx->m_device->GetFrameResources()->m_uploadAllocator.Alloc(*res, size, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+	_ctx->m_device->GetFrameResources()->m_uploadAllocator.Alloc(*res);
 
 	KT_ASSERT(res->m_mappedCpuData);
-	memcpy(res->m_mappedCpuData, _mem, size);
+	memcpy(res->m_mappedCpuData, _mem, res->m_desc.m_sizeInBytes);
 	res->m_lastFrameTouched = _ctx->m_device->m_frameCounter;
 	res->UpdateViews();
 }
 
 void SetGraphicsPSO(Context* _ctx, gpu::GraphicsPSOHandle _pso)
 {
-	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags::Graphics);
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
 
 	if (_ctx->m_state.m_graphicsPso.Handle() != _pso)
 	{
@@ -142,7 +167,7 @@ void SetGraphicsPSO(Context* _ctx, gpu::GraphicsPSOHandle _pso)
 void ClearRenderTarget(Context* _ctx, gpu::TextureHandle _handle, float const _color[4])
 {
 	AllocatedTexture_D3D12* tex = _ctx->m_device->m_textureHandles.Lookup(_handle);
-	// TODO: Flush barriers for render target? 
+	// TODO: Flush barriers for render target
 	KT_ASSERT(tex);
 	KT_ASSERT(tex->m_rtv.ptr);
 	KT_ASSERT(tex->m_state == D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -195,11 +220,11 @@ void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth)
 	_ctx->m_cmdList->ClearDepthStencilView(tex->m_dsv, D3D12_CLEAR_FLAG_DEPTH, _depth, 0, 0, nullptr);
 }
 
-void CommandContext_D3D12::ApplyStateChanges(CommandListFlags _dispatchType)
+void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchType)
 {
-	if (!!(_dispatchType & CommandListFlags::Graphics))
+	if (!!(_dispatchType & CommandListFlags_D3D12::Graphics))
 	{
-		CHECK_QUEUE_FLAGS(this, CommandListFlags::Graphics);
+		CHECK_QUEUE_FLAGS(this, CommandListFlags_D3D12::Graphics);
 
 		if (!!(m_dirtyFlags & DirtyStateFlags::PipelineState))
 		{
@@ -277,7 +302,7 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags _dispatchType)
 		}
 	}
 
-	if (!!(_dispatchType & (CommandListFlags::Compute | CommandListFlags::Graphics)))
+	if (!!(_dispatchType & (CommandListFlags_D3D12::Compute | CommandListFlags_D3D12::Graphics)))
 	{
 		for (uint32_t spaceIdx = 0; spaceIdx < gpu::c_numShaderSpaces; ++spaceIdx)
 		{
@@ -312,10 +337,10 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags _dispatchType)
 				D3D12_GPU_DESCRIPTOR_HANDLE tableDestGpu;
 				D3D12_CPU_DESCRIPTOR_HANDLE tableDestCpu;
 				UINT const destSize = gpu::c_cbvTableSize;
-				m_descriptorAllocator->Alloc(gpu::c_cbvTableSize, tableDestCpu, tableDestGpu);
+				m_device->m_descriptorcbvsrvuavRingBuffer.Alloc(gpu::c_cbvTableSize, tableDestCpu, tableDestGpu);
 				m_device->m_d3dDev->CopyDescriptors(1, &tableDestCpu, &destSize, gpu::c_cbvTableSize, cpuDescriptors, sourceSizes, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-				if (!!(_dispatchType & CommandListFlags::Graphics))
+				if (!!(_dispatchType & CommandListFlags_D3D12::Graphics))
 				{
 					// TODO: Hardcoded root offset.
 					m_cmdList->SetGraphicsRootDescriptorTable(0 + 3 * spaceIdx, tableDestGpu);
@@ -335,7 +360,7 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags _dispatchType)
 
 void SetConstantBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space)
 {
-	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags::Compute);
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Compute);
 	if (_ctx->m_state.m_cbvs[_space][_idx].Handle() != _handle)
 	{
 		_ctx->m_state.m_cbvs[_space][_idx] = _handle;
@@ -345,7 +370,7 @@ void SetConstantBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, 
 
 void SetScissorRect(Context* _ctx, gpu::Rect const& _rect)
 {
-	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags::Graphics);
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
 
 	D3D12_RECT rect;
 	rect.top = _rect.m_topLeft.y;
@@ -357,7 +382,7 @@ void SetScissorRect(Context* _ctx, gpu::Rect const& _rect)
 
 void SetViewport(Context* _ctx, gpu::Rect const& _rect, float _minDepth, float _maxDepth)
 {
-	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags::Graphics);
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
 
 	D3D12_VIEWPORT vp;
 	vp.TopLeftX = _rect.m_topLeft.x;

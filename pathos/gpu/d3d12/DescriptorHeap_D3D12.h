@@ -2,6 +2,7 @@
 #include <kt/Array.h>
 
 #include <gpu/Types.h>
+#include <gpu/GPURingBuffer.h>
 
 #include <d3d12.h>
 #include <stdint.h>
@@ -25,7 +26,6 @@ struct DescriptorHeap_D3D12
 	uint32_t CPUPtrToIndex(D3D12_CPU_DESCRIPTOR_HANDLE _ptr) const;
 
 	bool IsFrom(D3D12_CPU_DESCRIPTOR_HANDLE _ptr) const;
-
 
 	ID3D12DescriptorHeap* m_heap = nullptr;
 	D3D12_DESCRIPTOR_HEAP_TYPE m_type;
@@ -53,19 +53,19 @@ private:
 	kt::Array<uint32_t> m_freeList;
 };
 
-struct LinearDescriptorHeap_D3D12
+struct RingBufferDescriptorHeap_D3D12
 {
-	void Init(ID3D12Device* _dev, D3D12_DESCRIPTOR_HEAP_TYPE _ty, uint32_t _maxDescriptors, bool _shaderVisible, char const* _debugName);
-	void Shutdown();
+	void Init(DescriptorHeap_D3D12* _baseHeap, uint64_t _rangeOffsetInBytes, uint64_t _numDescriptors);
+	bool Alloc(uint32_t _numDescriptors, D3D12_CPU_DESCRIPTOR_HANDLE& o_cpuBase, D3D12_GPU_DESCRIPTOR_HANDLE& o_gpuBase);
 
-	void Alloc(uint32_t _num, D3D12_CPU_DESCRIPTOR_HANDLE& o_cpuBase, D3D12_GPU_DESCRIPTOR_HANDLE& o_gpuBase);
-
-	void Clear();
-
-	DescriptorHeap_D3D12 m_heap;
+	void OnBeginFrame(uint32_t _frameIdx);
+	void OnEndOfFrame(uint32_t _frameIdx);
 
 private:
-	uint32_t m_numAllocated = 0;
+	static uint64_t constexpr c_invalidEndOfFrameHead = UINT64_MAX;
+	uint64_t m_handleIncrement = 0;
+	gpu::RingBuffer m_ringBuffer;
+	uint64_t m_endOfFrameHeads[gpu::c_maxBufferedFrames];
 };
 
 }

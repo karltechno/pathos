@@ -6,20 +6,6 @@
 namespace gpu
 {
 
-
-enum class CommandListFlags : uint32_t
-{
-	Graphics	= 0x1,
-	Compute		= 0x2,
-	Copy		= 0x4,
-
-	DirectQueueFlags	= Graphics | Compute | Copy,
-	ComputeQueueFlags	= Compute | Copy,
-	CopyQueueFlags		= Copy
-};
-
-KT_ENUM_CLASS_FLAG_OPERATORS(CommandListFlags);
-
 namespace cmd
 {
 
@@ -28,7 +14,19 @@ struct CommandContext_D3D12;
 using Context = CommandContext_D3D12;
 #endif
 
+enum class ContextType
+{
+	Graphics,
+	Compute,
+	Copy,
+
+	Num_ContextType
+};
+
+Context* Begin(ContextType _type);
 void End(Context* _ctx);
+
+ContextType GetContextType(Context* _ctx);
 
 void SetGraphicsPSO(Context* _ctx, gpu::GraphicsPSOHandle _pso);
 
