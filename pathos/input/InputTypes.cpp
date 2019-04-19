@@ -45,4 +45,21 @@ input::Event Event::Create_MouseWheelDelta(int16_t _delta)
 	return e;
 }
 
+input::Event Event::Create_KeyUp(Key _key)
+{
+	Event e = {};
+	e.m_type = Event::Type::KeyUp;
+	e.m_key = _key;
+	return e;
+}
+
+input::Event Event::Create_KeyDown(Key _key)
+{
+	Event e = {};
+	e.m_type = Event::Type::KeyDown;
+	e.m_key = _key;
+	return e;
+}
+
+
 }

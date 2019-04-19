@@ -36,6 +36,28 @@ void ImGuiHandler::Init(void* _nwh)
 	io.ImeWindowHandle = _nwh;
 	io.BackendPlatformName = "pathos_d3d12";
 
+	io.KeyMap[ImGuiKey_Tab] = uint32_t(input::Key::Tab);
+	io.KeyMap[ImGuiKey_LeftArrow] = uint32_t(input::Key::Left);
+	io.KeyMap[ImGuiKey_RightArrow] = uint32_t(input::Key::Right);
+	io.KeyMap[ImGuiKey_UpArrow] = uint32_t(input::Key::Up);
+	io.KeyMap[ImGuiKey_DownArrow] = uint32_t(input::Key::Down);
+	io.KeyMap[ImGuiKey_PageUp] = uint32_t(input::Key::PageUp);
+	io.KeyMap[ImGuiKey_PageDown] = uint32_t(input::Key::PageDown);
+	io.KeyMap[ImGuiKey_Home] = uint32_t(input::Key::Home);;
+	io.KeyMap[ImGuiKey_End] = uint32_t(input::Key::End);
+	io.KeyMap[ImGuiKey_Insert] = uint32_t(input::Key::Insert);
+	io.KeyMap[ImGuiKey_Delete] = uint32_t(input::Key::Delete);
+	io.KeyMap[ImGuiKey_Backspace] = uint32_t(input::Key::BackSpace);
+	io.KeyMap[ImGuiKey_Space] = uint32_t(input::Key::Space);
+	io.KeyMap[ImGuiKey_Enter] = uint32_t(input::Key::Enter);
+	io.KeyMap[ImGuiKey_Escape] = uint32_t(input::Key::Escape);
+	io.KeyMap[ImGuiKey_A] = uint32_t(input::Key::KeyA);
+	io.KeyMap[ImGuiKey_C] = uint32_t(input::Key::KeyC);
+	io.KeyMap[ImGuiKey_V] = uint32_t(input::Key::KeyV);
+	io.KeyMap[ImGuiKey_X] = uint32_t(input::Key::KeyX);
+	io.KeyMap[ImGuiKey_Y] = uint32_t(input::Key::KeyY);
+	io.KeyMap[ImGuiKey_Z] = uint32_t(input::Key::KeyZ);
+
 	// io.KeyMap TODO.
 
 	FILE* pshFile = fopen("shaders/ImGui.pixel.cso", "rb");
@@ -137,6 +159,33 @@ bool ImGuiHandler::HandleInputEvent(input::Event const& _event)
 			io.MouseWheel += _event.m_wheelDelta > 0 ? 1.0f : -1.0f;
 		} break;
 
+		case input::Event::Type::KeyUp:
+		case input::Event::Type::KeyDown:
+		{
+			bool const isDown = _event.m_type == input::Event::Type::KeyDown;
+			io.KeysDown[uint32_t(_event.m_key)] = isDown;
+
+			switch (_event.m_key)
+			{
+				case input::Key::LeftControl:
+				{
+					io.KeyCtrl = isDown;
+				} break;
+
+				case input::Key::LeftAlt:
+				{
+					io.KeyAlt = isDown;
+				} break;
+
+				case input::Key::LeftShift:
+				{
+					io.KeyShift = isDown;
+				} break;
+
+				default: {} break;
+			}
+		} break;
+
 		case input::Event::Type::MouseButtonDown:
 		case input::Event::Type::MouseButtonUp:
 		{
@@ -179,9 +228,11 @@ bool ImGuiHandler::HandleInputEvent(input::Event const& _event)
 	return false;
 }
 
-void ImGuiHandler::BeginFrame()
+void ImGuiHandler::BeginFrame(float _dt)
 {
 	ImGuiIO& io = ImGui::GetIO();
+	io.DeltaTime = _dt;
+
 	uint32_t w, h;
 	gpu::GetSwapchainDimensions(w, h);
 	io.DisplaySize = ImVec2(float(w), float(h));

@@ -18,6 +18,102 @@ namespace win
 
 using XInputGetStateFn =  DWORD (WINAPI*)(DWORD, XINPUT_STATE*);
 
+static Key s_keyMap[0xFF];
+
+void InitKeyMap()
+{
+	memset(s_keyMap, 0, sizeof(s_keyMap));
+
+	for (uint32_t i = 0; i < 26; ++i)
+	{
+		s_keyMap[(int)('A') + i] = (Key)((uint32_t)Key::KeyA + i);
+	}
+
+	for (uint32_t i = 0; i < 10; ++i)
+	{
+		s_keyMap[(int)('0') + i] = (Key)((uint32_t)Key::Key0 + i);
+	}
+
+	s_keyMap[VK_ESCAPE] = Key::Escape;
+	s_keyMap[VK_RETURN] = Key::Enter;
+	s_keyMap[VK_SPACE] = Key::Space;
+	s_keyMap[VK_OEM_7] = Key::Apostraphe;
+	s_keyMap[VK_OEM_COMMA] = Key::Comma;
+	s_keyMap[VK_OEM_MINUS] = Key::Minus;
+	s_keyMap[VK_OEM_PERIOD] = Key::Period;
+	s_keyMap[VK_OEM_2] = Key::Slash;
+	s_keyMap[VK_OEM_5] = Key::BackSlash;
+	s_keyMap[VK_OEM_1] = Key::Semicolon;
+	s_keyMap[VK_OEM_4] = Key::LeftBracket;
+	s_keyMap[VK_OEM_6] = Key::RightBracket;
+	s_keyMap[VK_OEM_3] = Key::Tilde;
+	s_keyMap[VK_ESCAPE] = Key::Escape;
+	s_keyMap[VK_TAB] = Key::Tab;
+	s_keyMap[VK_BACK] = Key::BackSpace;
+	s_keyMap[VK_INSERT] = Key::Insert;
+	s_keyMap[VK_DELETE] = Key::Delete;
+	s_keyMap[VK_RIGHT] = Key::Right;
+	s_keyMap[VK_LEFT] = Key::Left;
+	s_keyMap[VK_DOWN] = Key::Down;
+	s_keyMap[VK_UP] = Key::Up;
+	s_keyMap[VK_PRIOR] = Key::PageUp;
+	s_keyMap[VK_NEXT] = Key::PageDown;
+	s_keyMap[VK_HOME] = Key::Home;
+	s_keyMap[VK_END] = Key::End;
+	s_keyMap[VK_CAPITAL] = Key::CapsLock;
+	s_keyMap[VK_SCROLL] = Key::ScrollLock;
+	s_keyMap[VK_NUMLOCK] = Key::NumLock;
+	s_keyMap[VK_PRINT] = Key::PrintScreen;
+	s_keyMap[VK_PAUSE] = Key::Pause;
+
+	s_keyMap[VK_F1] = Key::F1;
+	s_keyMap[VK_F2] = Key::F2;
+	s_keyMap[VK_F3] = Key::F3;
+	s_keyMap[VK_F4] = Key::F4;
+	s_keyMap[VK_F5] = Key::F5;
+	s_keyMap[VK_F6] = Key::F6;
+	s_keyMap[VK_F7] = Key::F7;
+	s_keyMap[VK_F8] = Key::F8;
+	s_keyMap[VK_F9] = Key::F9;
+	s_keyMap[VK_F10] = Key::F10;
+	s_keyMap[VK_F11] = Key::F11;
+	s_keyMap[VK_F12] = Key::F12;
+	s_keyMap[VK_F13] = Key::F13;
+	s_keyMap[VK_F14] = Key::F14;
+	s_keyMap[VK_F15] = Key::F15;
+	s_keyMap[VK_F16] = Key::F16;
+	s_keyMap[VK_F17] = Key::F17;
+	s_keyMap[VK_F18] = Key::F18;
+	s_keyMap[VK_F19] = Key::F19;
+	s_keyMap[VK_F20] = Key::F20;
+	s_keyMap[VK_F21] = Key::F21;
+	s_keyMap[VK_F22] = Key::F22;
+	s_keyMap[VK_F23] = Key::F23;
+	s_keyMap[VK_F24] = Key::F24;
+
+	s_keyMap[VK_NUMPAD0] = Key::NumPad0;
+	s_keyMap[VK_NUMPAD1] = Key::NumPad1;
+	s_keyMap[VK_NUMPAD2] = Key::NumPad2;
+	s_keyMap[VK_NUMPAD3] = Key::NumPad3;
+	s_keyMap[VK_NUMPAD4] = Key::NumPad4;
+	s_keyMap[VK_NUMPAD5] = Key::NumPad5;
+	s_keyMap[VK_NUMPAD6] = Key::NumPad6;
+	s_keyMap[VK_NUMPAD7] = Key::NumPad7;
+	s_keyMap[VK_NUMPAD8] = Key::NumPad8;
+	s_keyMap[VK_NUMPAD9] = Key::NumPad9;
+	s_keyMap[VK_MULTIPLY] = Key::NumPadMultiply;
+	s_keyMap[VK_DIVIDE] = Key::NumPadDivide;
+	s_keyMap[VK_ADD] = Key::NumPadAdd;
+	s_keyMap[VK_DECIMAL] = Key::NumPadDecimal;
+	s_keyMap[VK_SUBTRACT] = Key::NumPadSubtract;
+	s_keyMap[VK_LSHIFT] = Key::LeftShift;
+	s_keyMap[VK_RSHIFT] = Key::RightShift;
+	s_keyMap[VK_LCONTROL] = Key::LeftControl;
+	s_keyMap[VK_RCONTROL] = Key::RightControl;
+	s_keyMap[VK_CONTROL] = Key::LeftControl;
+	s_keyMap[VK_LMENU] = Key::LeftAlt;
+	s_keyMap[VK_RMENU] = Key::RightAlt;
+}
 
 struct XInputGamepad
 {
@@ -164,6 +260,7 @@ static void UpdateXInput(bool _forceRefresh)
 bool Init(void* _nativeWindowHandle, input::EventCallback const& _callback)
 {
 	KT_ASSERT(!s_ctx.m_isInit);
+	InitKeyMap();
 
 	s_ctx.m_hwnd = HWND(_nativeWindowHandle);
 
@@ -359,18 +456,44 @@ uint32_t WinMsgLoopHook(void* _hwnd, uint32_t _umsg, uintptr_t _wparam, intptr_t
 
 			if (raw->header.dwType == RIM_TYPEKEYBOARD)
 			{
+				// https://blog.molecular-matters.com/2011/09/05/properly-handling-keyboard-input/
 				RAWKEYBOARD* kb = &raw->data.keyboard;
-				if (kb->Flags & RI_KEY_BREAK)
+				UINT translatedVK = kb->VKey;
+
+				if (kb->VKey == 255)
 				{
-					// Key up
-					KT_LOG_INFO("key up");
-					
+					break;
 				}
-				else
+				else if (kb->VKey == VK_SHIFT || kb->VKey == VK_CONTROL) 
 				{
-					KT_LOG_INFO("key down");
-					// Key down
+					// TODO: Various sources say this is hardware dependant, and need to read e0/e1 to handle lctrl/rctrl properly.
+					// Works on my machine atm :)
+					translatedVK = ::MapVirtualKeyA(kb->MakeCode, MAPVK_VSC_TO_VK_EX);
 				}
+				else if (kb->VKey == VK_NUMLOCK)
+				{
+					translatedVK = ::MapVirtualKey(kb->VKey, MAPVK_VK_TO_VSC);
+				}
+
+				if (translatedVK < KT_ARRAY_COUNT(s_keyMap))
+				{
+					Key const key = s_keyMap[translatedVK];
+					if (key == Key::InvalidKey)
+					{
+						break;
+					}
+
+					if (kb->Flags & RI_KEY_BREAK)
+					{
+						DispatchInputEvent(input::Event::Create_KeyUp(key));
+					}
+					else
+					{
+						DispatchInputEvent(input::Event::Create_KeyDown(key));
+					}
+				}
+
+
 			}
 			else if (raw->header.dwType == RIM_TYPEMOUSE)
 			{

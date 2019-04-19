@@ -142,10 +142,10 @@ void GraphicsApp::Go(int _argc, char** _argv)
 	{
 		gpu::BeginFrame();
 
-		float const dt = float(tickTime.Milliseconds());
+		float const dt = float(tickTime.Seconds());
 		PumpMessageLoop(m_window);
 		input::Tick(dt);
-		m_imguiHandler.BeginFrame();
+		m_imguiHandler.BeginFrame(dt);
 
 		Tick(dt);
 

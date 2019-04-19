@@ -20,7 +20,7 @@ public:
 
 	bool HandleInputEvent(input::Event const& _event);
 
-	void BeginFrame();
+	void BeginFrame(float _dt);
 	void EndFrame();
 
 private:

@@ -43,6 +43,134 @@ enum class MouseButton : uint32_t
 	Mouse5,
 };
 
+
+enum class Key : uint8_t
+{
+	InvalidKey = 0,
+
+	Space,
+	Apostraphe,
+	Comma,
+	Minus,
+	Period,
+	Slash,
+
+	Semicolon,
+
+	Key0,
+	Key1,
+	Key2,
+	Key3,
+	Key4,
+	Key5,
+	Key6,
+	Key7,
+	Key8,
+	Key9,
+
+	KeyA,
+	KeyB,
+	KeyC,
+	KeyD,
+	KeyE,
+	KeyF,
+	KeyG,
+	KeyH,
+	KeyI,
+	KeyJ,
+	KeyK,
+	KeyL,
+	KeyM,
+	KeyN,
+	KeyO,
+	KeyP,
+	KeyQ,
+	KeyR,
+	KeyS,
+	KeyT,
+	KeyU,
+	KeyV,
+	KeyW,
+	KeyX,
+	KeyY,
+	KeyZ,
+
+	LeftBracket,
+	BackSlash,
+	RightBracket,
+	Tilde,
+	Escape,
+	Enter,
+	Tab,
+	BackSpace,
+	Insert,
+	Delete,
+	Right,
+	Left,
+	Down,
+	Up,
+	PageUp,
+	PageDown,
+	Home,
+	End,
+	CapsLock,
+	ScrollLock,
+	NumLock,
+	PrintScreen,
+	Pause,
+
+	F1,
+	F2,
+	F3,
+	F4,
+	F5,
+	F6,
+	F7,
+	F8,
+	F9,
+	F10,
+	F11,
+	F12,
+	F13,
+	F14,
+	F15,
+	F16,
+	F17,
+	F18,
+	F19,
+	F20,
+	F21,
+	F22,
+	F23,
+	F24,
+
+	NumPad0,
+	NumPad1,
+	NumPad2,
+	NumPad3,
+	NumPad4,
+	NumPad5,
+	NumPad6,
+	NumPad7,
+	NumPad8,
+	NumPad9,
+	NumPadDecimal,
+	NumPadDivide,
+	NumPadMultiply,
+	NumPadSubtract,
+	NumPadAdd,
+
+	LeftShift,
+	LeftControl,
+	LeftAlt,
+	RightShift,
+	RightControl,
+	RightAlt,
+
+	MaxKeys
+};
+
+
 struct GamepadState
 {
 	// Bitfield of buttons pressed since last input update. 
@@ -79,15 +207,22 @@ struct Event
 	static Event Create_MouseButtonUp(MouseButton _button);
 	static Event Create_MouseButtonDown(MouseButton _button);
 	static Event Create_MouseWheelDelta(int16_t _delta);
+	static Event Create_KeyUp(Key _key);
+	static Event Create_KeyDown(Key _key);
 
 	enum class Type
 	{
 		GamepadUp,
 		GamepadDown,
+		
 		TextInput,
+		
 		MouseButtonDown,
 		MouseButtonUp,
-		MouseWheelDelta
+		MouseWheelDelta,
+		
+		KeyUp,
+		KeyDown
 	} m_type;
 
 	union 
@@ -109,6 +244,9 @@ struct Event
 		// Mouse button state.
 		// Type: MouseButtonUp/MouseButtonDown
 		MouseButton m_mouseButton;
+
+		// Type: KeyUp/KeyDown
+		Key m_key;
 
 		// Text string input (UTF-8)
 		// Type: TextInput
