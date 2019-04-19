@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include <input/InputTypes.h>
+#include <input/Input.h>
 
 #include <gpu/GPUDevice.h>
 #include <gpu/CommandContext.h>
@@ -131,12 +132,41 @@ bool ImGuiHandler::HandleInputEvent(input::Event const& _event)
 			io.AddInputCharactersUTF8(_event.m_stringUtf8);
 		} break;
 
+		case input::Event::Type::MouseWheelDelta:
+		{
+			io.MouseWheel += _event.m_wheelDelta > 0 ? 1.0f : -1.0f;
+		} break;
+
 		case input::Event::Type::MouseButtonDown:
 		case input::Event::Type::MouseButtonUp:
 		{
 			if (!io.WantCaptureMouse)
 			{
 				return false;
+			}
+			bool const isDown = _event.m_type == input::Event::Type::MouseButtonDown;
+
+			switch (_event.m_mouseButton)
+			{
+				case input::MouseButton::Left:
+				{
+					io.MouseDown[0] = isDown;
+				} break;
+
+				case input::MouseButton::Right:
+				{
+					io.MouseDown[1] = isDown;
+
+				} break;
+
+				case input::MouseButton::Middle:
+				{
+					io.MouseDown[2] = isDown;
+				} break;
+
+				default:
+				{
+				} break;
 			}
 		} break;
 	
@@ -155,6 +185,12 @@ void ImGuiHandler::BeginFrame()
 	uint32_t w, h;
 	gpu::GetSwapchainDimensions(w, h);
 	io.DisplaySize = ImVec2(float(w), float(h));
+	
+	int32_t mouse[2];
+	input::GetCursorPos(mouse[0], mouse[1]);
+
+	io.MousePos = ImVec2(float(mouse[0]), float(mouse[1]));
+
 	ImGui::NewFrame();
 }
 

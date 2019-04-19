@@ -1,10 +1,14 @@
 #include "Input_Win.h"
 #include "InputTypes.h"
 
+
 #include <math.h>
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <Xinput.h>
+#include <Dbt.h>
+
+#include <kt/Logging.h>
 
 namespace input
 {
@@ -29,6 +33,9 @@ struct Context
 	HMODULE m_xinputDll = 0;
 
 	input::EventCallback m_eventCb;
+	HWND m_hwnd;
+
+	int32_t m_lastCursorPos[2] = {0, 0};
 
 	bool m_isInit = false;
 };
@@ -118,19 +125,32 @@ static void XInputUpdateGamepad(XInputGamepad& _gmp, uint32_t _gamepadIdx, XINPU
 	XInputThumbToFloat(_state.Gamepad.sThumbRX, _state.Gamepad.sThumbRY, _gmp.m_state.m_rightThumb);
 }
 
+static void UpdateConnectedXInputPads()
+{
+	for (uint32_t i = 0; i < input::c_maxGamepads; ++i)
+	{
+		XInputGamepad& xinputGmp = s_ctx.m_pads[i];
+		XINPUT_STATE xinp_state;
+		xinputGmp.m_isConnected = (s_ctx.m_getStateFn(i, &xinp_state) == ERROR_SUCCESS);
+	}
+}
+
 static void UpdateXInput(bool _forceRefresh)
 {
 	for (uint32_t i = 0; i < input::c_maxGamepads; ++i)
 	{
 		XInputGamepad& xinputGmp = s_ctx.m_pads[i];
+		if (!xinputGmp.m_isConnected)
+		{
+			continue;
+		}
+
 		XINPUT_STATE xinp_state;
 		if (s_ctx.m_getStateFn(i, &xinp_state) != ERROR_SUCCESS)
 		{
 			xinputGmp.m_isConnected = 0;
 			continue;
 		}
-
-		xinputGmp.m_isConnected = 1;
 
 		if (_forceRefresh || xinp_state.dwPacketNumber != xinputGmp.m_lastPacket)
 		{
@@ -143,9 +163,9 @@ static void UpdateXInput(bool _forceRefresh)
 
 bool Init(void* _nativeWindowHandle, input::EventCallback const& _callback)
 {
-	KT_UNUSED(_nativeWindowHandle);
-
 	KT_ASSERT(!s_ctx.m_isInit);
+
+	s_ctx.m_hwnd = HWND(_nativeWindowHandle);
 
 	// Init Xinput.
 
@@ -180,9 +200,29 @@ bool Init(void* _nativeWindowHandle, input::EventCallback const& _callback)
 
 	s_ctx.m_eventCb.Clear();
 
+	UpdateConnectedXInputPads();
 	UpdateXInput(true);
 
 	s_ctx.m_eventCb = _callback;
+
+	RAWINPUTDEVICE rid[2];
+
+	rid[0].usUsagePage = 0x01;
+	rid[0].usUsage = 0x02;
+	rid[0].dwFlags = 0;
+	rid[0].hwndTarget = 0;
+
+	rid[1].usUsagePage = 0x01;
+	rid[1].usUsage = 0x06;
+	rid[1].dwFlags = 0;
+	rid[1].hwndTarget = 0;
+
+	if (::RegisterRawInputDevices(rid, KT_ARRAY_COUNT(rid), sizeof(RAWINPUTDEVICE)) == FALSE)
+	{
+		KT_LOG_ERROR("RegisterRawInputDevices failed: Error code: %u", ::GetLastError());
+		KT_ASSERT(false);
+		return false;
+	}
 
 	s_ctx.m_isInit = true;
 	return true;
@@ -228,8 +268,22 @@ void Tick(float const _dt)
 {
 	KT_UNUSED(_dt);
 	UpdateXInput(false);
+
+	POINT p;
+
+	if (::GetCursorPos(&p) && ::ScreenToClient(s_ctx.m_hwnd, &p))
+	{
+		s_ctx.m_lastCursorPos[0] = p.x;
+		s_ctx.m_lastCursorPos[1] = p.y;
+	}
 }
 
+
+void GetCursorPos(int32_t& o_x, int32_t& o_y)
+{
+	o_x = s_ctx.m_lastCursorPos[0];
+	o_y = s_ctx.m_lastCursorPos[1];
+}
 
 static uint32_t UTF32_to_UTF8(uint32_t _codepoint, char (&buff)[5])
 {
@@ -293,25 +347,65 @@ uint32_t WinMsgLoopHook(void* _hwnd, uint32_t _umsg, uintptr_t _wparam, intptr_t
 
 		case WM_INPUT:
 		{
-			//UINT size;
+			UINT size;
 
-			//::GetRawInputData((HRAWINPUT)_lparam, RID_INPUT, NULL, &size,
-			//				sizeof(RAWINPUTHEADER));
-			//uint8_t* buff = (uint8_t*)alloca(size);
+			::GetRawInputData((HRAWINPUT)_lparam, RID_INPUT, NULL, &size,
+							  sizeof(RAWINPUTHEADER));
+			uint8_t* buff = (uint8_t*)alloca(size);
 
-			//::GetRawInputData((HRAWINPUT)_lparam, RID_INPUT, buff, &size, sizeof(RAWINPUTHEADER));
+			::GetRawInputData((HRAWINPUT)_lparam, RID_INPUT, buff, &size, sizeof(RAWINPUTHEADER));
 
-			//RAWINPUT* raw = (RAWINPUT*)buff;
+			RAWINPUT* raw = (RAWINPUT*)buff;
 
-			//if (raw->header.dwType == RIM_TYPEKEYBOARD)
-			//{
-			//	RAWKEYBOARD* kb = &raw->data.keyboard;
-			//}
-			//else if (raw->header.dwType == RIM_TYPEMOUSE)
-			//{
-			//	RAWMOUSE* mouse = &raw->data.mouse;
-			//}
+			if (raw->header.dwType == RIM_TYPEKEYBOARD)
+			{
+				RAWKEYBOARD* kb = &raw->data.keyboard;
+				if (kb->Flags & RI_KEY_BREAK)
+				{
+					// Key up
+					KT_LOG_INFO("key up");
+					
+				}
+				else
+				{
+					KT_LOG_INFO("key down");
+					// Key down
+				}
+			}
+			else if (raw->header.dwType == RIM_TYPEMOUSE)
+			{
+				RAWMOUSE* mouse = &raw->data.mouse;
+				
+				// Handle buttons
+				if (mouse->usButtonFlags & RI_MOUSE_LEFT_BUTTON_DOWN) { DispatchInputEvent(Event::Create_MouseButtonDown(MouseButton::Left)); }
+				if (mouse->usButtonFlags & RI_MOUSE_LEFT_BUTTON_UP) { DispatchInputEvent(Event::Create_MouseButtonUp(MouseButton::Left));}
+				if (mouse->usButtonFlags & RI_MOUSE_MIDDLE_BUTTON_DOWN) { DispatchInputEvent(Event::Create_MouseButtonDown(MouseButton::Middle)); }
+				if (mouse->usButtonFlags & RI_MOUSE_MIDDLE_BUTTON_UP) { DispatchInputEvent(Event::Create_MouseButtonUp(MouseButton::Middle)); }
+				if (mouse->usButtonFlags & RI_MOUSE_RIGHT_BUTTON_DOWN) { DispatchInputEvent(Event::Create_MouseButtonDown(MouseButton::Right)); }
+				if (mouse->usButtonFlags & RI_MOUSE_RIGHT_BUTTON_UP) { DispatchInputEvent(Event::Create_MouseButtonUp(MouseButton::Right)); }
+				if (mouse->usButtonFlags & RI_MOUSE_BUTTON_3_DOWN) { DispatchInputEvent(Event::Create_MouseButtonDown(MouseButton::Mouse3)); }
+				if (mouse->usButtonFlags & RI_MOUSE_BUTTON_3_UP) { DispatchInputEvent(Event::Create_MouseButtonUp(MouseButton::Mouse3)); }
+				if (mouse->usButtonFlags & RI_MOUSE_BUTTON_4_DOWN) { DispatchInputEvent(Event::Create_MouseButtonDown(MouseButton::Mouse4)); }
+				if (mouse->usButtonFlags & RI_MOUSE_BUTTON_4_UP) { DispatchInputEvent(Event::Create_MouseButtonUp(MouseButton::Mouse4)); }
+				if (mouse->usButtonFlags & RI_MOUSE_BUTTON_5_DOWN) { DispatchInputEvent(Event::Create_MouseButtonDown(MouseButton::Mouse5)); }
+				if (mouse->usButtonFlags & RI_MOUSE_BUTTON_5_UP) { DispatchInputEvent(Event::Create_MouseButtonUp(MouseButton::Mouse5)); }
+
+				if (mouse->usButtonFlags & RI_MOUSE_WHEEL)
+				{
+					DispatchInputEvent(Event::Create_MouseWheelDelta(int16_t(mouse->usButtonData)));
+				}
+			}
 		} break;
+
+		case WM_DEVICECHANGE:
+		{
+			if ((UINT)_wparam == DBT_DEVNODES_CHANGED)
+			{
+				UpdateConnectedXInputPads();
+			}
+			return 0;
+		} break;
+
 
 		default:
 		{

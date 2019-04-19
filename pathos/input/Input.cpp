@@ -46,4 +46,11 @@ bool GetGamepadState(uint32_t _padIdx, GamepadState& o_state)
 }
 
 
+void GetCursorPos(int32_t& o_x, int32_t& o_y)
+{
+#if KT_PLATFORM_WINDOWS
+	return win::GetCursorPos(o_x, o_y);
+#endif
+}
+
 }

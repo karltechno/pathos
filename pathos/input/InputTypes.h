@@ -76,6 +76,9 @@ struct Event
 {
 	static Event Create_GamepadUp(uint32_t _padIdx, GamepadButton _button);
 	static Event Create_GamepadDown(uint32_t _padIdx, GamepadButton _button);
+	static Event Create_MouseButtonUp(MouseButton _button);
+	static Event Create_MouseButtonDown(MouseButton _button);
+	static Event Create_MouseWheelDelta(int16_t _delta);
 
 	enum class Type
 	{
@@ -83,7 +86,8 @@ struct Event
 		GamepadDown,
 		TextInput,
 		MouseButtonDown,
-		MouseButtonUp
+		MouseButtonUp,
+		MouseWheelDelta
 	} m_type;
 
 	union 
@@ -98,6 +102,13 @@ struct Event
 			// The pad this event originated from.
 			uint32_t m_padIdx;
 		} m_gamepad;
+
+		// Type: MouseWheelDelta
+		int16_t m_wheelDelta;
+
+		// Mouse button state.
+		// Type: MouseButtonUp/MouseButtonDown
+		MouseButton m_mouseButton;
 
 		// Text string input (UTF-8)
 		// Type: TextInput

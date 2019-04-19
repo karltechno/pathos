@@ -21,4 +21,28 @@ Event Event::Create_GamepadDown(uint32_t _padIdx, GamepadButton _button)
 	return e;
 }
 
+Event Event::Create_MouseButtonUp(MouseButton _button)
+{
+	Event e = {};
+	e.m_type = Event::Type::MouseButtonUp;
+	e.m_mouseButton = _button;
+	return e;
+}
+
+Event Event::Create_MouseButtonDown(MouseButton _button)
+{
+	Event e = {};
+	e.m_type = Event::Type::MouseButtonDown;
+	e.m_mouseButton = _button;
+	return e;
+}
+
+input::Event Event::Create_MouseWheelDelta(int16_t _delta)
+{
+	Event e = {};
+	e.m_type = Event::Type::MouseWheelDelta;
+	e.m_wheelDelta = _delta;
+	return e;
+}
+
 }

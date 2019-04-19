@@ -57,7 +57,14 @@ void GraphicsApp::Go(int _argc, char** _argv)
 
 	m_window = CreatePlatformWindow(params);
 
-	if (!input::Init(m_window.nwh, [this](input::Event const& _ev) { HandleInputEvent(_ev); }))
+	if (!input::Init(m_window.nwh, [this](input::Event const& _ev) 
+	{
+		if (!m_imguiHandler.HandleInputEvent(_ev))
+		{
+			HandleInputEvent(_ev);
+		}
+	}))
+
 	{
 		KT_ASSERT(false);
 		KT_LOG_ERROR("Failed to initialise input system, exiting.");
@@ -134,11 +141,12 @@ void GraphicsApp::Go(int _argc, char** _argv)
 	do 
 	{
 		gpu::BeginFrame();
-		m_imguiHandler.BeginFrame();
 
 		float const dt = float(tickTime.Milliseconds());
 		PumpMessageLoop(m_window);
 		input::Tick(dt);
+		m_imguiHandler.BeginFrame();
+
 		Tick(dt);
 
 		myCbuffer.myVec4 += kt::Vec4(dt);

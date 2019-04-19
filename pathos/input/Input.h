@@ -17,4 +17,5 @@ bool IsGamepadConnected(uint32_t _padIdx);
 
 bool GetGamepadState(uint32_t _padIdx, GamepadState& o_state);
 
+void GetCursorPos(int32_t& o_x, int32_t& o_y);
 }
