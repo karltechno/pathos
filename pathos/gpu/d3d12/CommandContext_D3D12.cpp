@@ -112,7 +112,7 @@ void SetVertexBuffer(Context* _ctx, uint32_t _streamIdx, gpu::BufferHandle _hand
 	KT_ASSERT(_streamIdx < gpu::c_maxVertexStreams);
 	if (_ctx->m_state.m_vertexStreams[_streamIdx].Handle() != _handle)
 	{
-		_ctx->m_state.m_vertexStreams[_streamIdx] = _handle;
+		_ctx->m_state.m_vertexStreams[_streamIdx].Acquire(_handle);
 		_ctx->m_dirtyFlags |= DirtyStateFlags::VertexBuffer;
 	}
 }
@@ -123,7 +123,7 @@ void SetIndexBuffer(Context* _ctx, gpu::BufferHandle _handle)
 
 	if (_ctx->m_state.m_indexBuffer.Handle() != _handle)
 	{
-		_ctx->m_state.m_indexBuffer = _handle;
+		_ctx->m_state.m_indexBuffer.Acquire(_handle);
 		_ctx->m_dirtyFlags |= DirtyStateFlags::IndexBuffer;
 	}
 }
@@ -132,7 +132,7 @@ void SetShaderResource(Context* _ctx, gpu::TextureHandle _handle, uint32_t _idx,
 {
 	if (_ctx->m_state.m_srvTex[_space][_idx].Handle() != _handle)
 	{
-		_ctx->m_state.m_srvTex[_space][_idx] = _handle;
+		_ctx->m_state.m_srvTex[_space][_idx].Acquire(_handle);
 		_ctx->m_dirtyDescriptors[_space] |= DirtyDescriptorFlags::SRV;
 	}
 }
@@ -191,7 +191,7 @@ void SetGraphicsPSO(Context* _ctx, gpu::GraphicsPSOHandle _pso)
 
 	if (_ctx->m_state.m_graphicsPso.Handle() != _pso)
 	{
-		_ctx->m_state.m_graphicsPso = _pso;
+		_ctx->m_state.m_graphicsPso.Acquire(_pso);
 		_ctx->m_dirtyFlags |= DirtyStateFlags::PipelineState;
 	}
 }
@@ -219,7 +219,7 @@ void SetRenderTarget(Context* _ctx, uint32_t _idx, gpu::TextureHandle _handle)
 		}
 #endif
 
-		_ctx->m_state.m_renderTargets[_idx] = _handle;
+		_ctx->m_state.m_renderTargets[_idx].Acquire(_handle);
 		_ctx->m_dirtyFlags |= DirtyStateFlags::RenderTarget;
 	}
 }
@@ -237,7 +237,7 @@ void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle)
 		}
 #endif
 
-		_ctx->m_state.m_depthBuffer = _handle;
+		_ctx->m_state.m_depthBuffer.Acquire(_handle);
 		_ctx->m_dirtyFlags |= DirtyStateFlags::DepthBuffer;
 	}
 }
@@ -441,6 +441,11 @@ void CommandContext_D3D12::MarkDirtyIfBound(gpu::BufferHandle _handle)
 		}
 	}
 
+	if (m_state.m_indexBuffer.Handle() == _handle)
+	{
+		m_dirtyFlags |= DirtyStateFlags::IndexBuffer;
+	}
+	
 	for (uint32_t space = 0; space < gpu::c_numShaderSpaces; ++space)
 	{
 		for (gpu::BufferRef const& buff : m_state.m_cbvs[space])
@@ -459,7 +464,7 @@ void SetConstantBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, 
 	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Compute);
 	if (_ctx->m_state.m_cbvs[_space][_idx].Handle() != _handle)
 	{
-		_ctx->m_state.m_cbvs[_space][_idx] = _handle;
+		_ctx->m_state.m_cbvs[_space][_idx].Acquire(_handle);
 		_ctx->m_dirtyDescriptors[_space] |= DirtyDescriptorFlags::CBV;
 	}
 }
