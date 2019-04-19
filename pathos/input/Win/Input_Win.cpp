@@ -111,11 +111,11 @@ static void XInputUpdateGamepad(XInputGamepad& _gmp, uint32_t _gamepadIdx, XINPU
 	}
 
 	// Triggers and thumbs. 
-	_gmp.m_state.left_trigger = XInputTriggerToFloat(_state.Gamepad.bLeftTrigger);
-	_gmp.m_state.right_trigger = XInputTriggerToFloat(_state.Gamepad.bRightTrigger);
+	_gmp.m_state.m_leftTrigger = XInputTriggerToFloat(_state.Gamepad.bLeftTrigger);
+	_gmp.m_state.m_rightTrigger = XInputTriggerToFloat(_state.Gamepad.bRightTrigger);
 
-	XInputThumbToFloat(_state.Gamepad.sThumbLX, _state.Gamepad.sThumbLY, _gmp.m_state.left_thumb);
-	XInputThumbToFloat(_state.Gamepad.sThumbRX, _state.Gamepad.sThumbRY, _gmp.m_state.right_thumb);
+	XInputThumbToFloat(_state.Gamepad.sThumbLX, _state.Gamepad.sThumbLY, _gmp.m_state.m_leftThumb);
+	XInputThumbToFloat(_state.Gamepad.sThumbRX, _state.Gamepad.sThumbRY, _gmp.m_state.m_rightThumb);
 }
 
 static void UpdateXInput(bool _forceRefresh)

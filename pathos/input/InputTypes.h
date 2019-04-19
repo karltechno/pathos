@@ -58,18 +58,18 @@ struct GamepadState
 	GamepadButton m_buttonsDown;
 
 	// Normalized [0, 1] left analog trigger. 
-	float left_trigger;
+	float m_leftTrigger;
 
 	// Normalized [0, 1] for right analog trigger. 
-	float right_trigger;
+	float m_rightTrigger;
 
 	// Normalized [0, 1] for left thumb analog stick.
 	// Stored as 2 dimensional vector (x, y). 
-	float left_thumb[2];
+	float m_leftThumb[2];
 
 	// Normalized [0, 1] for right thumb analog stick. 
 	// Stored as 2 dimensional vector (x, y). 
-	float right_thumb[2];
+	float m_rightThumb[2];
 };
 
 struct Event
