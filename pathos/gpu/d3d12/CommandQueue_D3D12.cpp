@@ -71,14 +71,15 @@ void CommandQueue_D3D12::WaitForQueueGPU(CommandQueue_D3D12& _other)
 	D3D_CHECK(m_commandQueue->Wait(_other.D3DFence(), _other.NextFenceValue() - 1u));
 }
 
-uint64_t CommandQueue_D3D12::ExecuteCommandLists(ID3D12CommandList** _lists, uint32_t _numLists)
+uint64_t CommandQueue_D3D12::ExecuteCommandLists(kt::Slice<ID3D12CommandList*> const& _lists)
 {
-	for (uint32_t i = 0; i < _numLists; ++i)
+	KT_ASSERT(!_lists.Empty())
+
+	for (ID3D12CommandList* list : _lists)
 	{
-		ID3D12GraphicsCommandList* list = (ID3D12GraphicsCommandList*)_lists[i];
-		D3D_CHECK(list->Close());
+		D3D_CHECK(((ID3D12GraphicsCommandList*)list)->Close());
 	}
-	m_commandQueue->ExecuteCommandLists(_numLists, _lists);
+	m_commandQueue->ExecuteCommandLists(_lists.Size(), _lists.Data());
 	m_commandQueue->Signal(m_fence, m_nextFenceVal);
 	return ++m_nextFenceVal;
 }

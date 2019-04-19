@@ -96,8 +96,9 @@ CommandContext_D3D12::~CommandContext_D3D12()
 
 void End(Context* _ctx)
 {
-	ID3D12CommandList* lists[] = { _ctx->m_cmdList };
-	uint64_t const fence = _ctx->m_device->m_commandQueueManager.QueueByType(_ctx->m_d3dType).ExecuteCommandLists(lists, KT_ARRAY_COUNT(lists));
+	ID3D12CommandList* list = _ctx->m_cmdList;
+
+	uint64_t const fence = _ctx->m_device->m_commandQueueManager.QueueByType(_ctx->m_d3dType).ExecuteCommandLists(kt::MakeSlice(list));
 	_ctx->m_device->m_commandQueueManager.QueueByType(_ctx->m_d3dType).ReleaseAllocator(_ctx->m_cmdAllocator, fence);
 	_ctx->m_cmdAllocator = nullptr;
 

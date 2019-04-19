@@ -1,6 +1,7 @@
 #pragma once
 #include <kt/Array.h>
 #include <kt/Macros.h>
+#include <kt/Slice.h>
 
 #include <d3d12.h>
 #include <stdint.h>
@@ -49,7 +50,7 @@ public:
 	void WaitForFenceGPU(uint64_t _fenceVal);
 	void WaitForQueueGPU(CommandQueue_D3D12& _other);
 
-	uint64_t ExecuteCommandLists(ID3D12CommandList** _lists, uint32_t _numLists);
+	uint64_t ExecuteCommandLists(kt::Slice<ID3D12CommandList*> const& _lists);
 
 	ID3D12CommandAllocator* AcquireAllocator();
 	void ReleaseAllocator(ID3D12CommandAllocator* _allocator, uint64_t _fenceVal);

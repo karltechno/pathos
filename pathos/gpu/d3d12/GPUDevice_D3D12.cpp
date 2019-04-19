@@ -51,7 +51,6 @@ static void CopyInitialResourceData(ID3D12Resource* _resource, void const* _data
 	memcpy(cpuPtr, _data, _size);
 
 	ID3D12CommandAllocator* allocator = g_device->m_commandQueueManager.GraphicsQueue().AcquireAllocator();
-	KT_SCOPE_EXIT();
 	// TODO: Pool lists
 	ID3D12CommandList* listBase;
 	// TODO: Use direct queue for now, need to work out synchronization and use copy queue.
@@ -70,7 +69,7 @@ static void CopyInitialResourceData(ID3D12Resource* _resource, void const* _data
 		list->ResourceBarrier(1, &barrier);
 	}
 
-	uint64_t const fence = g_device->m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(&listBase, 1);
+	uint64_t const fence = g_device->m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(kt::MakeSlice(listBase));
 	g_device->m_commandQueueManager.GraphicsQueue().ReleaseAllocator(allocator, fence);
 	listBase->Release();
 }
@@ -1227,7 +1226,7 @@ void Device_D3D12::BeginFrame()
 		backBuffer->m_state = D3D12_RESOURCE_STATE_RENDER_TARGET;
 	}
 
-	uint64_t const fence = m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(&list, 1);
+	uint64_t const fence = m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(kt::MakeSlice(list));
 	m_commandQueueManager.GraphicsQueue().ReleaseAllocator(allocator, fence);
 	gfxList->Release();
 }
@@ -1252,7 +1251,7 @@ void Device_D3D12::EndFrame()
 		backBuffer->m_state = D3D12_RESOURCE_STATE_PRESENT;
 	}
 
-	uint64_t const fence = m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(&list, 1);
+	uint64_t const fence = m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(kt::MakeSlice(list));
 	m_commandQueueManager.GraphicsQueue().ReleaseAllocator(allocator, fence);
 	gfxList->Release();
 
