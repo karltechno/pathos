@@ -73,7 +73,7 @@ void CommandQueue_D3D12::WaitForQueueGPU(CommandQueue_D3D12& _other)
 
 uint64_t CommandQueue_D3D12::ExecuteCommandLists(kt::Slice<ID3D12CommandList*> const& _lists)
 {
-	KT_ASSERT(!_lists.Empty())
+	KT_ASSERT(!_lists.Empty());
 
 	for (ID3D12CommandList* list : _lists)
 	{

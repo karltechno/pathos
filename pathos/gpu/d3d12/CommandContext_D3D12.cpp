@@ -15,7 +15,7 @@
 
 #define CHECK_TRANSIENT_TOUCHED_THIS_FRAME(_ctx, _allocatedBuffer) \
 	KT_MACRO_BLOCK_BEGIN \
-		KT_ASSERT(!(_allocatedBuffer->m_desc.m_flags & BufferFlags::Transient) || _allocatedBuffer->m_lastFrameTouched == _ctx->m_device->m_frameCounter) \
+		KT_ASSERT(!(_allocatedBuffer->m_desc.m_flags & BufferFlags::Transient) || _allocatedBuffer->m_lastFrameTouched == _ctx->m_device->m_frameCounter); \
 	KT_MACRO_BLOCK_END
 
 namespace gpu

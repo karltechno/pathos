@@ -15,16 +15,19 @@ struct ID3D12Device2;
 struct IDXGISwapChain4;
 struct IDXGISwapChain1;
 
+#define STORE_GPU_DEBUG_NAME (1) // TODO: Better handling
+
 namespace gpu
 {
 
 struct Device_D3D12;
 
+
 struct AllocatedObjectBase_D3D12
 {
 	void Init(char const* _name = nullptr)
 	{
-#if KT_DEBUG
+#if STORE_GPU_DEBUG_NAME
 		m_debugName = _name ? _name : "";
 #else
 		KT_UNUSED(_name);
@@ -44,7 +47,7 @@ struct AllocatedObjectBase_D3D12
 		return --m_refs;
 	}
 
-#if KT_DEBUG
+#if STORE_GPU_DEBUG_NAME
 	kt::String64 m_debugName;
 #endif
 	uint32_t m_refs = 0;

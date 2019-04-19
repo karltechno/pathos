@@ -12,5 +12,10 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 include("cmake/pathos_projects.cmake")
 
+if(MSVC)
+    add_definitions(/Zi)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /DEBUG")
+endif()
+
 add_subdirectory(extern)
 add_subdirectory(pathos)
