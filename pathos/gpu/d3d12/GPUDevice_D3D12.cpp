@@ -51,7 +51,7 @@ static void CopyInitialResourceData(ID3D12Resource* _resource, void const* _data
 	memcpy(cpuPtr, _data, _size);
 
 	ID3D12CommandAllocator* allocator = g_device->m_commandQueueManager.GraphicsQueue().AcquireAllocator();
-	KT_SCOPE_EXIT(allocator->Release());
+	KT_SCOPE_EXIT();
 	// TODO: Pool lists
 	ID3D12CommandList* listBase;
 	// TODO: Use direct queue for now, need to work out synchronization and use copy queue.
@@ -70,7 +70,9 @@ static void CopyInitialResourceData(ID3D12Resource* _resource, void const* _data
 		list->ResourceBarrier(1, &barrier);
 	}
 
-	g_device->m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(&listBase, 1);
+	uint64_t const fence = g_device->m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(&listBase, 1);
+	g_device->m_commandQueueManager.GraphicsQueue().ReleaseAllocator(allocator, fence);
+	listBase->Release();
 }
 
 bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, void const* _initialData, char const* _debugName)
