@@ -7,7 +7,7 @@ namespace input
 namespace win
 {
 
-bool Init(void* _nativeWindowHandle, EventCallback _callback, void* _eventUserData);
+bool Init(void* _nativeWindowHandle, EventCallback const& _callback);
 
 void Shutdown();
 

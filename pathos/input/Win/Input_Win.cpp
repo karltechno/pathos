@@ -1,4 +1,5 @@
 #include "Input_Win.h"
+#include "InputTypes.h"
 
 #include <math.h>
 #define WIN32_LEAN_AND_MEAN
@@ -27,8 +28,7 @@ struct Context
 	XInputGetStateFn m_getStateFn;
 	HMODULE m_xinputDll = 0;
 
-	input::EventCallback m_eventCb = nullptr;
-	void* m_eventCbCtx = nullptr;
+	input::EventCallback m_eventCb;
 
 	bool m_isInit = false;
 };
@@ -39,7 +39,7 @@ static void DispatchInputEvent(input::Event const& _ev)
 {
 	if (s_ctx.m_eventCb)
 	{
-		s_ctx.m_eventCb(s_ctx.m_eventCbCtx, _ev);
+		s_ctx.m_eventCb(_ev);
 	}
 }
 
@@ -141,7 +141,7 @@ static void UpdateXInput(bool _forceRefresh)
 	}
 }
 
-bool Init(void* _nativeWindowHandle, input::EventCallback _callback, void* _eventUserData)
+bool Init(void* _nativeWindowHandle, input::EventCallback const& _callback)
 {
 	KT_UNUSED(_nativeWindowHandle);
 
@@ -178,13 +178,11 @@ bool Init(void* _nativeWindowHandle, input::EventCallback _callback, void* _even
 		return false;
 	}
 
-	s_ctx.m_eventCb = nullptr;
-	s_ctx.m_eventCbCtx = _eventUserData;
+	s_ctx.m_eventCb.Clear();
 
 	UpdateXInput(true);
 
 	s_ctx.m_eventCb = _callback;
-	s_ctx.m_eventCbCtx = _eventUserData;
 
 	s_ctx.m_isInit = true;
 	return true;

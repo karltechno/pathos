@@ -1,8 +1,17 @@
 #include "Types.h"
 
+#include "FormatConversion.h"
+
 namespace gpu
 {
 
+#undef GPU_FMT_ONE
+#define GPU_FMT_ONE(_1, _2, _size) _size,
+
+static const uint32_t s_formatBits[] =
+{
+	GPU_FMT_ALL
+};
 
 gpu::TextureDesc TextureDesc::Desc1D(uint32_t _width, TextureUsageFlags _flags, Format _fmt)
 {
@@ -69,6 +78,11 @@ bool IsDepthFormat(Format _fmt)
 	}
 }
 
+uint32_t GetFormatSize(Format _fmt)
+{
+	return s_formatBits[uint32_t(_fmt)] / 8u;
+}
+
 gpu::BlendDesc BlendDesc::Opaque()
 {
 	BlendDesc desc;
@@ -85,5 +99,6 @@ gpu::BlendDesc BlendDesc::Opaque()
 	desc.m_blendOpAlpha = BlendOp::Add;
 	return desc;
 }
+
 
 }

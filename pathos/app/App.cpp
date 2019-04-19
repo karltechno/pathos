@@ -1,5 +1,7 @@
 #include "App.h"
 
+#include <stdio.h>
+
 #include <gpu/GPUDevice.h>
 #include <input/Input.h>
 
@@ -9,7 +11,8 @@
 #include <kt/Vec3.h>
 #include <kt/Vec4.h>
 
-#include <stdio.h>
+
+#include "imgui.h"
 
 static kt::Vec3 const s_testTriVerts[] =
 {
@@ -54,7 +57,7 @@ void GraphicsApp::Go(int _argc, char** _argv)
 
 	m_window = CreatePlatformWindow(params);
 
-	if (!input::Init(m_window.nwh, [](void* _ctx, input::Event const& _ev) { ((GraphicsApp*)_ctx)->HandleInputEvent(_ev); }, this))
+	if (!input::Init(m_window.nwh, [this](input::Event const& _ev) { HandleInputEvent(_ev); }))
 	{
 		KT_ASSERT(false);
 		KT_LOG_ERROR("Failed to initialise input system, exiting.");
@@ -62,6 +65,7 @@ void GraphicsApp::Go(int _argc, char** _argv)
 	}
 
 	gpu::Init(m_window.nwh);
+	m_imguiHandler.Init(m_window.nwh);
 
 	Setup();
 
@@ -130,6 +134,7 @@ void GraphicsApp::Go(int _argc, char** _argv)
 	do 
 	{
 		gpu::BeginFrame();
+		m_imguiHandler.BeginFrame();
 
 		float const dt = float(tickTime.Milliseconds());
 		PumpMessageLoop(m_window);
@@ -166,7 +171,8 @@ void GraphicsApp::Go(int _argc, char** _argv)
 			gpu::cmd::DrawIndexedInstanced(ctx, gpu::PrimitiveType::TriangleList, 3, 1, 0, 0, 0);
 			gpu::cmd::End(ctx);
 		}
-
+		ImGui::ShowDemoWindow();
+		m_imguiHandler.EndFrame();
 
 		kt::TimePoint const now = kt::TimePoint::Now();
 		tickTime = now - lastFrameStart;
@@ -176,6 +182,8 @@ void GraphicsApp::Go(int _argc, char** _argv)
 	} while (m_keepAlive);
 
 	Shutdown();
+
+	m_imguiHandler.Shutdown();
 
 	gpu::Release(indexBuffer);
 	gpu::Release(vertexBuffer);

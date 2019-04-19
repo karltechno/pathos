@@ -1,9 +1,11 @@
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.8)
 
 set_property(GLOBAL PROPERTY FOLDER extern)
 
 add_subdirectory(kt)
+add_subdirectory(imgui)
 
+set_target_properties(imgui PROPERTIES FOLDER extern)
 set_target_properties(kt PROPERTIES FOLDER extern/kt)
 
 if(TARGET kt_tests)

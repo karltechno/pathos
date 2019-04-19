@@ -1,5 +1,6 @@
 #pragma once
 #include "Window.h"
+#include "ImGuiHandler.h"
 
 namespace input
 {
@@ -28,6 +29,7 @@ struct GraphicsApp
 
 private:
 	WindowHandle m_window;
+	ImGuiHandler m_imguiHandler;
 	bool m_keepAlive = true;
 };
 

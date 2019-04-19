@@ -29,6 +29,20 @@ struct HandleRef
 		return *this;
 	}
 
+	HandleRef(HandleType&& _other)
+	{
+		AcquireNoRef(_other);
+		_other = HandleType{};
+	}
+
+
+	HandleRef& operator=(HandleType&& _other)
+	{
+		AcquireNoRef(_other);
+		_other = HandleType{};
+		return *this;
+	}
+
 	HandleRef(HandleRef const& _other)
 	{
 		Acquire(_other.Handle());

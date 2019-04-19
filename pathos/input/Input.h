@@ -4,7 +4,7 @@
 namespace input
 {
 // Global init.
-bool Init(void* _nativeWindowHandle, EventCallback _callback, void* _eventUserData);
+bool Init(void* _nativeWindowHandle, EventCallback const& _callback);
 
 // Global shutdown.
 void Shutdown();

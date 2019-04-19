@@ -1,4 +1,5 @@
 #include "Input.h"
+#include "InputTypes.h"
 
 #if KT_PLATFORM_WINDOWS
 #include "Win/Input_Win.h"
@@ -9,10 +10,10 @@ namespace input
 
 
 
-bool Init(void* _nativeWindowHandle, EventCallback _callback, void* _eventUserData)
+bool Init(void* _nativeWindowHandle, EventCallback const& _callback)
 {
 #if KT_PLATFORM_WINDOWS
-	return win::Init(_nativeWindowHandle, _callback, _eventUserData);
+	return win::Init(_nativeWindowHandle, _callback);
 #endif
 }
 

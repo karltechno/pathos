@@ -19,8 +19,6 @@
 
 #include <string.h>
 
-
-
 static D3D12_HEAP_PROPERTIES const c_defaultHeapProperties{ D3D12_HEAP_TYPE_DEFAULT , D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 1, 1 };
 static D3D12_HEAP_PROPERTIES const c_uploadHeapProperties{ D3D12_HEAP_TYPE_UPLOAD , D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 1, 1 };
 
@@ -37,18 +35,14 @@ static uint32_t GetBufferAlign(gpu::BufferDesc const& _desc)
 	}
 	else
 	{
-		return 8; // Anything better ?
+		return 16; // Anything better ?
 	}
 }
 
 static void CopyInitialResourceData(ID3D12Resource* _resource, void const* _data, uint32_t _size, D3D12_RESOURCE_STATES _beforeState, D3D12_RESOURCE_STATES _afterState)
 {
-	ID3D12Resource* srcRes;
-	D3D12_GPU_VIRTUAL_ADDRESS addr; 
-	uint64_t offest;
-	void* cpuPtr;
-	g_device->GetFrameResources()->m_uploadAllocator.Alloc(srcRes, addr, offest, cpuPtr, _size, 16); // TODO: Any other align needed?
-	memcpy(cpuPtr, _data, _size);
+	ScratchAlloc_D3D12 scratchMem = g_device->GetFrameResources()->m_uploadAllocator.Alloc(_size, 16); // TODO: Any other align needed?
+	memcpy(scratchMem.m_cpuData, _data, _size);
 
 	ID3D12CommandAllocator* allocator = g_device->m_commandQueueManager.GraphicsQueue().AcquireAllocator();
 	// TODO: Pool lists
@@ -56,13 +50,75 @@ static void CopyInitialResourceData(ID3D12Resource* _resource, void const* _data
 	// TODO: Use direct queue for now, need to work out synchronization and use copy queue.
 	D3D_CHECK(g_device->m_d3dDev->CreateCommandList(1, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&listBase)));
 	ID3D12GraphicsCommandList* list = (ID3D12GraphicsCommandList*)listBase;
-	list->CopyBufferRegion(_resource, 0, srcRes, offest, _size);
+	list->CopyBufferRegion(_resource, 0, scratchMem.m_res, scratchMem.m_offset, _size);
 	
 	if (_beforeState != _afterState)
 	{
 		D3D12_RESOURCE_BARRIER barrier{};
 		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
 		barrier.Transition.pResource = _resource;
+		barrier.Transition.StateBefore = _beforeState;
+		barrier.Transition.StateAfter = _afterState;
+		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		list->ResourceBarrier(1, &barrier);
+	}
+
+	uint64_t const fence = g_device->m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(kt::MakeSlice(listBase));
+	g_device->m_commandQueueManager.GraphicsQueue().ReleaseAllocator(allocator, fence);
+	listBase->Release();
+}
+
+static void CopyInitialTextureData(AllocatedTexture_D3D12& _tex, void const* _data, D3D12_RESOURCE_STATES _beforeState, D3D12_RESOURCE_STATES _afterState)
+{
+
+	// TODO: This doesn't handle subresources currently.
+	// TODO: Always assume initialdata is correct for desc?
+
+	UINT64 totalBytes;
+	D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+	UINT numRows;
+	UINT64 rowSizes;
+	D3D12_RESOURCE_DESC const d3dDesc = _tex.m_res->GetDesc();
+	g_device->m_d3dDev->GetCopyableFootprints(&d3dDesc, 0, 1, 0, &footprint, &numRows, &rowSizes, &totalBytes);
+	KT_ASSERT(totalBytes);
+	ScratchAlloc_D3D12 uploadScratch = g_device->GetFrameResources()->m_uploadAllocator.Alloc(uint32_t(totalBytes), 16);
+	
+	uint8_t* srcPtr = (uint8_t*)_data;
+	uint8_t* destPtr = (uint8_t*)uploadScratch.m_cpuData + footprint.Offset;
+
+	uint32_t const srcPitch = gpu::GetFormatSize(_tex.m_desc.m_format) * _tex.m_desc.m_width;
+	
+	for (uint32_t rowIdx = 0; rowIdx < numRows; ++rowIdx)
+	{
+		memcpy(destPtr, srcPtr, srcPitch);
+		srcPtr += srcPitch;
+		destPtr += footprint.Footprint.RowPitch;
+	}
+
+	D3D12_TEXTURE_COPY_LOCATION destLoc;
+	destLoc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+	destLoc.pResource = _tex.m_res;
+	destLoc.SubresourceIndex = 0;
+
+	D3D12_TEXTURE_COPY_LOCATION srcLoc;
+	srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+	srcLoc.pResource = uploadScratch.m_res;
+	srcLoc.PlacedFootprint = footprint;
+	srcLoc.PlacedFootprint.Offset += uploadScratch.m_offset; // TODO: Is this undefined with alignment? Do we need to pass it into GetCopyableFootprints
+
+	ID3D12CommandAllocator* allocator = g_device->m_commandQueueManager.GraphicsQueue().AcquireAllocator();
+	// TODO: Pool lists
+	ID3D12CommandList* listBase;
+	// TODO: Use direct queue for now, need to work out synchronization and use copy queue.
+	D3D_CHECK(g_device->m_d3dDev->CreateCommandList(1, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&listBase)));
+	ID3D12GraphicsCommandList* list = (ID3D12GraphicsCommandList*)listBase;
+	list->CopyTextureRegion(&destLoc, 0, 0, 0, &srcLoc, nullptr);
+
+	if (_beforeState != _afterState)
+	{
+		D3D12_RESOURCE_BARRIER barrier{};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier.Transition.pResource = _tex.m_res;
 		barrier.Transition.StateBefore = _beforeState;
 		barrier.Transition.StateAfter = _afterState;
 		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
@@ -370,9 +426,9 @@ bool AllocatedTexture_D3D12::Init(TextureDesc const& _desc, void const* _initial
 		bestInitialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 	}
 
-	m_state = bestInitialState;
 
 	D3D12_RESOURCE_STATES const creationState = _initialData ? D3D12_RESOURCE_STATE_COPY_DEST : bestInitialState;
+	m_state = creationState;
 
 	D3D12_RESOURCE_DESC d3dDesc = {};
 
@@ -472,7 +528,7 @@ bool AllocatedTexture_D3D12::Init(TextureDesc const& _desc, void const* _initial
 	if (!!(_desc.m_usageFlags & gpu::TextureUsageFlags::ShaderResource))
 	{
 		m_srv = g_device->m_stagingHeap.AllocOne();
-		g_device->m_d3dDev->CreateRenderTargetView(m_res, nullptr, m_srv);
+		g_device->m_d3dDev->CreateShaderResourceView(m_res, nullptr, m_srv);
 	}
 
 	AllocatedObjectBase_D3D12::Init(_debugName);
@@ -483,8 +539,7 @@ bool AllocatedTexture_D3D12::Init(TextureDesc const& _desc, void const* _initial
 
 	if (_initialData)
 	{
-		// TODO:
-		//CopyInitialResourceData(m_res, _initialData, _
+		CopyInitialTextureData(*this, _initialData, m_state, bestInitialState);
 	}
 
 	return true;
@@ -635,7 +690,7 @@ void FrameUploadAllocator_D3D12::ClearOnBeginFrame()
 	m_numFullPages = 0;
 }
 
-void FrameUploadAllocator_D3D12::Alloc(ID3D12Resource*& o_res, D3D12_GPU_VIRTUAL_ADDRESS& o_addr, uint64_t& o_offest, void*& o_cpuPtr, uint32_t _size, uint32_t _align)
+ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _align)
 {
 	do 
 	{
@@ -659,18 +714,28 @@ void FrameUploadAllocator_D3D12::Alloc(ID3D12Resource*& o_res, D3D12_GPU_VIRTUAL
 		}
 
 		page->m_curOffset = endAddr - page->m_base;
-		o_offest = alignedAddr - page->m_base;
-		o_addr = page->m_base + o_offest;
-		o_res = page->m_res;
-		o_cpuPtr = (uint8_t*)page->m_mappedPtr + o_offest;
-		return;
+		
+		ScratchAlloc_D3D12 alloc;
+
+		alloc.m_offset = alignedAddr - page->m_base;
+		alloc.m_addr = page->m_base + alloc.m_offset;
+		alloc.m_res = page->m_res;
+		alloc.m_cpuData = (uint8_t*)page->m_mappedPtr + alloc.m_offset;
+		return alloc;
 
 	} while (false);
+
+	KT_UNREACHABLE;
 }
 
 void FrameUploadAllocator_D3D12::Alloc(AllocatedBuffer_D3D12& o_res)
 {
-	Alloc(o_res.m_res, o_res.m_gpuAddress, o_res.m_offset, o_res.m_mappedCpuData, o_res.m_desc.m_sizeInBytes, GetBufferAlign(o_res.m_desc));
+	ScratchAlloc_D3D12 scratch = Alloc(o_res.m_desc.m_sizeInBytes, GetBufferAlign(o_res.m_desc));
+	o_res.m_mappedCpuData = scratch.m_cpuData;
+	o_res.m_res = scratch.m_res;
+	o_res.m_offset = scratch.m_offset;
+	o_res.m_gpuAddress = scratch.m_addr;
+
 	o_res.m_ownsResource = false;
 	o_res.m_state = D3D12_RESOURCE_STATE_GENERIC_READ;
 }
@@ -711,6 +776,8 @@ static ID3D12RootSignature* CreateGraphicsRootSignature(ID3D12Device* _dev)
 	D3D12_ROOT_SIGNATURE_DESC desc = {};
 
 	D3D12_STATIC_SAMPLER_DESC samplers[4] = {};
+	desc.pStaticSamplers = samplers;
+	desc.NumStaticSamplers = KT_ARRAY_COUNT(samplers);
 
 	desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
@@ -728,37 +795,37 @@ static ID3D12RootSignature* CreateGraphicsRootSignature(ID3D12Device* _dev)
 
 	// Point Wrap
 	{
-		samplers[1].AddressU = samplers[0].AddressV = samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+		samplers[1].AddressU = samplers[1].AddressV = samplers[1].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 		samplers[1].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
 		samplers[1].MinLOD = 0.0f;
 		samplers[1].MaxLOD = D3D12_FLOAT32_MAX;
 		samplers[1].MipLODBias = 0.0f;
 		samplers[1].RegisterSpace = 0;
-		samplers[1].ShaderRegister = 0;
+		samplers[1].ShaderRegister = 1;
 		samplers[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 	}
 
 	// Linear clamp
 	{
-		samplers[2].AddressU = samplers[0].AddressV = samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+		samplers[2].AddressU = samplers[2].AddressV = samplers[2].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 		samplers[2].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 		samplers[2].MinLOD = 0.0f;
 		samplers[2].MaxLOD = D3D12_FLOAT32_MAX;
 		samplers[2].MipLODBias = 0.0f;
 		samplers[2].RegisterSpace = 0;
-		samplers[2].ShaderRegister = 0;
+		samplers[2].ShaderRegister = 2;
 		samplers[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 	}
 
 	// Linear wrap
 	{
-		samplers[3].AddressU = samplers[0].AddressV = samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		samplers[3].AddressU = samplers[3].AddressV = samplers[3].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 		samplers[3].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 		samplers[3].MinLOD = 0.0f;
 		samplers[3].MaxLOD = D3D12_FLOAT32_MAX;
 		samplers[3].MipLODBias = 0.0f;
 		samplers[3].RegisterSpace = 0;
-		samplers[3].ShaderRegister = 0;
+		samplers[3].ShaderRegister = 3;
 		samplers[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 	}
 
@@ -1269,6 +1336,12 @@ void GetSwapchainDimensions(uint32_t& o_width, uint32_t& o_height)
 	o_width = g_device->m_swapChainWidth;
 	o_height = g_device->m_swapChainHeight;
 }
+
+gpu::Format BackbufferFormat()
+{
+	return g_device->m_textureHandles.Lookup(g_device->m_backBuffers[0])->m_desc.m_format;
+}
+
 
 void Device_D3D12::FrameResources::ClearOnBeginFrame()
 {

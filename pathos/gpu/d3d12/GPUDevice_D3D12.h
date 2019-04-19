@@ -142,6 +142,14 @@ private:
 	kt::Array<FrameUploadPage_D3D12> m_freePages;
 };
 
+struct ScratchAlloc_D3D12
+{
+	ID3D12Resource* m_res;
+	D3D12_GPU_VIRTUAL_ADDRESS m_addr;
+	uint64_t m_offset;
+	void* m_cpuData;
+};
+
 struct FrameUploadAllocator_D3D12
 {
 	void Init(FrameUploadPagePool_D3D12* _pagePool);
@@ -150,7 +158,7 @@ struct FrameUploadAllocator_D3D12
 	void ClearOnBeginFrame();
 
 	void Alloc(AllocatedBuffer_D3D12& o_res);
-	void Alloc(ID3D12Resource*& o_res, D3D12_GPU_VIRTUAL_ADDRESS& o_addr, uint64_t& o_offest, void*& o_cpuPtr, uint32_t _size, uint32_t _align);
+	ScratchAlloc_D3D12 Alloc(uint32_t _size, uint32_t _align);
 
 private:
 	kt::Array<FrameUploadPage_D3D12> m_pages;

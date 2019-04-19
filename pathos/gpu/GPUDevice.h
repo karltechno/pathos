@@ -23,6 +23,7 @@ gpu::ShaderHandle CreateShader(gpu::ShaderType _type, gpu::ShaderBytecode const&
 
 gpu::TextureHandle CurrentBackbuffer();
 gpu::TextureHandle BackbufferDepth();
+gpu::Format	BackbufferFormat();
 
 void AddRef(gpu::BufferHandle _handle);
 void AddRef(gpu::TextureHandle _handle);

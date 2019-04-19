@@ -62,6 +62,7 @@ struct CommandContext_D3D12
 	~CommandContext_D3D12();
 
 	void ApplyStateChanges(CommandListFlags_D3D12 _dispatchType);
+	void MarkDirtyIfBound(gpu::BufferHandle _handle);
 
 	Device_D3D12* m_device;
 
@@ -89,6 +90,9 @@ struct CommandContext_D3D12
 		gpu::TextureRef m_renderTargets[gpu::c_maxRenderTargets];
 	
 		gpu::BufferRef m_cbvs[gpu::c_numShaderSpaces][gpu::c_cbvTableSize];		
+
+		// TODO: make view handle otherwise this is awkward without base resource for tex/buff.
+		gpu::TextureRef m_srvTex[gpu::c_numShaderSpaces][gpu::c_srvTableSize];
 	} m_state;
 };
 

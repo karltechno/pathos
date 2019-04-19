@@ -77,6 +77,8 @@ enum class Format : uint32_t
 	Num_Format
 };
 
+uint32_t GetFormatSize(gpu::Format _fmt);
+
 bool IsDepthFormat(Format _fmt);
 
 enum class BufferFlags : uint32_t
@@ -193,6 +195,12 @@ struct VertexLayout
 		KT_ASSERT(_decl.m_streamIdx < c_maxVertexStreams);
 		KT_ASSERT(m_numElements < c_maxVertexElements);
 		m_elements[m_numElements++] = _decl;
+		return *this;
+	}
+
+	VertexLayout& Add(Format _fmt, VertexSemantic _semantic, uint8_t _semanticIdx = 0, uint8_t _streamIdx = 0)
+	{
+		Add(VertexDeclEntry{ _fmt, _semantic, _semanticIdx, _streamIdx });
 		return *this;
 	}
 

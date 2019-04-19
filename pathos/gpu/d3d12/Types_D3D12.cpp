@@ -4,7 +4,7 @@
 #include <kt/Macros.h>
 
 #undef GPU_FMT_ONE
-#define GPU_FMT_ONE(_pathos, _dxgi) _dxgi,
+#define GPU_FMT_ONE(_pathos, _dxgi, _bpp) _dxgi,
 static DXGI_FORMAT const s_toDxgi[] =
 {
 	GPU_FMT_ALL

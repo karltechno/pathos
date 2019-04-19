@@ -1,4 +1,6 @@
+#pragma once
 #include <kt/kt.h>
+#include <kt/StaticFunction.h>
 
 namespace input
 {
@@ -79,7 +81,9 @@ struct Event
 	{
 		GamepadUp,
 		GamepadDown,
-		TextInput
+		TextInput,
+		MouseButtonDown,
+		MouseButtonUp
 	} m_type;
 
 	union 
@@ -102,6 +106,5 @@ struct Event
 };
 
 // Event callback for client code.
-using EventCallback = void(*)(void* _userData, Event const& _ev);
-
+using EventCallback = kt::StaticFunction<void(input::Event const&), 32>;
 }
