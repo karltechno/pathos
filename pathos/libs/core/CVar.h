@@ -10,8 +10,7 @@ namespace core
 struct CVarBase;
 
 void InitCVars();
-
-void DrawTreeWindow();
+void DrawImGuiCVarMenuItems();
 
 struct CVarBase
 {

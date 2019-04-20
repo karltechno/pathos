@@ -22,7 +22,7 @@ struct TaggedHandle : kt::VersionedHandle
 {
 	TaggedHandle() = default;
 	
-	TaggedHandle(kt::VersionedHandle _handle)
+	explicit TaggedHandle(kt::VersionedHandle _handle)
 		: kt::VersionedHandle(_handle)
 	{}
 

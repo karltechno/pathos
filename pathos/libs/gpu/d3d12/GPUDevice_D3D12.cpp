@@ -1015,7 +1015,7 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 	{
 		// Create back buffer
 		AllocatedTexture_D3D12* backbufferData;
-		m_backBuffers[i].AcquireNoRef(m_textureHandles.Alloc(backbufferData));
+		m_backBuffers[i].AcquireNoRef(gpu::TextureHandle(m_textureHandles.Alloc(backbufferData)));
 		ID3D12Resource* backbufferRes;
 		D3D_CHECK(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&backbufferRes)));
 		backbufferData->InitFromBackbuffer(backbufferRes, Format::R8G8B8A8_UNorm, m_swapChainHeight, m_swapChainWidth);
@@ -1089,7 +1089,7 @@ Device_D3D12::~Device_D3D12()
 gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initialData, char const* _debugName)
 {
 	AllocatedBuffer_D3D12* res;
-	gpu::BufferHandle const handle = g_device->m_bufferHandles.Alloc(res);
+	gpu::BufferHandle const handle = gpu::BufferHandle(g_device->m_bufferHandles.Alloc(res));
 	if (!handle.IsValid())
 	{
 		return gpu::BufferHandle{};
@@ -1110,16 +1110,16 @@ gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc, void const* _ini
 	kt::VersionedHandle const handle = g_device->m_textureHandles.Alloc(res);
 	if (!handle.IsValid())
 	{
-		return gpu::BufferHandle{};
+		return gpu::TextureHandle{};
 	}
 
 	if (!res->Init(_desc, _initialData, _debugName))
 	{
 		g_device->m_bufferHandles.Free(handle);
-		return gpu::BufferHandle{};
+		return gpu::TextureHandle{};
 	}
 
-	return gpu::BufferHandle{ handle };
+	return gpu::TextureHandle{ handle };
 }
 
 gpu::ShaderHandle CreateShader(ShaderType _type, gpu::ShaderBytecode const& _byteCode)
@@ -1166,7 +1166,7 @@ gpu::GraphicsPSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc)
 	}
 
 	AllocatedGraphicsPSO_D3D12* psoData;
-	gpu::GraphicsPSOHandle const psoHandle = g_device->m_psoHandles.Alloc(psoData);
+	gpu::GraphicsPSOHandle const psoHandle = gpu::GraphicsPSOHandle(g_device->m_psoHandles.Alloc(psoData));
 	psoData->Init(g_device->m_d3dDev, _desc, vsShader->m_byteCode, psShader->m_byteCode);
 	g_device->m_psoCache.Insert(hash, gpu::GraphicsPSORef{ psoHandle });
 

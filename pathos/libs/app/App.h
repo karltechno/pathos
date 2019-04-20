@@ -19,10 +19,9 @@ struct GraphicsApp
 	void RequestShutdown();
 
 	virtual void Setup() = 0;
-	virtual void Tick(float const _dt) = 0;
+	virtual void Tick(float _dt) = 0;
 	virtual void Shutdown() = 0;
 
-	// Todo: Input params.
 	virtual void HandleInputEvent(input::Event const& _event) = 0;
 
 	void* NativeWindowHandle() const;

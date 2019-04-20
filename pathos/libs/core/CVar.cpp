@@ -186,9 +186,8 @@ void ImGuiDrawTreeRecursive(CVarTreeNode const& _group)
 	ImGui::PopID();
 }
 
-void DrawTreeWindow()
+void DrawImGuiCVarMenuItems()
 {
-	ImGui::BeginMainMenuBar();
 	if (ImGui::BeginMenu("CVars"))
 	{
 		for (CVarTreeNode const& node : s_ctx.m_root.m_group)
@@ -197,8 +196,6 @@ void DrawTreeWindow()
 		}
 		ImGui::EndMenu();
 	}
-
-	ImGui::EndMainMenuBar();
 }
 
 void CVar<bool>::DrawImGuiInteraction()
