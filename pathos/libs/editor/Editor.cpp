@@ -43,9 +43,7 @@ void GpuResourceWindow()
 
 		ImGui::BeginChild("Buffer List");
 
-		bool anySelected = false;
-
-		gpu::EnumBufferHandles([&anySelected](gpu::BufferHandle _handle)
+		gpu::EnumBufferHandles([](gpu::BufferHandle _handle)
 		{
 			gpu::BufferDesc desc;
 			char const* bufferName;
@@ -55,12 +53,12 @@ void GpuResourceWindow()
 			ImGui::PushID(int(_handle.m_packed));
 			if (ImGui::Selectable(bufferName, selected))
 			{
-				anySelected = true;
 				s_ctx.m_selectedBuffer = _handle;
 			}
 
 			ImGui::PopID();
 		});
+
 		ImGui::EndChild();
 
 		ImGui::NextColumn();
@@ -78,11 +76,35 @@ void GpuResourceWindow()
 			ImGui::Text("Name: %s", bufferName);
 			ImGui::Text("Size: %u", desc.m_sizeInBytes);
 			ImGui::Text("Stride: %u", desc.m_strideInBytes);
+			ImGui::Text("Format: %s", gpu::GetFormatName(desc.m_format));
+			ImGui::Text("Flags: ");
+
+			bool didAny = false;
+
+			auto writeFlag = [&desc, &didAny](gpu::BufferFlags _flag, char const* _text)
+			{
+				if (!!(desc.m_flags & _flag))
+				{
+					ImGui::SameLine();
+					if (didAny) { ImGui::Text("|"); }
+					ImGui::SameLine();
+					ImGui::Text("%s", _text);
+					didAny = true;
+				}
+			};
+			writeFlag(gpu::BufferFlags::Constant, "Constant");
+			writeFlag(gpu::BufferFlags::Vertex, "Vertex");
+			writeFlag(gpu::BufferFlags::Index, "Index");
+			writeFlag(gpu::BufferFlags::UnorderedAccess, "UAV");
+			writeFlag(gpu::BufferFlags::ShaderResource, "SRV");
+			writeFlag(gpu::BufferFlags::Transient, "Transient");
+
 		}
 
 		ImGui::Columns();
 		ImGui::EndTabItem();
 	}
+
 	ImGui::EndTabBar();
 	ImGui::End();
 }

@@ -78,6 +78,7 @@ enum class Format : uint32_t
 };
 
 uint32_t GetFormatSize(gpu::Format _fmt);
+char const* GetFormatName(gpu::Format _fmt);
 
 bool IsDepthFormat(Format _fmt);
 
@@ -141,7 +142,7 @@ struct TextureDesc
 struct BufferDesc
 {
 	BufferFlags m_flags = BufferFlags::None;
-	Format m_format = Format::Num_Format;
+	Format m_format = Format::Unknown;
 	uint32_t m_sizeInBytes = 0;
 	uint32_t m_strideInBytes = 0;
 };

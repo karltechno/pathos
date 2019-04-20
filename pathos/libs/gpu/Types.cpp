@@ -6,9 +6,16 @@ namespace gpu
 {
 
 #undef GPU_FMT_ONE
-#define GPU_FMT_ONE(_1, _2, _size) _size,
+#define GPU_FMT_ONE(_1, _3, _size) _size,
 
 static const uint32_t s_formatBits[] =
+{
+	GPU_FMT_ALL
+};
+
+#undef GPU_FMT_ONE
+#define GPU_FMT_ONE(_fmt, ...) #_fmt,
+static char const* const s_formatNames[] =
 {
 	GPU_FMT_ALL
 };
@@ -81,6 +88,12 @@ bool IsDepthFormat(Format _fmt)
 uint32_t GetFormatSize(Format _fmt)
 {
 	return s_formatBits[uint32_t(_fmt)] / 8u;
+}
+
+char const* GetFormatName(Format _fmt)
+{	
+	// gpu::Format:: <- 13
+	return s_formatNames[uint32_t(_fmt)] + 13;
 }
 
 gpu::BlendDesc BlendDesc::Opaque()

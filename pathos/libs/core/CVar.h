@@ -5,6 +5,8 @@
 #include <kt/Vec3.h>
 #include <kt/Vec4.h>
 
+#include <type_traits>
+
 namespace core
 {
 struct CVarBase;
@@ -337,5 +339,138 @@ private:
 	EnumT const m_default;
 	char const* const (&m_strings)[size_t(EnumMaxT)];
 };
+
+struct CVarIntBase : CVarBase
+{
+	CVarIntBase(char const* _path, char const* _desc)
+		: CVarBase(_path, _desc)
+	{
+	}
+
+	void DrawIntImGui(void* _intPtr, void* _intMin, void* _intMax, uint32_t _typeSize, bool _isSigned);
+};
+
+template <typename IntT>
+struct CVarIntTemplated : CVarIntBase
+{
+	CVarIntTemplated(char const* _path, char const* _desc, IntT _default, IntT _min, IntT _max)
+		: CVarIntBase(_path, _desc)
+		, m_current(_default)
+		, m_default(_default)
+		, m_min(_min)
+		, m_max(_max)
+	{}
+
+	bool HasChanged() const override
+	{
+		return m_current != m_default;
+	}
+
+	void DrawImGuiInteraction() override
+	{
+		CVarIntBase::DrawIntImGui((void*)&m_current, (void*)&m_min, (void*)&m_max, sizeof(IntT), std::is_signed<IntT>::value);
+	}
+
+	void SetDefault() override
+	{
+		m_current = m_default;
+	}
+
+	operator IntT const& () const
+	{
+		return m_current;
+	}
+
+	IntT* operator&()
+	{
+		return &m_current;
+	}
+
+	IntT const* operator&() const
+	{
+		return &m_current;
+	}
+
+private:
+	IntT m_current;
+
+	IntT const m_default;
+	IntT const m_min;
+	IntT const m_max;
+};
+
+
+template <>
+struct CVar<uint8_t> : CVarIntTemplated<uint8_t>
+{
+	CVar(char const* _path, char const* _desc, uint8_t _default, uint8_t _min, uint8_t _max)
+		: CVarIntTemplated<uint8_t>(_path, _desc, _default, _min, _max)
+	{
+	}
+};
+
+template <>
+struct CVar<int8_t> : CVarIntTemplated<int8_t>
+{
+	CVar(char const* _path, char const* _desc, int8_t _default, int8_t _min, int8_t _max)
+		: CVarIntTemplated<int8_t>(_path, _desc, _default, _min, _max)
+	{
+	}
+};
+
+template <>
+struct CVar<uint16_t> : CVarIntTemplated<uint16_t>
+{
+	CVar(char const* _path, char const* _desc, uint16_t _default, uint16_t _min, uint16_t _max)
+		: CVarIntTemplated<uint16_t>(_path, _desc, _default, _min, _max)
+	{
+	}
+};
+
+template <>
+struct CVar<int16_t> : CVarIntTemplated<int16_t>
+{
+	CVar(char const* _path, char const* _desc, int16_t _default, int16_t _min, int16_t _max)
+		: CVarIntTemplated<int16_t>(_path, _desc, _default, _min, _max)
+	{
+	}
+};
+
+template <>
+struct CVar<uint32_t> : CVarIntTemplated<uint32_t>
+{
+	CVar(char const* _path, char const* _desc, uint32_t _default, uint32_t _min, uint32_t _max)
+		: CVarIntTemplated<uint32_t>(_path, _desc, _default, _min, _max)
+	{
+	}
+};
+
+template <>
+struct CVar<int32_t> : CVarIntTemplated<int32_t>
+{
+	CVar(char const* _path, char const* _desc, int32_t _default, int32_t _min, int32_t _max)
+		: CVarIntTemplated<int32_t>(_path, _desc, _default, _min, _max)
+	{
+	}
+};
+
+template <>
+struct CVar<uint64_t> : CVarIntTemplated<uint64_t>
+{
+	CVar(char const* _path, char const* _desc, uint64_t _default, uint64_t _min, uint64_t _max)
+		: CVarIntTemplated<uint64_t>(_path, _desc, _default, _min, _max)
+	{
+	}
+};
+
+template <>
+struct CVar<int64_t> : CVarIntTemplated<int64_t>
+{
+	CVar(char const* _path, char const* _desc, int64_t _default, int64_t _min, int64_t _max)
+		: CVarIntTemplated<int64_t>(_path, _desc, _default, _min, _max)
+	{
+	}
+};
+
 
 }
