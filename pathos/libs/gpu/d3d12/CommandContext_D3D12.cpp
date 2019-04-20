@@ -374,6 +374,7 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 					else
 					{
 						AllocatedBuffer_D3D12* buf = m_device->m_bufferHandles.Lookup(bufRef);
+						CHECK_TRANSIENT_TOUCHED_THIS_FRAME(this, buf);
 						KT_ASSERT(buf);
 						KT_ASSERT(buf->m_cbv.ptr);
 						cpuDescriptors[i] = buf->m_cbv;
