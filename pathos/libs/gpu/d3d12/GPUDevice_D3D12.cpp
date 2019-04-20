@@ -1358,5 +1358,43 @@ void Device_D3D12::FrameResources::ClearOnBeginFrame()
 }
 
 
+void EnumBufferHandles(kt::StaticFunction<void(gpu::BufferHandle), 32> const& _ftor)
+{
+	gpu::BufferHandle bufferHandle = gpu::BufferHandle{ g_device->m_bufferHandles.FirstAllocatedHandle() };
+
+	while (bufferHandle.IsValid())
+	{
+		_ftor(bufferHandle);
+		bufferHandle = gpu::BufferHandle{ g_device->m_bufferHandles.NextAllocatedHandle(bufferHandle) };
+	}
+}
+
+
+void EnumTextureHandles(kt::StaticFunction<void(gpu::TextureHandle), 32> const& _ftor)
+{
+	gpu::TextureHandle texHandle = gpu::TextureHandle{ g_device->m_textureHandles.FirstAllocatedHandle() };
+
+	while (texHandle.IsValid())
+	{
+		_ftor(texHandle);
+		texHandle = gpu::TextureHandle{ g_device->m_textureHandles.NextAllocatedHandle(texHandle) };
+	}
+}
+
+
+bool GetBufferInfo(BufferHandle _handle, BufferDesc& o_desc, char const*& o_name)
+{
+	if (AllocatedBuffer_D3D12* buf = g_device->m_bufferHandles.Lookup(_handle))
+	{
+		o_name = buf->m_debugName.Data();
+		o_desc = buf->m_desc;
+		return true;
+	}
+
+
+	return false;
+}
+
+
 
 }

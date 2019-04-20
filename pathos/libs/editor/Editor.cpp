@@ -1,6 +1,7 @@
 #include "Editor.h"
 
 #include <core/CVar.h>
+#include <gpu/GPUDevice.h>
 
 #include "imgui.h"
 
@@ -12,7 +13,12 @@ struct Context
 	bool m_openDemoWindow = false;
 	bool m_openAboutWindow = false;
 	bool m_openMetricsWindow = false;
+
+	bool m_openGpuResourceWindow = false;
+
+	gpu::BufferHandle m_selectedBuffer = gpu::BufferHandle{};
 } s_ctx;
+
 
 void Init()
 {
@@ -22,6 +28,63 @@ void Init()
 void Shutdown()
 {
 
+}
+
+void GpuResourceWindow()
+{
+	ImGui::SetNextWindowSize(ImVec2(400.0f, 400.0f), ImGuiCond_FirstUseEver);
+	ImGui::Begin("GPU Resources", &s_ctx.m_openGpuResourceWindow);
+
+	ImGui::BeginTabBar("Resource Types");
+
+	if (ImGui::BeginTabItem("Buffers"))
+	{
+		ImGui::Columns(2);
+
+		ImGui::BeginChild("Buffer List");
+
+		bool anySelected = false;
+
+		gpu::EnumBufferHandles([&anySelected](gpu::BufferHandle _handle)
+		{
+			gpu::BufferDesc desc;
+			char const* bufferName;
+			gpu::GetBufferInfo(_handle, desc, bufferName);
+		
+			bool selected = _handle == s_ctx.m_selectedBuffer;
+			ImGui::PushID(int(_handle.m_packed));
+			if (ImGui::Selectable(bufferName, selected))
+			{
+				anySelected = true;
+				s_ctx.m_selectedBuffer = _handle;
+			}
+
+			ImGui::PopID();
+		});
+		ImGui::EndChild();
+
+		ImGui::NextColumn();
+
+		gpu::BufferDesc desc;
+		char const* bufferName;
+		if (!gpu::GetBufferInfo(s_ctx.m_selectedBuffer, desc, bufferName))
+		{
+			ImGui::Text("No selected buffer.");
+			s_ctx.m_selectedBuffer = gpu::BufferHandle{};
+		}
+		else
+		{
+
+			ImGui::Text("Name: %s", bufferName);
+			ImGui::Text("Size: %u", desc.m_sizeInBytes);
+			ImGui::Text("Stride: %u", desc.m_strideInBytes);
+		}
+
+		ImGui::Columns();
+		ImGui::EndTabItem();
+	}
+	ImGui::EndTabBar();
+	ImGui::End();
 }
 
 void DoEditorImGui(float _dt)
@@ -43,24 +106,18 @@ void DoEditorImGui(float _dt)
 		ImGui::ShowMetricsWindow(&s_ctx.m_openMetricsWindow);
 	}
 
+	if (s_ctx.m_openGpuResourceWindow)
+	{
+		GpuResourceWindow();
+	}
+
 	ImGui::BeginMainMenuBar();
 
 	if (ImGui::BeginMenu("*"))
 	{
-		if (ImGui::MenuItem("About"))
-		{
-			s_ctx.m_openAboutWindow = true;
-		}
-
-		if (ImGui::MenuItem("Demo"))
-		{
-			s_ctx.m_openDemoWindow = true;
-		}
-
-		if (ImGui::MenuItem("Metrics"))
-		{
-			s_ctx.m_openMetricsWindow = true;
-		}
+		ImGui::MenuItem("About", nullptr, &s_ctx.m_openAboutWindow);
+		ImGui::MenuItem("Demo", nullptr, &s_ctx.m_openDemoWindow);
+		ImGui::MenuItem("Metrics", nullptr, &s_ctx.m_openMetricsWindow);
 
 		if (ImGui::BeginMenu("Styles"))
 		{
@@ -68,6 +125,12 @@ void DoEditorImGui(float _dt)
 			ImGui::EndMenu();
 		}
 
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu("gpu"))
+	{
+		ImGui::MenuItem("Resources", nullptr, &s_ctx.m_openGpuResourceWindow);
 		ImGui::EndMenu();
 	}
 

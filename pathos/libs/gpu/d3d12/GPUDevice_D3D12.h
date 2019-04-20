@@ -28,7 +28,7 @@ struct AllocatedObjectBase_D3D12
 	void Init(char const* _name = nullptr)
 	{
 #if STORE_GPU_DEBUG_NAME
-		m_debugName = _name ? _name : "";
+		m_debugName = (_name && *_name != '\0') ? _name : "Un-named resource";
 #else
 		KT_UNUSED(_name);
 #endif
