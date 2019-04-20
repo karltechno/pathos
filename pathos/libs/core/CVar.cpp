@@ -7,8 +7,6 @@
 #include <kt/Logging.h>
 
 #include "imgui.h"
-#include <algorithm>
-#include <utility>
 
 namespace core
 {

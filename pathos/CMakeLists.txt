@@ -9,10 +9,9 @@ elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     add_compile_options(-ffast-math)
 endif()
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+# todo, don't apply this include to everything
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/libs)
 
-add_subdirectory(app)
-add_subdirectory(editor_app)
-add_subdirectory(input)
-add_subdirectory(gpu)
+add_subdirectory(libs)
+add_subdirectory(apps)
 # add_subdirectory(gfx)

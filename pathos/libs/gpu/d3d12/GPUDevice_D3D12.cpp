@@ -996,8 +996,8 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 
 	// Shared heaps resources
 	{
-		m_rtvHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 64, false, "Main RTV Heap");
-		m_dsvHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 64, false, "Main DSV Heap");
+		m_rtvHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1024, false, "Main RTV Heap");
+		m_dsvHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 256, false, "Main DSV Heap");
 
 		m_stagingHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1024, false, "CBV/SRV/UAV Staging Heap");
 	}

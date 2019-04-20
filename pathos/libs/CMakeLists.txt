@@ -1,0 +1,4 @@
+add_subdirectory(app)
+add_subdirectory(input)
+add_subdirectory(gpu)
+add_subdirectory(core)

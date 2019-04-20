@@ -4,7 +4,7 @@
 namespace editor
 {
 
-struct EditorApp : app::GraphicsApp
+struct TestbedApp : app::GraphicsApp
 {
 	void Setup() override {}
 	void Tick(float const) override {}
