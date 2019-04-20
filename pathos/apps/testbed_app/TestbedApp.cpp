@@ -98,6 +98,8 @@ void TestbedApp::Setup()
 	psoDesc.m_vs = m_vertexShader;
 	psoDesc.m_ps = m_pixelShader;
 
+	m_pso = gpu::CreateGraphicsPSO(psoDesc);
+
 	gpu::BufferDesc indexBufferDesc;
 	indexBufferDesc.m_flags = gpu::BufferFlags::Index;
 	indexBufferDesc.m_format = gpu::Format::R16_Uint;
@@ -119,8 +121,6 @@ void TestbedApp::Setup()
 	constantBufferDesc.m_flags = gpu::BufferFlags::Constant | gpu::BufferFlags::Transient;
 	constantBufferDesc.m_sizeInBytes = sizeof(DummyCbuffer);
 	m_constantBuffer = gpu::CreateBuffer(constantBufferDesc);
-
-	m_pso = gpu::CreateGraphicsPSO(psoDesc);
 }
 
 
