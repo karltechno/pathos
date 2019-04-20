@@ -15,6 +15,41 @@ CVarBase* CVarBase::s_head;
 
 uint32_t CVarBase::s_numVars;
 
+namespace CVarDrawHelpers
+{
+void DrawIntImGui(CVarBase* _base, void* _intPtr, void const* _intMin, void const* _intMax, uint32_t _typeSize, bool _isSigned)
+{
+	ImGuiDataType dataType = 0;
+
+	switch (_typeSize)
+	{
+		case 1: dataType = _isSigned ? ImGuiDataType_S8 : ImGuiDataType_U8; break;
+		case 2: dataType = _isSigned ? ImGuiDataType_S16 : ImGuiDataType_U16; break;
+		case 4: dataType = _isSigned ? ImGuiDataType_S32 : ImGuiDataType_U32; break;
+		case 8: dataType = _isSigned ? ImGuiDataType_S64 : ImGuiDataType_U64; break;
+
+		default:
+		{
+			KT_ASSERT(false);
+			return;
+		} break;
+	}
+
+	ImGui::DragScalar(_base->PathSuffix(), dataType, _intPtr, 1.0f, _intMin, _intMax);
+}
+
+void DrawEnumImGui(CVarBase* _base, char const** _values, uint32_t _numValues, uint32_t& _currentIdx)
+{
+	ImGui::PushID(_base);
+	int curIdx = int(_currentIdx);
+	ImGui::Combo(_base->PathSuffix(), &curIdx, _values, int(_numValues));
+	_currentIdx = uint32_t(curIdx);
+	ImGui::PopID();
+}
+
+
+}
+
 struct CVarTreeNode
 {
 	enum class Type
@@ -227,14 +262,6 @@ void CVar<kt::Vec4>::DrawImGuiInteraction()
 	ImGui::SliderFloat4(PathSuffix(), &m_current[0], m_min, m_max);
 }
 
-void CVarEnumBase::DrawEnumImGui(char const** _values, uint32_t _numValues, uint32_t& _currentIdx)
-{
-	ImGui::PushID(this);
-	int curIdx = int(_currentIdx);
-	ImGui::Combo(PathSuffix(), &curIdx, _values, int(_numValues));
-	_currentIdx = uint32_t(curIdx);
-	ImGui::PopID();
-}
 
 
 char const* CVarBase::PathSuffix() const
@@ -245,25 +272,5 @@ char const* CVarBase::PathSuffix() const
 
 
 
-void CVarIntBase::DrawIntImGui(void* _intPtr, void* _intMin, void* _intMax, uint32_t _typeSize, bool _isSigned)
-{
-	ImGuiDataType dataType = 0;
-
-	switch (_typeSize)
-	{
-		case 1: dataType = _isSigned ? ImGuiDataType_S8 : ImGuiDataType_U8; break;
-		case 2: dataType = _isSigned ? ImGuiDataType_S16 : ImGuiDataType_U16; break;
-		case 4: dataType = _isSigned ? ImGuiDataType_S32 : ImGuiDataType_U32; break;
-		case 8: dataType = _isSigned ? ImGuiDataType_S64 : ImGuiDataType_U64; break;
-
-		default:
-		{
-			KT_ASSERT(false);
-			return;
-		} break;
-	}
-
-	ImGui::DragScalar(PathSuffix(), dataType, _intPtr, 1.0f, _intMin, _intMax);
-}
 
 }
