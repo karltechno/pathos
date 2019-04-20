@@ -4,6 +4,7 @@
 
 #include <gpu/GPUDevice.h>
 #include <input/Input.h>
+#include <core/CVar.h>
 
 #include <kt/Macros.h>
 #include <kt/Timer.h>
@@ -13,6 +14,34 @@
 
 
 #include "imgui.h"
+
+static core::CVar<float> s_testCVar0("app.group1.cats", "Test", 0.0f, 1.0f, 2.0f);
+static core::CVar<kt::Vec3> s_testCVar1("app.group1.cats2", "Test", kt::Vec3(0.0f), 1.0f, 2.0f);
+static core::CVar<float> s_testCVar2("app.group2.cats2", "Test", 0.0f, 1.0f, 2.0f);
+
+static core::CVar<float> s_testCVar01("gfx.cam.cats23", "This is a description.", 0.0f, 1.0f, 2.0f);
+static core::CVar<float> s_testCVar11("gfx.cam.cats2", "Test", 0.0f, 1.0f, 2.0f);
+static core::CVar<float> s_testCVar21("gfx.group2.cats2", "Test", 0.0f, 1.0f, 2.0f);
+static core::CVar<bool> s_testCVar212("gfx.group2.aBool", "Test", true);
+
+enum class MyEnumTest
+{
+	Hello,
+	Cats,
+	Test,
+
+	Num
+};
+
+char const* const s_enumStrs[] =
+{
+	"Hello",
+	"Cats",
+	"Test"
+};
+
+static core::CVarEnum<MyEnumTest, MyEnumTest::Num> s_enumCvar("app.enumtest", "test", s_enumStrs, MyEnumTest::Hello);
+
 
 static kt::Vec3 const s_testTriVerts[] =
 {
@@ -48,6 +77,8 @@ void GraphicsApp::Go(int _argc, char** _argv)
 {
 	KT_UNUSED2(_argc, _argv);
 	
+	core::InitCVars();
+
 	WindowInitParams params{};
 	params.m_app = this;
 	params.m_height = 720;
@@ -148,6 +179,8 @@ void GraphicsApp::Go(int _argc, char** _argv)
 		m_imguiHandler.BeginFrame(dt);
 
 		Tick(dt);
+		
+		core::DrawTreeWindow();
 
 		myCbuffer.myVec4 += kt::Vec4(dt);
 		{

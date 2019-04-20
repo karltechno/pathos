@@ -11,4 +11,4 @@ if(WIN32)
 endif()
 
 add_pathos_lib(app "${APP_SOURCES}")
-target_link_libraries(app input gpu imgui)
+target_link_libraries(app core input gpu imgui)
