@@ -167,7 +167,7 @@ enum class Key : uint8_t
 	RightControl,
 	RightAlt,
 
-	MaxKeys
+	Num_Keys
 };
 
 
@@ -209,6 +209,7 @@ struct Event
 	static Event Create_MouseWheelDelta(int16_t _delta);
 	static Event Create_KeyUp(Key _key);
 	static Event Create_KeyDown(Key _key);
+	static Event Create_MouseMove(int32_t _deltaX, int32_t _deltaY);
 
 	enum class Type
 	{
@@ -222,7 +223,9 @@ struct Event
 		MouseWheelDelta,
 		
 		KeyUp,
-		KeyDown
+		KeyDown,
+
+		MouseMove
 	} m_type;
 
 	union 
@@ -244,6 +247,13 @@ struct Event
 		// Mouse button state.
 		// Type: MouseButtonUp/MouseButtonDown
 		MouseButton m_mouseButton;
+
+		// Type MouseMove
+		struct  
+		{
+			int32_t deltaX;
+			int32_t deltaY;
+		} m_mouseMove;
 
 		// Type: KeyUp/KeyDown
 		Key m_key;

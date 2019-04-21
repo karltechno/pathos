@@ -20,6 +20,7 @@ using XInputGetStateFn =  DWORD (WINAPI*)(DWORD, XINPUT_STATE*);
 
 static Key s_keyMap[0xFF];
 
+
 void InitKeyMap()
 {
 	memset(s_keyMap, 0, sizeof(s_keyMap));
@@ -132,6 +133,8 @@ struct Context
 	HWND m_hwnd;
 
 	int32_t m_lastCursorPos[2] = {0, 0};
+
+	bool m_keysAreDown[uint32_t(Key::Num_Keys)];
 
 	bool m_isInit = false;
 };
@@ -321,6 +324,8 @@ bool Init(void* _nativeWindowHandle, input::EventCallback const& _callback)
 		return false;
 	}
 
+	memset(s_ctx.m_keysAreDown, 0, sizeof(s_ctx.m_keysAreDown));
+
 	s_ctx.m_isInit = true;
 	return true;
 }
@@ -485,11 +490,19 @@ uint32_t WinMsgLoopHook(void* _hwnd, uint32_t _umsg, uintptr_t _wparam, intptr_t
 
 					if (kb->Flags & RI_KEY_BREAK)
 					{
-						DispatchInputEvent(input::Event::Create_KeyUp(key));
+						if (s_ctx.m_keysAreDown[uint32_t(key)])
+						{
+							DispatchInputEvent(input::Event::Create_KeyUp(key));
+							s_ctx.m_keysAreDown[uint32_t(key)] = false;
+						}
 					}
 					else
 					{
-						DispatchInputEvent(input::Event::Create_KeyDown(key));
+						if (!s_ctx.m_keysAreDown[uint32_t(key)])
+						{
+							DispatchInputEvent(input::Event::Create_KeyDown(key));
+							s_ctx.m_keysAreDown[uint32_t(key)] = true;
+						}
 					}
 				}
 
@@ -516,6 +529,14 @@ uint32_t WinMsgLoopHook(void* _hwnd, uint32_t _umsg, uintptr_t _wparam, intptr_t
 				if (mouse->usButtonFlags & RI_MOUSE_WHEEL)
 				{
 					DispatchInputEvent(Event::Create_MouseWheelDelta(int16_t(mouse->usButtonData)));
+				}
+
+				if (!(mouse->usButtonFlags & MOUSE_MOVE_ABSOLUTE))
+				{
+					if (mouse->lLastX != 0 || mouse->lLastY != 0)
+					{
+						DispatchInputEvent(Event::Create_MouseMove(int32_t(mouse->lLastX), int32_t(mouse->lLastY)));
+					}
 				}
 			}
 		} break;

@@ -62,4 +62,13 @@ input::Event Event::Create_KeyDown(Key _key)
 }
 
 
+input::Event Event::Create_MouseMove(int32_t _deltaX, int32_t _deltaY)
+{
+	Event e = {};
+	e.m_type = Event::Type::MouseMove;
+	e.m_mouseMove.deltaX = _deltaX;
+	e.m_mouseMove.deltaY = _deltaY;
+	return e;
+}
+
 }
