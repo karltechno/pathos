@@ -23,6 +23,10 @@ static core::CVar<float> s_testCVar11("gfx.cam.cats2", "Test", 0.0f, 1.0f, 2.0f)
 static core::CVar<float> s_testCVar21("gfx.group2.cats2", "Test", 0.0f, 1.0f, 2.0f);
 static core::CVar<bool> s_testCVar212("gfx.group2.aBool", "Test", true);
 
+static core::CVar<int32_t> s_intTest("app.group1.int32", "testing int", 0, -100, 100);
+
+static core::CVar<float> s_camFov("app.cam.fov", "Camera field of view", 65.0f, 40.0f, 100.0f);
+
 enum class MyEnumTest
 {
 	Hello,
@@ -44,9 +48,9 @@ static core::CVarEnum<MyEnumTest, MyEnumTest::Num> s_enumCvar("app.enumtest", "t
 
 static kt::Vec3 const s_testTriVerts[] =
 {
-	{ 0.0f, 1.0f, 0.0f },
-	{ 1.0f, -1.0f, 0.0f },
-	{ -1.0f, -1.0f, 0.0f },
+	{ 0.0f, 1.0f, 100.f },
+	{ 1.0f, -1.0f, 100.f },
+	{ -1.0f, -1.0f, 100.f},
 };
 
 static uint16_t const s_testIndicies[] =
@@ -121,12 +125,46 @@ void TestbedApp::Setup()
 	constantBufferDesc.m_flags = gpu::BufferFlags::Constant | gpu::BufferFlags::Transient;
 	constantBufferDesc.m_sizeInBytes = sizeof(DummyCbuffer);
 	m_constantBuffer = gpu::CreateBuffer(constantBufferDesc);
+
+	uint32_t swapchainW, swapchainH;
+	gpu::GetSwapchainDimensions(swapchainW, swapchainH);
+
+	gfx::Camera::ProjectionParams params;
+	params.m_farPlane = 500.0f;
+	params.m_fov = kt::ToRadians(95.0f);
+	params.m_nearPlane = 0.01f;
+	params.m_type = gfx::Camera::ProjType::Perspective;
+	params.m_viewHeight = float(swapchainH);
+	params.m_viewWidth = float(swapchainW);
+
+	m_cam.SetProjection(params);
 }
 
 
 void TestbedApp::Tick(float _dt)
 {
+	uint32_t swapchainW, swapchainH;
+	gpu::GetSwapchainDimensions(swapchainW, swapchainH);
+
+	gfx::Camera::ProjectionParams params;
+	params.m_farPlane = 500.0f;
+	params.m_fov = kt::ToRadians(s_camFov);
+	params.m_nearPlane = 0.01f;
+	params.m_type = gfx::Camera::ProjType::Perspective;
+	params.m_viewHeight = float(swapchainH);
+	params.m_viewWidth = float(swapchainW);
+
+	m_cam.SetProjection(params);
+
+	input::GamepadState gpState;
+	if (input::GetGamepadState(0, gpState))
+	{
+		m_camController.HandleGamepadAnalog(gpState);
+	}
+
+	m_camController.UpdateCamera(_dt, m_cam);
 	m_myCbuffer.myVec4 += kt::Vec4(_dt);
+	m_myCbuffer.mvp = m_cam.GetCachedViewProj();
 
 	gpu::cmd::Context* ctx = gpu::cmd::Begin(gpu::cmd::ContextType::Graphics);
 
@@ -140,10 +178,8 @@ void TestbedApp::Tick(float _dt)
 	gpu::cmd::UpdateTransientBuffer(ctx, m_constantBuffer, &m_myCbuffer);
 
 	gpu::cmd::SetConstantBuffer(ctx, m_constantBuffer, 0, 0);
-	uint32_t width, height;
-	gpu::GetSwapchainDimensions(width, height);
 
-	gpu::Rect rect{ float(width), float(height) };
+	gpu::Rect rect{ float(swapchainW), float(swapchainH) };
 
 	gpu::cmd::SetViewport(ctx, rect, 0.0f, 1.0f);
 	gpu::cmd::SetScissorRect(ctx, rect);
@@ -166,6 +202,11 @@ void TestbedApp::Shutdown()
 	gpu::Release(m_pixelShader);
 	gpu::Release(m_vertexShader);
 	gpu::Release(m_constantBuffer);
+}
+
+void TestbedApp::HandleInputEvent(input::Event const& _ev)
+{
+	m_camController.DefaultInputHandler(_ev);
 }
 
 PATHOS_APP_IMPLEMENT_MAIN(TestbedApp);
