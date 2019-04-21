@@ -189,7 +189,7 @@ void ImGuiDrawTreeRecursive(CVarTreeNode const& _group)
 	ImGui::PushID(&_group);
 	if (_group.m_type == CVarTreeNode::Type::Group)
 	{
-		kt::String64 str;
+		kt::String128 str;
 		str.AppendFmt("%.*s", _group.m_pathPart.Size(), _group.m_pathPart.Data());
 
 		if (ImGui::BeginMenu(str.Data()))
@@ -207,9 +207,10 @@ void ImGuiDrawTreeRecursive(CVarTreeNode const& _group)
 		static const ImVec4 c_defaultCvarCol = ImVec4(0.0f, 0.8f, 0.2f, 1.0f);
 		static const ImVec4 c_changedCvarCol = ImVec4(1.0f, 0.7f, 0.2f, 1.0f);
 		ImVec4 const col = _group.m_leaf->HasChanged() ? c_changedCvarCol : c_defaultCvarCol;
-		ImGui::PushStyleColor(ImGuiCol_FrameBg, col);
+		ImGui::PushStyleColor(ImGuiCol_Text, col);
 		_group.m_leaf->DrawImGuiInteraction();
 		ImGui::PopStyleColor();
+
 
 		if (ImGui::BeginPopupContextItem(_group.m_leaf->PathSuffix()))
 		{

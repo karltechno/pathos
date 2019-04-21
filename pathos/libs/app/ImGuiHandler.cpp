@@ -33,6 +33,10 @@ void ImGuiHandler::Init(void* _nwh)
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
+
+	// This seems to make some lines almost disappear (eg checkbox) - bug or wrong config somewhere ?
+	ImGui::GetStyle().AntiAliasedLines = false;
+
 	io.ImeWindowHandle = _nwh;
 	io.BackendPlatformName = "pathos_d3d12";
 
