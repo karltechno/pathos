@@ -133,8 +133,6 @@ void DestroyFolderWatcher(FolderWatcher* _watcher)
 
 void UpdateFolderWatcher(FolderWatcher* _watcher, kt::StaticFunction<void(char const*), 32> const& _changeCb)
 {
-	KT_UNUSED2(_watcher, _changeCb);
-
 	kt::TimePoint const timeNow = kt::TimePoint::Now();
 
 	for (FolderWatcher::ChangedFileMap::Iterator it = _watcher->m_changedFiles.Begin();
