@@ -13,7 +13,7 @@ uint32_t constexpr c_cbvTableSize = 16;
 uint32_t constexpr c_srvTableSize = 16;
 uint32_t constexpr c_uavTableSize = 16;
 
-uint32_t constexpr c_numShaderSpaces = 1;
+uint32_t constexpr c_numShaderSpaces = 4;
 
 uint32_t constexpr c_maxBufferedFrames = 3u;
 

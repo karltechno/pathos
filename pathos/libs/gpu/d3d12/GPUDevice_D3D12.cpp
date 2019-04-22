@@ -358,7 +358,7 @@ void AllocatedGraphicsPSO_D3D12::CreateD3DPSO(ID3D12Device* _device, gpu::Graphi
 	d3dDesc.VS = D3D12_SHADER_BYTECODE{ _vs.m_data, _vs.m_size };
 	d3dDesc.PS = D3D12_SHADER_BYTECODE{ _ps.m_data, _ps.m_size };
 
-	d3dDesc.pRootSignature = g_device->m_debugRootSig;
+	d3dDesc.pRootSignature = g_device->m_graphicsRootSig;
 
 	d3dDesc.BlendState.AlphaToCoverageEnable = _desc.m_blendDesc.m_alphaToCoverageEnable;
 	d3dDesc.BlendState.IndependentBlendEnable = FALSE;
@@ -822,15 +822,26 @@ static IDXGIAdapter4* GetBestAdaptor(IDXGIFactory4* _dxgiFactory)
 }
 
 
-static ID3D12RootSignature* CreateGraphicsRootSignature(ID3D12Device* _dev)
+static void CreateRootSigs(ID3D12Device* _dev, ID3D12RootSignature*& o_gfx, ID3D12RootSignature*& o_compute)
 {
-	D3D12_ROOT_SIGNATURE_DESC desc = {};
+	D3D12_ROOT_SIGNATURE_DESC graphicsDesc = {};
+	D3D12_ROOT_SIGNATURE_DESC computeDesc = {};
 
 	D3D12_STATIC_SAMPLER_DESC samplers[4] = {};
-	desc.pStaticSamplers = samplers;
-	desc.NumStaticSamplers = KT_ARRAY_COUNT(samplers);
 
-	desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	graphicsDesc.pStaticSamplers = samplers;
+	graphicsDesc.NumStaticSamplers = KT_ARRAY_COUNT(samplers);
+
+	computeDesc.pStaticSamplers = samplers;
+	computeDesc.NumStaticSamplers = KT_ARRAY_COUNT(samplers);
+
+	graphicsDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+	computeDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_DENY_VERTEX_SHADER_ROOT_ACCESS
+		| D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS
+		| D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS
+		| D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS
+		| D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
 
 	// Point clamp
 	{
@@ -883,16 +894,17 @@ static ID3D12RootSignature* CreateGraphicsRootSignature(ID3D12Device* _dev)
 	D3D12_ROOT_PARAMETER tables[3 * c_numShaderSpaces];
 	D3D12_DESCRIPTOR_RANGE ranges[3 * c_numShaderSpaces];
 
-	desc.pParameters = tables;
-	desc.NumParameters = KT_ARRAY_COUNT(tables);
+	graphicsDesc.pParameters = tables;
+	graphicsDesc.NumParameters = KT_ARRAY_COUNT(tables);
+
+	computeDesc.pParameters = tables;
+	computeDesc.NumParameters = KT_ARRAY_COUNT(tables);
 
 	// One dumb global root sig for now.
 	// CBV Table (b0 - b16) space0
 	// SRV Table (t0 - t16) space0
 	// UAV Table (u0 - u16) space0
-	// CBV Table (b0 - b16) space1
-	// SRV Table (t0 - t16) space1
-	// UAV Table (u0 - u16) space1
+	// Repeat to space n.
 
 	for (uint32_t i = 0; i < c_numShaderSpaces; ++i)
 	{
@@ -930,23 +942,37 @@ static ID3D12RootSignature* CreateGraphicsRootSignature(ID3D12Device* _dev)
 		tables[i * 3 + 2].DescriptorTable.NumDescriptorRanges = 1;
 	}
 
-
-	ID3DBlob* rootBlob;
-	ID3DBlob* errBlob;
-	KT_SCOPE_EXIT(SafeReleaseDX(rootBlob));
-	KT_SCOPE_EXIT(SafeReleaseDX(errBlob));
-
-	D3D_CHECK(D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &rootBlob, &errBlob));
-
-	if (errBlob)
 	{
-		KT_LOG_ERROR("Failed to create root signature: %s", errBlob->GetBufferPointer());
+		ID3DBlob* rootBlob;
+		ID3DBlob* errBlob;
+		KT_SCOPE_EXIT(SafeReleaseDX(rootBlob));
+		KT_SCOPE_EXIT(SafeReleaseDX(errBlob));
+
+		D3D_CHECK(D3D12SerializeRootSignature(&graphicsDesc, D3D_ROOT_SIGNATURE_VERSION_1, &rootBlob, &errBlob));
+
+		if (errBlob)
+		{
+			KT_LOG_ERROR("Failed to create root signature: %s", errBlob->GetBufferPointer());
+		}
+
+		D3D_CHECK(_dev->CreateRootSignature(0, rootBlob->GetBufferPointer(), rootBlob->GetBufferSize(), IID_PPV_ARGS(&o_gfx)));
 	}
 
-	ID3D12RootSignature* rsig;
+	{
+		ID3DBlob* rootBlob;
+		ID3DBlob* errBlob;
+		KT_SCOPE_EXIT(SafeReleaseDX(rootBlob));
+		KT_SCOPE_EXIT(SafeReleaseDX(errBlob));
 
-	D3D_CHECK(_dev->CreateRootSignature(0, rootBlob->GetBufferPointer(), rootBlob->GetBufferSize(), IID_PPV_ARGS(&rsig)));
-	return rsig;
+		D3D_CHECK(D3D12SerializeRootSignature(&computeDesc, D3D_ROOT_SIGNATURE_VERSION_1, &rootBlob, &errBlob));
+
+		if (errBlob)
+		{
+			KT_LOG_ERROR("Failed to create root signature: %s", errBlob->GetBufferPointer());
+		}
+
+		D3D_CHECK(_dev->CreateRootSignature(0, rootBlob->GetBufferPointer(), rootBlob->GetBufferSize(), IID_PPV_ARGS(&o_compute)));
+	}
 }
 
 void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
@@ -1075,7 +1101,7 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 	}
 
 	//DebugCreateGraphicsPSO();
-	m_debugRootSig = CreateGraphicsRootSignature(m_d3dDev);
+	CreateRootSigs(m_d3dDev, m_graphicsRootSig, m_computeRootSig);
 
 	gpu::TextureDesc const depthDesc = gpu::TextureDesc::Desc2D(m_swapChainWidth, m_swapChainHeight, TextureUsageFlags::DepthStencil, Format::D32_Float);
 	m_backbufferDepth.AcquireNoRef(gpu::CreateTexture(depthDesc, nullptr, "Backbuffer Depth"));
@@ -1133,8 +1159,8 @@ Device_D3D12::~Device_D3D12()
 	SafeReleaseDX(m_d3dDev);
 	SafeReleaseDX(m_swapChain);
 
-	SafeReleaseDX(m_debugRootSig);
-	SafeReleaseDX(m_debugPsoTest);
+	SafeReleaseDX(m_graphicsRootSig);
+	SafeReleaseDX(m_computeRootSig);
 }
 
 gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initialData, char const* _debugName)

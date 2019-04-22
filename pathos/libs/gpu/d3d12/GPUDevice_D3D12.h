@@ -187,8 +187,6 @@ struct Device_D3D12
 
 	void Init(void* _nativeWindowHandle, bool _useDebugLayer);
 
-	void TestOneFrame();
-
 	void BeginFrame();
 	void EndFrame();
 
@@ -202,8 +200,6 @@ struct Device_D3D12
 
 	using PSOCache = kt::HashMap<uint64_t, GraphicsPSORef, kt::HashMap_KeyOps_IdentityInt<uint64_t>>;
 
-	void DebugCreateGraphicsPSO();
-
 	FrameResources* GetFrameResources()
 	{
 		return &m_framesResources[m_cpuFrameIdx];
@@ -211,8 +207,8 @@ struct Device_D3D12
 
 	kt::String256 m_deviceName;
 
-	ID3D12PipelineState* m_debugPsoTest = nullptr;
-	ID3D12RootSignature* m_debugRootSig = nullptr;
+	ID3D12RootSignature* m_graphicsRootSig = nullptr;
+	ID3D12RootSignature* m_computeRootSig = nullptr;
 
 	ID3D12Device2* m_d3dDev = nullptr;
 	IDXGISwapChain1* m_swapChain = nullptr;

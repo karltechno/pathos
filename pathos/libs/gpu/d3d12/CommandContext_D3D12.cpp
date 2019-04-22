@@ -84,7 +84,7 @@ CommandContext_D3D12::CommandContext_D3D12(ContextType _type, Device_D3D12* _dev
 	if (m_d3dType == D3D12_COMMAND_LIST_TYPE_DIRECT)
 	{
 		// TODO: HACK
-		m_cmdList->SetGraphicsRootSignature(m_device->m_debugRootSig);
+		m_cmdList->SetGraphicsRootSignature(m_device->m_graphicsRootSig);
 	}
 }
 
