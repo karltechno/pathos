@@ -14,6 +14,7 @@
 #include <kt/Logging.h>
 #include <kt/Vec3.h>
 #include <kt/Vec4.h>
+#include "kt/FilePath.h"
 
 
 namespace app
@@ -81,6 +82,8 @@ void GraphicsApp::Go(int _argc, char** _argv)
 		gpu::BeginFrame();
 
 		float const dt = float(tickTime.Seconds());
+		res::Tick();
+
 		PumpMessageLoop(m_window);
 		input::Tick(dt);
 		m_imguiHandler.BeginFrame(dt);

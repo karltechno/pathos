@@ -17,6 +17,8 @@ using ReloadFn		= kt::StaticFunction<void(kt::IReader& _newRes, uint64_t _stream
 void Init();
 void Shutdown();
 
+void Tick();
+
 ResourceHandleBase LoadResourceSync(char const* _path, uint32_t _typeTag);
 
 template <typename T>

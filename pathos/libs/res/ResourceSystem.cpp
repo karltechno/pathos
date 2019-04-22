@@ -1,6 +1,7 @@
 #include <kt/Array.h>
 
 #include "ResourceSystem.h"
+#include "FolderWatcher.h"
 
 #include <kt/HashMap.h>
 #include <kt/FilePath.h>
@@ -95,11 +96,13 @@ struct Context
 	kt::HashMap<char const*, uint32_t> m_extensionToTypeTag;
 
 	kt::HashMap<uint64_t, LoadedResource> m_loadedResourcesByAssetHash;
+
+	res::FolderWatcher* m_folderWatcher = nullptr;
 } s_ctx;
 
 void Init()
 {
-
+	s_ctx.m_folderWatcher = res::CreateFolderWatcher(kt::FilePath("."));
 }
 
 void Shutdown()
@@ -112,6 +115,9 @@ void Shutdown()
 	s_ctx.m_resourceContainers.ClearAndFree();
 	s_ctx.m_extensionToTypeTag.ClearAndFree();
 	s_ctx.m_loadedResourcesByAssetHash.ClearAndFree();
+
+	res::DestroyFolderWatcher(s_ctx.m_folderWatcher);
+	s_ctx.m_folderWatcher = nullptr;
 }
 
 
@@ -132,6 +138,23 @@ static uint64_t HashAssetPath(kt::FilePath const& _path)
 {
 	return kt::StringHash64I(_path.Data());
 }
+
+void Tick()
+{
+	res::UpdateFolderWatcher(s_ctx.m_folderWatcher, [](char const* _path)
+	{
+		kt::FilePath const path = CanonicalizeAssetPath(_path);
+		uint64_t const hash = HashAssetPath(path);
+		kt::HashMap<uint64_t, LoadedResource>::Iterator it = s_ctx.m_loadedResourcesByAssetHash.Find(hash);
+		if (it == s_ctx.m_loadedResourcesByAssetHash.End())
+		{
+			return;
+		}
+
+		Reload(it->m_val.m_handle, it->m_val.m_typeTag);
+	});
+}
+
 
 res::ResourceHandleBase LoadResourceSync(char const* _path, uint32_t _typeTag)
 {
