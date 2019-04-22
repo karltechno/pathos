@@ -27,6 +27,9 @@ struct GraphicsApp
 	void* NativeWindowHandle() const;
 
 private:
+	void SubsystemPreable(int _argc, char** _argv);
+	void SubsystemPostable();
+
 	WindowHandle m_window;
 	ImGuiHandler m_imguiHandler;
 	bool m_keepAlive = true;

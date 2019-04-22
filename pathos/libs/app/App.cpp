@@ -5,7 +5,9 @@
 #include <core/CVar.h>
 #include <editor/Editor.h>
 #include <gpu/GPUDevice.h>
+#include <gfx/Resources.h>
 #include <input/Input.h>
+#include <res/ResourceSystem.h>
 
 #include <kt/Macros.h>
 #include <kt/Timer.h>
@@ -14,11 +16,50 @@
 #include <kt/Vec4.h>
 
 
-#include "imgui.h"
-
-
 namespace app
 {
+
+void GraphicsApp::SubsystemPreable(int _argc, char** _argv)
+{
+	KT_UNUSED2(_argc, _argv);
+
+	WindowInitParams params{};
+	params.m_app = this;
+	params.m_width = 1280;
+	params.m_height = 720;
+	params.m_name = "Pathos";
+	params.m_windowed = true;
+
+	m_window = CreatePlatformWindow(params);
+
+	input::Init(m_window.nwh, [this](input::Event const& _ev)
+	{
+		if (!m_imguiHandler.HandleInputEvent(_ev))
+		{
+			HandleInputEvent(_ev);
+		}
+	});
+
+	gpu::Init(m_window.nwh);
+	editor::Init();
+	m_imguiHandler.Init(m_window.nwh);
+	core::InitCVars();
+
+	gfx::RegisterResourceLoaders();
+
+	res::Init();
+}
+
+void GraphicsApp::SubsystemPostable()
+{
+	res::Shutdown();
+	core::ShutdownCVars();
+	m_imguiHandler.Shutdown();
+	editor::Shutdown();
+	gpu::Shutdown();
+	input::Shutdown();
+}
+
 
 GraphicsApp::GraphicsApp()
 {
@@ -27,35 +68,7 @@ GraphicsApp::GraphicsApp()
 
 void GraphicsApp::Go(int _argc, char** _argv)
 {
-	KT_UNUSED2(_argc, _argv);
-	
-	core::InitCVars();
-
-	WindowInitParams params{};
-	params.m_app = this;
-	params.m_height = 720;
-	params.m_width = 1280;
-	params.m_name = "Pathos";
-	params.m_windowed = true;
-
-	m_window = CreatePlatformWindow(params);
-
-	if (!input::Init(m_window.nwh, [this](input::Event const& _ev) 
-	{
-		if (!m_imguiHandler.HandleInputEvent(_ev))
-		{
-			HandleInputEvent(_ev);
-		}
-	}))
-	{
-		KT_ASSERT(false);
-		KT_LOG_ERROR("Failed to initialise input system, exiting.");
-		return;
-	}
-
-	gpu::Init(m_window.nwh);
-	editor::Init();
-	m_imguiHandler.Init(m_window.nwh);
+	SubsystemPreable(_argc, _argv);
 
 	// Setup derived.
 	Setup();
@@ -88,10 +101,7 @@ void GraphicsApp::Go(int _argc, char** _argv)
 
 	Shutdown();
 
-	m_imguiHandler.Shutdown();
-
-	gpu::Shutdown();
-	input::Shutdown();
+	SubsystemPostable();
 }
 
 void GraphicsApp::RequestShutdown()
@@ -103,5 +113,6 @@ void* GraphicsApp::NativeWindowHandle() const
 {
 	return m_window.nwh;
 }
+
 
 }

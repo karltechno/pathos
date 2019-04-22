@@ -38,7 +38,8 @@ void ImGuiHandler::Init(void* _nwh)
 	ImGui::GetStyle().AntiAliasedLines = false;
 
 	io.ImeWindowHandle = _nwh;
-	io.BackendPlatformName = "pathos_d3d12";
+	io.BackendPlatformName = "pathos";
+	io.BackendRendererName = "pathos_d3d12";
 
 	io.KeyMap[ImGuiKey_Tab] = uint32_t(input::Key::Tab);
 	io.KeyMap[ImGuiKey_LeftArrow] = uint32_t(input::Key::Left);

@@ -1,8 +1,11 @@
 #pragma once
 #include <app/App.h>
+#include <app/CameraController.h>
 #include <gpu/Types.h>
 #include <gfx/Camera.h>
-#include <app/CameraController.h>
+#include <gfx/Resources.h>
+#include <res/Resource.h>
+#include <res/ResourceSystem.h>
 
 struct TestbedApp : app::GraphicsApp
 {
@@ -29,7 +32,7 @@ struct TestbedApp : app::GraphicsApp
 	gpu::BufferHandle m_vertexBuffer;
 	gpu::BufferHandle m_constantBuffer;
 
-	gpu::ShaderHandle m_pixelShader;
-	gpu::ShaderHandle m_vertexShader;
+	res::ResourceHandle<gfx::ShaderResource> m_pixelShader;
+	res::ResourceHandle<gfx::ShaderResource> m_vertexShader;
 };
 

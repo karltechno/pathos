@@ -7,11 +7,13 @@
 #include <gpu/GPUDevice.h>
 #include <input/Input.h>
 
+
 #include <kt/Macros.h>
 #include <kt/Timer.h>
 #include <kt/Logging.h>
 #include <kt/Vec3.h>
 #include <kt/Vec4.h>
+#include "imgui.h"
 
 
 static core::CVar<float> s_testCVar0("app.group1.cats", "Test", 0.0f, 1.0f, 2.0f);
@@ -59,48 +61,19 @@ static uint16_t const s_testIndicies[] =
 };
 
 
-static void DebugReadEntireFile(FILE* _f, gpu::ShaderBytecode& o_byteCode)
-{
-	fseek(_f, 0, SEEK_END);
-	size_t len = ftell(_f);
-	fseek(_f, 0, SEEK_SET);
-	void* ptr = kt::Malloc(len);
-	fread(ptr, len, 1, _f);
-	o_byteCode.m_size = len;
-	o_byteCode.m_data = ptr;
-}
-
-
 
 void TestbedApp::Setup()
 {
-	FILE* pshFile = fopen("shaders/TestTri.pixel.cso", "rb");
-	FILE* vshFile = fopen("shaders/TestTri.vertex.cso", "rb");
-
-	KT_ASSERT(pshFile);
-	KT_ASSERT(vshFile);
-
-	KT_SCOPE_EXIT(fclose(pshFile));
-	KT_SCOPE_EXIT(fclose(vshFile));
-
-	gpu::ShaderBytecode vsCode, psCode;
-
-	DebugReadEntireFile(pshFile, psCode);
-	DebugReadEntireFile(vshFile, vsCode);
-
-	KT_SCOPE_EXIT(kt::Free(psCode.m_data));
-	KT_SCOPE_EXIT(kt::Free(vsCode.m_data));
-
-	m_pixelShader = gpu::CreateShader(gpu::ShaderType::Pixel, psCode);
-	m_vertexShader = gpu::CreateShader(gpu::ShaderType::Vertex, vsCode);
+	m_pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/TestTri.pixel.cso");
+	m_vertexShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/TestTri.vertex.cso");
 
 	gpu::GraphicsPSODesc psoDesc;
 	psoDesc.m_depthFormat = gpu::Format::D32_Float;
 	psoDesc.m_numRenderTargets = 1;
 	psoDesc.m_renderTargetFormats[0] = gpu::Format::R8G8B8A8_UNorm;
 	psoDesc.m_vertexLayout.Add(gpu::VertexDeclEntry{ gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position, 0, 0 });
-	psoDesc.m_vs = m_vertexShader;
-	psoDesc.m_ps = m_pixelShader;
+	psoDesc.m_vs = res::GetData(m_vertexShader)->m_shader;
+	psoDesc.m_ps = res::GetData(m_pixelShader)->m_shader;
 
 	m_pso = gpu::CreateGraphicsPSO(psoDesc);
 
@@ -145,6 +118,15 @@ void TestbedApp::Tick(float _dt)
 {
 	uint32_t swapchainW, swapchainH;
 	gpu::GetSwapchainDimensions(swapchainW, swapchainH);
+
+	ImGui::Begin("BLAH");
+	{
+		if (ImGui::Button("reload"))
+		{
+			res::Reload(m_pixelShader);
+		}
+	}
+	ImGui::End();
 
 	gfx::Camera::ProjectionParams params;
 	params.m_farPlane = 500.0f;
@@ -199,8 +181,6 @@ void TestbedApp::Shutdown()
 	gpu::Release(m_indexBuffer);
 	gpu::Release(m_vertexBuffer);
 	gpu::Release(m_pso);
-	gpu::Release(m_pixelShader);
-	gpu::Release(m_vertexShader);
 	gpu::Release(m_constantBuffer);
 }
 

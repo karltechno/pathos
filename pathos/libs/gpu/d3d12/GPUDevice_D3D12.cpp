@@ -216,6 +216,7 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, void const* _initialDa
 		{
 			// Transient with initial data.
 			g_device->GetFrameResources()->m_uploadAllocator.Alloc(*this);
+			m_lastFrameTouched = g_device->m_frameCounter;
 			KT_ASSERT(m_mappedCpuData);
 			memcpy(m_mappedCpuData, _initialData, _desc.m_sizeInBytes);
 			UpdateViews();
@@ -293,27 +294,64 @@ struct AllocatedShader_D3D12 : AllocatedObjectBase_D3D12
 	void Init(ShaderType _type, ShaderBytecode const& _byteCode, char const* _name = nullptr)
 	{
 		m_shaderType = _type;
-		m_byteCode.m_data = kt::GetDefaultAllocator()->Alloc(_byteCode.m_size);
-		m_byteCode.m_size = _byteCode.m_size;
-		memcpy(m_byteCode.m_data, _byteCode.m_data, _byteCode.m_size);
+		CopyBytecode(_byteCode);
 
 		AllocatedObjectBase_D3D12::Init(_name);
 	}
 
 	void Destroy()
 	{
+		FreeBytecode();
+		m_linkedPsos.Clear();
+	}
+
+	void FreeBytecode()
+	{
 		kt::GetDefaultAllocator()->FreeSized(m_byteCode.m_data, m_byteCode.m_size);
 		m_byteCode = ShaderBytecode{};
+	}
+
+	void CopyBytecode(ShaderBytecode const& _byteCode)
+	{
+		KT_ASSERT(!m_byteCode.m_data);
+		m_byteCode.m_data = kt::GetDefaultAllocator()->Alloc(_byteCode.m_size);
+		m_byteCode.m_size = _byteCode.m_size;
+		memcpy(m_byteCode.m_data, _byteCode.m_data, _byteCode.m_size);
 	}
 
 	ShaderBytecode m_byteCode;
 	ShaderType m_shaderType;
 	
-	kt::Array<GraphicsPSOHandle> m_linkedPsos;
+	kt::InplaceArray<GraphicsPSOHandle, 4> m_linkedPsos;
 };
 
-void AllocatedGraphicsPSO_D3D12::Init(ID3D12Device* _device, gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps)
+void AllocatedGraphicsPSO_D3D12::Init
+(
+	ID3D12Device* _device, 
+	gpu::GraphicsPSODesc const& _desc, 
+	gpu::ShaderBytecode const& _vs, 
+	gpu::ShaderBytecode const& _ps, 
+	gpu::ShaderHandle _vsHandle, 
+	gpu::ShaderHandle _pshandle
+)
 {
+	gpu::AddRef(_vsHandle);
+	gpu::AddRef(_pshandle);
+
+	m_vs = _vsHandle;
+	m_ps = _pshandle;
+	m_psoDesc = _desc;
+
+	CreateD3DPSO(_device, _desc, _vs, _ps);
+
+	// TODO: Debug name
+	AllocatedObjectBase_D3D12::Init(nullptr);
+}
+
+void AllocatedGraphicsPSO_D3D12::CreateD3DPSO(ID3D12Device* _device, gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps)
+{
+	KT_ASSERT(!m_pso);
+
 	// Create a new PSO.
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC d3dDesc{};
 
@@ -396,8 +434,8 @@ void AllocatedGraphicsPSO_D3D12::Init(ID3D12Device* _device, gpu::GraphicsPSODes
 	}
 
 	D3D_CHECK(_device->CreateGraphicsPipelineState(&d3dDesc, IID_PPV_ARGS(&m_pso)));
-	AllocatedObjectBase_D3D12::Init(nullptr);
 }
+
 
 bool AllocatedTexture_D3D12::Init(TextureDesc const& _desc, void const* _initialData, char const* _debugName /* = nullptr */)
 {
@@ -603,7 +641,20 @@ void AllocatedGraphicsPSO_D3D12::Destroy()
 		g_device->GetFrameResources()->m_deferredDeletions.PushBack(m_pso);
 		m_pso = nullptr;
 	}
+
+	if (m_ps.IsValid())
+	{
+		gpu::Release(m_ps);
+		m_ps = gpu::ShaderHandle{};
+	}
+
+	if (m_vs.IsValid())
+	{
+		gpu::Release(m_vs);
+		m_vs = gpu::ShaderHandle{};
+	}
 }
+
 
 void FrameUploadPagePool_D3D12::Init(ID3D12Device* _device)
 {
@@ -1122,7 +1173,7 @@ gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc, void const* _ini
 	return gpu::TextureHandle{ handle };
 }
 
-gpu::ShaderHandle CreateShader(ShaderType _type, gpu::ShaderBytecode const& _byteCode)
+gpu::ShaderHandle CreateShader(ShaderType _type, gpu::ShaderBytecode const& _byteCode, char const* _debugName)
 {
 	AllocatedShader_D3D12* shader;
 	kt::VersionedHandle handle = g_device->m_shaderHandles.Alloc(shader);
@@ -1131,7 +1182,7 @@ gpu::ShaderHandle CreateShader(ShaderType _type, gpu::ShaderBytecode const& _byt
 		return gpu::ShaderHandle{};
 	}
 
-	shader->Init(_type, _byteCode);
+	shader->Init(_type, _byteCode, _debugName);
 	return gpu::ShaderHandle{ handle };
 }
 
@@ -1167,11 +1218,59 @@ gpu::GraphicsPSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc)
 
 	AllocatedGraphicsPSO_D3D12* psoData;
 	gpu::GraphicsPSOHandle const psoHandle = gpu::GraphicsPSOHandle(g_device->m_psoHandles.Alloc(psoData));
-	psoData->Init(g_device->m_d3dDev, _desc, vsShader->m_byteCode, psShader->m_byteCode);
+	psoData->Init(g_device->m_d3dDev, _desc, vsShader->m_byteCode, psShader->m_byteCode, _desc.m_vs, _desc.m_ps);
 	g_device->m_psoCache.Insert(hash, gpu::GraphicsPSORef{ psoHandle });
+
+	psShader->m_linkedPsos.PushBack(psoHandle);
+	vsShader->m_linkedPsos.PushBack(psoHandle);
 
 	return psoHandle;
 }
+
+void ReloadShader(ShaderHandle _handle, ShaderBytecode const& _newBytecode)
+{
+	AllocatedShader_D3D12* shader = g_device->m_shaderHandles.Lookup(_handle);
+	if (!shader)
+	{
+		KT_LOG_ERROR("Attempt to reload shader with invalid handle!");
+		return;
+	}
+
+	shader->FreeBytecode();
+	shader->CopyBytecode(_newBytecode);
+
+	uint32_t numPsos = 0;
+	KT_UNUSED(numPsos);
+
+	for (kt::Array<gpu::GraphicsPSOHandle>::Iterator it = shader->m_linkedPsos.Begin();
+		 it != shader->m_linkedPsos.End();
+		 /* */)
+	{
+		AllocatedGraphicsPSO_D3D12* psoData = g_device->m_psoHandles.Lookup(*it);
+		if (!psoData)
+		{
+			it = shader->m_linkedPsos.EraseSwap(it);
+			continue;
+		}
+
+		ShaderBytecode const& vsBytecode = g_device->m_shaderHandles.Lookup(psoData->m_vs)->m_byteCode;
+		ShaderBytecode const& psBytecode = g_device->m_shaderHandles.Lookup(psoData->m_ps)->m_byteCode; 
+
+		if (psoData->m_pso)
+		{
+			g_device->GetFrameResources()->m_deferredDeletions.PushBack(psoData->m_pso);
+			psoData->m_pso = nullptr;
+		}
+
+		psoData->CreateD3DPSO(g_device->m_d3dDev, psoData->m_psoDesc, vsBytecode, psBytecode);
+		++numPsos;
+		++it;
+	}
+
+	KT_LOG_INFO("Shader \"%s\" reloaded, %u PSO(s) re-compiled.", shader->m_debugName.Data(), numPsos);
+}
+
+
 
 gpu::TextureHandle CurrentBackbuffer()
 {
@@ -1360,24 +1459,26 @@ void Device_D3D12::FrameResources::ClearOnBeginFrame()
 
 void EnumBufferHandles(kt::StaticFunction<void(gpu::BufferHandle), 32> const& _ftor)
 {
-	gpu::BufferHandle bufferHandle = gpu::BufferHandle{ g_device->m_bufferHandles.FirstAllocatedHandle() };
+	kt::VersionedHandlePool<AllocatedBuffer_D3D12>& handlePool = g_device->m_bufferHandles;
 
-	while (bufferHandle.IsValid())
+	for (uint32_t i = handlePool.FirstAllocatedIndex(); 
+		 handlePool.IsIndexInUse(i); 
+		 i = handlePool.NextAllocatedIndex(i))
 	{
-		_ftor(bufferHandle);
-		bufferHandle = gpu::BufferHandle{ g_device->m_bufferHandles.NextAllocatedHandle(bufferHandle) };
+		_ftor(gpu::BufferHandle{ handlePool.HandleForIndex(i) });
 	}
 }
 
 
 void EnumTextureHandles(kt::StaticFunction<void(gpu::TextureHandle), 32> const& _ftor)
 {
-	gpu::TextureHandle texHandle = gpu::TextureHandle{ g_device->m_textureHandles.FirstAllocatedHandle() };
+	kt::VersionedHandlePool<AllocatedTexture_D3D12>& handlePool = g_device->m_textureHandles;
 
-	while (texHandle.IsValid())
+	for (uint32_t i = handlePool.FirstAllocatedIndex();
+		 handlePool.IsIndexInUse(i);
+		 i = handlePool.NextAllocatedIndex(i))
 	{
-		_ftor(texHandle);
-		texHandle = gpu::TextureHandle{ g_device->m_textureHandles.NextAllocatedHandle(texHandle) };
+		_ftor(gpu::TextureHandle{ handlePool.HandleForIndex(i) });
 	}
 }
 

@@ -12,6 +12,7 @@ namespace core
 struct CVarBase;
 
 void InitCVars();
+void ShutdownCVars();
 void DrawImGuiCVarMenuItems();
 
 namespace CVarDrawHelpers

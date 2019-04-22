@@ -111,10 +111,16 @@ struct AllocatedShader_D3D12;
 
 struct AllocatedGraphicsPSO_D3D12 : AllocatedObjectBase_D3D12
 {
-	void Init(ID3D12Device* _device, gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps);
+	void Init(ID3D12Device* _device, gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps, gpu::ShaderHandle _vsHandle, gpu::ShaderHandle _pshandle);
 	void Destroy();
 
+	void CreateD3DPSO(ID3D12Device* _device, gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps);
+
 	gpu::GraphicsPSODesc m_psoDesc;
+	
+	// Explicitly hold onto shaders to ensure hot reload always works.
+	gpu::ShaderHandle m_vs;
+	gpu::ShaderHandle m_ps;
 
 	ID3D12PipelineState* m_pso = nullptr;
 };

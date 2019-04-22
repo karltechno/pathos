@@ -184,6 +184,12 @@ void InitCVars()
 	RegisterCVarGroupsRecursive(s_ctx.m_root, kt::MakeSlice(varArray, CVarBase::s_numVars));
 }
 
+void ShutdownCVars()
+{
+	// Not strictly necessary, but will count as a 'leak' in leak check allocator (since it checks before dtor calls after main)
+	s_ctx.m_root.m_group.ClearAndFree();
+}
+
 void ImGuiDrawTreeRecursive(CVarTreeNode const& _group)
 {
 	ImGui::PushID(&_group);

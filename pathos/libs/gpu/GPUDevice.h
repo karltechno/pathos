@@ -21,7 +21,8 @@ void GetSwapchainDimensions(uint32_t& o_width, uint32_t& o_height);
 
 gpu::GraphicsPSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc);
 
-gpu::ShaderHandle CreateShader(gpu::ShaderType _type, gpu::ShaderBytecode const& _byteCode);
+gpu::ShaderHandle CreateShader(gpu::ShaderType _type, gpu::ShaderBytecode const& _byteCode, char const* _debugName = nullptr);
+void ReloadShader(gpu::ShaderHandle _handle, gpu::ShaderBytecode const& _newBytecode);
 
 gpu::TextureHandle CurrentBackbuffer();
 gpu::TextureHandle BackbufferDepth();
