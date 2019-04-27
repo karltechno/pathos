@@ -5,28 +5,19 @@
 
 #include <gpu/GPUDevice.h>
 #include <gpu/CommandContext.h>
+#include <gfx/Resources.h>
+#include <res/Resource.h>
+#include <res/ResourceSystem.h>
 
 #include <kt/Mat4.h>
 
-#include "imgui.h"
 #include "ImGuiHandler.h"
+
+#include "imgui.h"
 
 
 namespace app
 {
-
-// TODO: Duplicated/bad
-static void DebugReadEntireFile(FILE* _f, gpu::ShaderBytecode& o_byteCode)
-{
-	fseek(_f, 0, SEEK_END);
-	size_t len = ftell(_f);
-	fseek(_f, 0, SEEK_SET);
-	void* ptr = kt::Malloc(len);
-	fread(ptr, len, 1, _f);
-	o_byteCode.m_size = len;
-	o_byteCode.m_data = ptr;
-}
-
 
 void ImGuiHandler::Init(void* _nwh)
 {
@@ -63,24 +54,13 @@ void ImGuiHandler::Init(void* _nwh)
 	io.KeyMap[ImGuiKey_Y] = uint32_t(input::Key::KeyY);
 	io.KeyMap[ImGuiKey_Z] = uint32_t(input::Key::KeyZ);
 
-	// io.KeyMap TODO.
-
-	FILE* pshFile = fopen("shaders/ImGui.pixel.cso", "rb");
-	FILE* vshFile = fopen("shaders/ImGui.vertex.cso", "rb");
-	KT_SCOPE_EXIT(fclose(pshFile); fclose(vshFile));
-	gpu::ShaderBytecode vsBytecode, psBytecode;
-	DebugReadEntireFile(pshFile, psBytecode);
-	DebugReadEntireFile(vshFile, vsBytecode);
-	KT_SCOPE_EXIT(kt::Free(vsBytecode.m_data); kt::Free(psBytecode.m_data););
-
-	gpu::ShaderRef vsRef, psRef;
-	vsRef.AcquireNoRef(gpu::CreateShader(gpu::ShaderType::Vertex, vsBytecode));
-	psRef.AcquireNoRef(gpu::CreateShader(gpu::ShaderType::Pixel, psBytecode));
+	res::ResourceHandle<gfx::ShaderResource> pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ImGui.pixel.cso");
+	res::ResourceHandle<gfx::ShaderResource> vertexShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ImGui.vertex.cso");
 
 	gpu::GraphicsPSODesc psoDesc;
 
-	psoDesc.m_vs = vsRef;
-	psoDesc.m_ps = psRef;
+	psoDesc.m_vs = res::GetData(vertexShader)->m_shader;
+	psoDesc.m_ps = res::GetData(pixelShader)->m_shader;
 
 	psoDesc.m_vertexLayout
 		.Add(gpu::Format::R32G32_Float, gpu::VertexSemantic::Position)
