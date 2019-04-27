@@ -116,8 +116,8 @@ def main():
 
     script_dir = os.path.dirname(__file__) 
     pathos_base = os.path.normpath(os.path.join(script_dir, '../'))
-    shader_src_dir = os.path.normpath(os.path.join(pathos_base, 'assets/shaders/'))
-    shader_out_dir = os.path.normpath(os.path.join(pathos_base, 'run_tree/shaders/'))
+    shader_src_dir = os.path.normpath(os.path.join(pathos_base, 'pathos/shaders/'))
+    shader_out_dir = os.path.normpath(os.path.join(pathos_base, 'assets/shaders/'))
 
     dxc_exe_path = os.path.normpath(os.path.join(pathos_base, 'tools/dxc.exe'))
 
