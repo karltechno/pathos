@@ -10,9 +10,9 @@ struct IReader;
 
 namespace res
 {
-using LoaderFn		= kt::StaticFunction<bool(kt::IReader& _reader, uint64_t _streamLen, char const* _filePath, void*& o_res), 32>;
+using LoaderFn		= kt::StaticFunction<bool(char const* _filePath, void*& o_res), 32>;
 using DestroyFn		= kt::StaticFunction<void(void* _oldRes), 32>;
-using ReloadFn		= kt::StaticFunction<void(kt::IReader& _newRes, uint64_t _streamLen, void* _oldRes), 32>;
+using ReloadFn		= kt::StaticFunction<void(char const* _filePath, void* _oldRes), 32>;
 
 void Init();
 void Shutdown();

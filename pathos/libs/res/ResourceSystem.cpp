@@ -7,6 +7,7 @@
 #include <kt/FilePath.h>
 #include <kt/Logging.h>
 #include <kt/Serialization.h>
+#include <kt/File.h>
 
 namespace res
 {
@@ -158,6 +159,12 @@ void Tick()
 
 res::ResourceHandleBase LoadResourceSync(char const* _path, uint32_t _typeTag)
 {
+	if (!kt::FileExists(_path))
+	{
+		KT_LOG_ERROR("Resource file: \"%s\" does not exist!", _path);
+		return res::ResourceHandleBase{};
+	}
+
 	KT_ASSERT(_typeTag < s_ctx.m_resourceContainers.Size());
 	ResourceContainer& container = s_ctx.m_resourceContainers[_typeTag];
 
@@ -179,18 +186,8 @@ res::ResourceHandleBase LoadResourceSync(char const* _path, uint32_t _typeTag)
 		}
 	}
 
-	FILE* resFile = fopen(_path, "rb");
-	if (!resFile)
-	{
-		KT_LOG_ERROR("Failed to open resource file \"%s\".", _path);
-		return ResourceHandleBase{};
-	}
-	KT_SCOPE_EXIT(fclose(resFile));
-
-	kt::FileReader reader(resFile);
-
 	void* data = nullptr;
-	if (!container.m_createFn(reader, reader.OriginalSize(), _path, data))
+	if (!container.m_createFn(_path, data))
 	{
 		return ResourceHandleBase{};
 	}
@@ -241,17 +238,8 @@ void Reload(ResourceHandleBase _handle, uint32_t _typeTag)
 		ResourceContainer::InternalResource* res = s_ctx.m_resourceContainers[_typeTag].m_handles.Lookup(_handle);
 		if (res)
 		{
-			FILE* newFile = fopen(res->m_path, "rb");
-			if (!newFile)
-			{
-				KT_LOG_ERROR("Failed to re-open file for asset reload: \"%s\"", res->m_path);
-				return;
-			}
-			KT_SCOPE_EXIT(fclose(newFile));
-
-			kt::FileReader reader(newFile);
 			KT_LOG_INFO("Reloading resource: \"%s\"", res->m_path);
-			container.m_reloadFn(reader, reader.OriginalSize(), res->m_ptr);
+			container.m_reloadFn(res->m_path, res->m_ptr);
 		}
 	}
 	else
