@@ -7,7 +7,7 @@ import argparse
 import binascii
 import subprocess
 
-compiled_shader_extensions = ['.vertex', '.pixel', '.compute']
+compiled_shader_extensions = ['.vs', '.ps', '.cs']
 
 do_log_verbose = False
 force_rebuild = False
@@ -88,11 +88,11 @@ def parse_shader_tree(shader_src_dir, shaders_to_rebuild):
         
 def get_shader_profile_arg(shader_path):
     ext = os.path.splitext(shader_path)[1].lower()
-    if ext == '.vertex':
+    if ext == '.vs':
         return '-Tvs_6_0'
-    elif ext == '.pixel':
+    elif ext == '.ps':
         return '-Tps_6_0'
-    elif ext == '.compute':
+    elif ext == '.cs':
         return '-Tcs_6_0'
 
     raise ValueError('Unexpected shader extension {}'.format(ext))

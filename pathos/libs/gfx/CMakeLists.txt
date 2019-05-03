@@ -5,7 +5,12 @@ set(GFX_SOURCES
     "Material.cpp"
     "Resources.h"
     "Resources.cpp"
+    "Model.h"
+    "Model.cpp"
+    "Texture.h"
+    "Texture.cpp"
 )
 
 add_pathos_lib(gfx "${GFX_SOURCES}")
-target_link_libraries(gfx core gpu res)
+target_link_libraries(gfx PUBLIC kt core gpu res PRIVATE cgltf mikktspace stb)
+target_include_directories(gfx PUBLIC ${PATHOS_SHADER_SRC})

@@ -13,4 +13,4 @@ if(WIN32)
 endif()
 
 add_pathos_lib(app "${APP_SOURCES}")
-target_link_libraries(app core input gpu gfx imgui editor)
+target_link_libraries(app kt core input gpu gfx imgui editor)

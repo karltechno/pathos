@@ -54,8 +54,8 @@ void ImGuiHandler::Init(void* _nwh)
 	io.KeyMap[ImGuiKey_Y] = uint32_t(input::Key::KeyY);
 	io.KeyMap[ImGuiKey_Z] = uint32_t(input::Key::KeyZ);
 
-	res::ResourceHandle<gfx::ShaderResource> pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ImGui.pixel.cso");
-	res::ResourceHandle<gfx::ShaderResource> vertexShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ImGui.vertex.cso");
+	res::ResourceHandle<gfx::ShaderResource> pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ImGui.ps.cso");
+	res::ResourceHandle<gfx::ShaderResource> vertexShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ImGui.vs.cso");
 
 	gpu::GraphicsPSODesc psoDesc;
 

@@ -69,11 +69,9 @@ struct ResourceContainer
 
 	char const* m_resDebugName;
 
-	res::LoaderFn m_createFn;
-	res::DestroyFn m_destroyFn;
-	res::ReloadFn m_reloadFn;
+	res::IResourceHandler* m_handler;
 
-	void DestroyAll()
+	void Shutdown()
 	{
 		for (uint32_t i = m_handles.FirstAllocatedIndex();
 			 m_handles.IsIndexInUse(i);
@@ -81,12 +79,12 @@ struct ResourceContainer
 		{
 			InternalResource* res = m_handles.LookupAtIndex(i);
 			KT_ASSERT(res);
-			m_destroyFn(res->m_ptr);
+			m_handler->Destroy(res->m_ptr);
 			m_handles.Free(m_handles.HandleForIndex(i));
 		}
+
+		delete m_handler;
 	}
-
-
 
 	kt::VersionedHandlePool<InternalResource> m_handles;
 };
@@ -110,7 +108,7 @@ void Shutdown()
 {
 	for (ResourceContainer& container : s_ctx.m_resourceContainers)
 	{
-		container.DestroyAll();
+		container.Shutdown();
 	}
 
 	s_ctx.m_resourceContainers.ClearAndFree();
@@ -187,8 +185,11 @@ res::ResourceHandleBase LoadResourceSync(char const* _path, uint32_t _typeTag)
 	}
 
 	void* data = nullptr;
-	if (!container.m_createFn(_path, data))
+	KT_LOG_INFO("Creating resource from file \"%s\" (type: %s)", canonPath.Data(), container.m_resDebugName);
+
+	if (!container.m_handler->CreateFromFile(_path, data))
 	{
+		KT_LOG_ERROR("Failed to create resource: %s", canonPath.Data());
 		return ResourceHandleBase{};
 	}
 
@@ -203,6 +204,52 @@ res::ResourceHandleBase LoadResourceSync(char const* _path, uint32_t _typeTag)
 	return retHandle;
 }
 
+res::ResourceHandleBase CreateEmptyResource(char const* _path, void*& o_mem, uint32_t _typeTag, bool& o_resourceWasAlreadyCreated)
+{
+	KT_ASSERT(_typeTag < s_ctx.m_resourceContainers.Size());
+	ResourceContainer& container = s_ctx.m_resourceContainers[_typeTag];
+
+	kt::FilePath const canonPath = CanonicalizeAssetPath(_path);
+	uint64_t const assetHash = HashAssetPath(canonPath);
+
+	kt::HashMap<uint64_t, LoadedResource>::Iterator it = s_ctx.m_loadedResourcesByAssetHash.Find(assetHash);
+	if (it != s_ctx.m_loadedResourcesByAssetHash.End())
+	{
+		KT_ASSERT(it->m_val.m_typeTag == _typeTag);
+
+		ResourceContainer::InternalResource* foundRes = container.m_handles.Lookup(it->m_val.m_handle);
+
+		if (!foundRes)
+		{
+			s_ctx.m_loadedResourcesByAssetHash.Erase(it);
+		}
+		else
+		{
+			o_resourceWasAlreadyCreated = true;
+			o_mem = foundRes->m_ptr;
+			return it->m_val.m_handle;
+		}
+	}
+
+	o_resourceWasAlreadyCreated = false;
+
+	void* data = nullptr;
+	KT_LOG_INFO("Creating empty resource \"%s\" (type: %s)", canonPath.Data(), container.m_resDebugName);
+	if (!container.m_handler->CreateEmpty(data))
+	{
+		return ResourceHandleBase{};
+	}
+
+	ResourceContainer::InternalResource* internalRes;
+
+	ResourceHandleBase const retHandle = ResourceHandleBase{ container.m_handles.Alloc(internalRes) };
+	internalRes->m_ptr = data;
+	internalRes->SetPath(canonPath.Data());
+	s_ctx.m_loadedResourcesByAssetHash.Insert(assetHash, LoadedResource{ _typeTag, retHandle });
+	o_mem = data;
+	return retHandle;
+}
+
 void* GetData(ResourceHandleBase _handle, uint32_t _typeTag)
 {
 	KT_ASSERT(_typeTag < s_ctx.m_resourceContainers.Size());
@@ -211,13 +258,11 @@ void* GetData(ResourceHandleBase _handle, uint32_t _typeTag)
 }
 
 
-void RegisterResourceWithTypeTag(uint32_t _typeTag, char const* _debugName, kt::Slice<char const*> const& _extensions, LoaderFn&& _loader, DestroyFn&& _deleter, ReloadFn&& _reloader)
+void RegisterResourceWithTypeTag(uint32_t _typeTag, char const* _debugName, kt::Slice<char const*> const& _extensions, IResourceHandler* _handler)
 {
 	KT_ASSERT(s_ctx.m_resourceContainers.Size() == _typeTag);
 	ResourceContainer& container = s_ctx.m_resourceContainers.PushBack();
-	container.m_createFn = _loader;
-	container.m_destroyFn = _deleter;
-	container.m_reloadFn = _reloader;
+	container.m_handler = _handler;
 	container.m_resDebugName = _debugName;
 
 	container.m_handles.Init(kt::GetDefaultAllocator(), 256);
@@ -233,13 +278,13 @@ void Reload(ResourceHandleBase _handle, uint32_t _typeTag)
 {
 	KT_ASSERT(_typeTag < s_ctx.m_resourceContainers.Size());
 	ResourceContainer& container = s_ctx.m_resourceContainers[_typeTag];
-	if (container.m_reloadFn)
+	if (container.m_handler->SupportsReload())
 	{
 		ResourceContainer::InternalResource* res = s_ctx.m_resourceContainers[_typeTag].m_handles.Lookup(_handle);
 		if (res)
 		{
 			KT_LOG_INFO("Reloading resource: \"%s\"", res->m_path);
-			container.m_reloadFn(res->m_path, res->m_ptr);
+			container.m_handler->ReloadFromFile(res->m_path, res->m_ptr);
 		}
 	}
 	else

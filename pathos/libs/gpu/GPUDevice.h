@@ -29,7 +29,7 @@ gpu::TextureHandle BackbufferDepth();
 gpu::Format	BackbufferFormat();
 
 bool GetBufferInfo(gpu::BufferHandle _handle, gpu::BufferDesc& o_desc, char const*& o_name);
-bool GetTextureInfo(gpu::TextureHandle _handle, gpu::BufferDesc& o_desc, char const*& o_name);
+bool GetTextureInfo(gpu::TextureHandle _handle, gpu::TextureDesc& o_desc, char const*& o_name);
 bool GetShaderInfo(gpu::TextureHandle _handle, gpu::ShaderType& o_type, char const*& o_name);
 
 void AddRef(gpu::BufferHandle _handle);

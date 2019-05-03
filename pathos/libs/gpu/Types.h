@@ -60,6 +60,10 @@ struct ShaderBytecode
 enum class Format : uint32_t
 {
 	Unknown,
+
+	R8G8_UNorm,
+	R8G8_SNorm,
+
 	R8G8B8A8_UNorm,
 	R8G8B8A8_UNorm_SRGB,
 	R8G8B8A8_SNorm,

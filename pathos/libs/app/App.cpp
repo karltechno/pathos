@@ -41,12 +41,12 @@ void GraphicsApp::SubsystemPreable(int _argc, char** _argv)
 		}
 	});
 
+	gfx::RegisterResourceLoaders();
+
 	gpu::Init(m_window.nwh);
 	editor::Init();
 	m_imguiHandler.Init(m_window.nwh);
 	core::InitCVars();
-
-	gfx::RegisterResourceLoaders();
 
 	res::Init();
 }

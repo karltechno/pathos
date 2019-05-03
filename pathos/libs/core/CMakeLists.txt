@@ -6,4 +6,4 @@ set(CORE_SOURCES
 )
 
 add_pathos_lib(core "${CORE_SOURCES}")
-target_link_libraries(core imgui)
+target_link_libraries(core kt imgui)

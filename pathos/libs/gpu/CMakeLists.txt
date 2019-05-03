@@ -31,6 +31,7 @@ endif()
 
 add_pathos_lib(gpu "${GPU_SOURCES}")
 
+target_link_libraries(gpu kt)
 if(WIN32)
 	target_link_libraries(gpu d3d12 dxgi dxguid)
 endif()

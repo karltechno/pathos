@@ -6,6 +6,7 @@
 #include <gfx/Resources.h>
 #include <res/Resource.h>
 #include <res/ResourceSystem.h>
+#include <gfx/Model.h>
 
 struct TestbedApp : app::GraphicsApp
 {
@@ -34,5 +35,6 @@ struct TestbedApp : app::GraphicsApp
 
 	res::ResourceHandle<gfx::ShaderResource> m_pixelShader;
 	res::ResourceHandle<gfx::ShaderResource> m_vertexShader;
+	res::ResourceHandle<gfx::Model> m_modelHandle;
 };
 

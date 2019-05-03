@@ -5,6 +5,8 @@
 #define GPU_FMT_ONE(_pathos, _dxgi, _bitsPerPixel)
 #define GPU_FMT_ALL \
 	GPU_FMT_ONE(gpu::Format::Unknown,				DXGI_FORMAT_UNKNOWN,				0) \
+	GPU_FMT_ONE(gpu::Format::R8G8_UNorm,			DXGI_FORMAT_R8G8_UNORM,				16) \
+	GPU_FMT_ONE(gpu::Format::R8G8_SNorm,			DXGI_FORMAT_R8G8_SNORM,				16) \
 	GPU_FMT_ONE(gpu::Format::R8G8B8A8_UNorm,		DXGI_FORMAT_R8G8B8A8_UNORM,			32) \
 	GPU_FMT_ONE(gpu::Format::R8G8B8A8_UNorm_SRGB,	DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,	32) \
 	GPU_FMT_ONE(gpu::Format::R8G8B8A8_SNorm,		DXGI_FORMAT_R8G8B8A8_SNORM,			32) \

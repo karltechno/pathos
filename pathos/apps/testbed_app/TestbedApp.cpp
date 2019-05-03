@@ -4,6 +4,7 @@
 
 #include <core/CVar.h>
 #include <editor/Editor.h>
+#include <gfx/Model.h>
 #include <gpu/GPUDevice.h>
 #include <input/Input.h>
 
@@ -64,8 +65,9 @@ static uint16_t const s_testIndicies[] =
 
 void TestbedApp::Setup()
 {
-	m_pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/TestTri.pixel.cso");
-	m_vertexShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/TestTri.vertex.cso");
+
+	m_pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/TestTri.ps.cso");
+	m_vertexShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/TestTri.vs.cso");
 
 	gpu::GraphicsPSODesc psoDesc;
 	psoDesc.m_depthFormat = gpu::Format::D32_Float;
@@ -99,18 +101,8 @@ void TestbedApp::Setup()
 	constantBufferDesc.m_sizeInBytes = sizeof(DummyCbuffer);
 	m_constantBuffer = gpu::CreateBuffer(constantBufferDesc);
 
-	uint32_t swapchainW, swapchainH;
-	gpu::GetSwapchainDimensions(swapchainW, swapchainH);
+	m_modelHandle = res::LoadResourceSync<gfx::Model>("models/DamagedHelmet/DamagedHelmet.gltf");
 
-	gfx::Camera::ProjectionParams params;
-	params.m_farPlane = 500.0f;
-	params.m_fov = kt::ToRadians(95.0f);
-	params.m_nearPlane = 0.01f;
-	params.m_type = gfx::Camera::ProjType::Perspective;
-	params.m_viewHeight = float(swapchainH);
-	params.m_viewWidth = float(swapchainW);
-
-	m_cam.SetProjection(params);
 }
 
 
@@ -119,17 +111,8 @@ void TestbedApp::Tick(float _dt)
 	uint32_t swapchainW, swapchainH;
 	gpu::GetSwapchainDimensions(swapchainW, swapchainH);
 
-	ImGui::Begin("BLAH");
-	{
-		if (ImGui::Button("reload"))
-		{
-			res::Reload(m_pixelShader);
-		}
-	}
-	ImGui::End();
-
 	gfx::Camera::ProjectionParams params;
-	params.m_farPlane = 500.0f;
+	params.m_farPlane = 10000.0f;
 	params.m_fov = kt::ToRadians(s_camFov);
 	params.m_nearPlane = 0.01f;
 	params.m_type = gfx::Camera::ProjType::Perspective;
@@ -172,6 +155,15 @@ void TestbedApp::Tick(float _dt)
 	gpu::cmd::SetRenderTarget(ctx, 0, backbuffer);
 	gpu::cmd::SetDepthBuffer(ctx, depth);
 	gpu::cmd::DrawIndexedInstanced(ctx, gpu::PrimitiveType::TriangleList, 3, 1, 0, 0, 0);
+	
+	{
+		// draw test model
+		gfx::Model* model = res::GetData(m_modelHandle);
+		gpu::cmd::SetIndexBuffer(ctx, model->m_indexGpuBuf);
+		gpu::cmd::SetVertexBuffer(ctx, 0, model->m_posGpuBuf);
+		gpu::cmd::DrawIndexedInstanced(ctx, gpu::PrimitiveType::TriangleList, model->m_indicies.Size(), 1, 0, 0, 0);
+	}
+
 	gpu::cmd::End(ctx);
 
 }

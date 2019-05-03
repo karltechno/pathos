@@ -8,3 +8,4 @@ set(RES_SOURCES
 )
 
 add_pathos_lib(res "${RES_SOURCES}")
+target_link_libraries(res kt)

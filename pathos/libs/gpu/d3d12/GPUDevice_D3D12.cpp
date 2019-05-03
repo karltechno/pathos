@@ -156,11 +156,8 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, void const* _initialDa
 
 	D3D12_RESOURCE_STATES const creationState = _initialData ? D3D12_RESOURCE_STATE_COPY_DEST : bestInitialState;
 
-	m_state = bestInitialState;
-	if (_initialData)
-	{
-		m_state = D3D12_RESOURCE_STATE_COPY_DEST;
-	}
+	m_state = creationState;
+
 
 	if (!!(_desc.m_flags & BufferFlags::Constant))
 	{
@@ -223,6 +220,7 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, void const* _initialDa
 		}
 		else
 		{
+			m_state = bestInitialState;
 			KT_ASSERT(m_res);
 			CopyInitialResourceData(m_res, _initialData, _desc.m_sizeInBytes, creationState, m_state);
 		}
@@ -577,6 +575,7 @@ bool AllocatedTexture_D3D12::Init(TextureDesc const& _desc, void const* _initial
 
 	if (_initialData)
 	{
+		m_state = bestInitialState;
 		CopyInitialTextureData(*this, _initialData, m_state, bestInitialState);
 	}
 
@@ -760,6 +759,7 @@ ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _a
 		uintptr_t const endAddr = alignedAddr + _size;
 		if (endAddr > page->m_base + page->m_size)
 		{
+			// TODO: A lot of potential wastage here if we do a large alloc
 			++m_numFullPages;
 			continue;
 		}
@@ -774,7 +774,7 @@ ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _a
 		alloc.m_cpuData = (uint8_t*)page->m_mappedPtr + alloc.m_offset;
 		return alloc;
 
-	} while (false);
+	} while (true);
 
 	KT_UNREACHABLE;
 }
@@ -1518,6 +1518,18 @@ bool GetBufferInfo(BufferHandle _handle, BufferDesc& o_desc, char const*& o_name
 		return true;
 	}
 
+	return false;
+}
+
+
+bool GetTextureInfo(TextureHandle _handle, TextureDesc& o_desc, char const*& o_name)
+{
+	if (AllocatedTexture_D3D12* tex = g_device->m_textureHandles.Lookup(_handle))
+	{
+		o_name = tex->m_debugName.Data();
+		o_desc = tex->m_desc;
+		return true;
+	}
 
 	return false;
 }

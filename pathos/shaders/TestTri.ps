@@ -10,5 +10,5 @@ ConstantBuffer<TestData> g_data : register(b0, space0);
 
 float4 main(in VSOut_XU _input) : SV_Target
 {
-    return float4(_input.uv, 1.0, 1.0);    
+    return float4(_input.uv, sin(g_data.time.x) * 0.5 + 0.5, 1.0);    
 }   
