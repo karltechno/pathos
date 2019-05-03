@@ -424,7 +424,7 @@ static void LoadMaterials(Model* _model, cgltf_data* _data, char const* _basePat
 			// TODO: Samplers
 			// TOdo: Transform
 			modelMat.m_diffuseTex = LoadTexture(_basePath, *pbrMetalRough.base_color_texture.texture, TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
-			modelMat.m_metallicRoughnessTex = LoadTexture(_basePath, *pbrMetalRough.base_color_texture.texture, TextureLoadFlags::GenMips);
+			modelMat.m_metallicRoughnessTex = LoadTexture(_basePath, *pbrMetalRough.metallic_roughness_texture.texture, TextureLoadFlags::GenMips);
 			
 		}
 		else
