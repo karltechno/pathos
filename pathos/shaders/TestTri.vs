@@ -3,7 +3,7 @@
 struct TestData
 {
     float4 time;
-    row_major float4x4 mvp;
+    float4x4 mvp;
 };
 
 ConstantBuffer<TestData> g_data : register(b0, space0);

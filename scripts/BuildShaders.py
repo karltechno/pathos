@@ -130,7 +130,7 @@ def main():
         shader_out_path = os.path.abspath(os.path.join(shader_out_dir, os.path.basename(shader))) + '.cso'
         log("\nRebuilding shader: {}".format(shader))
 
-        dxc_args = [dxc_exe_path, get_shader_profile_arg(shader), '-Emain', '-Fo{}'.format(shader_out_path), os.path.abspath(shader)]
+        dxc_args = [dxc_exe_path, '-Zpr', get_shader_profile_arg(shader), '-Emain', '-Fo{}'.format(shader_out_path), os.path.abspath(shader)]
         log('Running DXC: ' + ''.join('{} '.format(v) for v in dxc_args))
         # requires python 3.5
         proc_call = subprocess.run(dxc_args, stderr=subprocess.STDOUT)
