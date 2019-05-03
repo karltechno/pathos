@@ -16,6 +16,7 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <dxgidebug.h>
+#include "d3dx12.h"
 
 #include <string.h>
 
@@ -70,41 +71,17 @@ static void CopyInitialResourceData(ID3D12Resource* _resource, void const* _data
 
 static void CopyInitialTextureData(AllocatedTexture_D3D12& _tex, void const* _data, D3D12_RESOURCE_STATES _beforeState, D3D12_RESOURCE_STATES _afterState)
 {
-
-	// TODO: This doesn't handle subresources currently.
-	// TODO: Always assume initialdata is correct for desc?
+	// TODO: Texture arrays.
+	// TODO: Cubemaps.
+	// TODO: Assert size of input data?
+	// TODO: Handle pitch more robustly?
 
 	UINT64 totalBytes;
-	D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
-	UINT numRows;
-	UINT64 rowSizes;
 	D3D12_RESOURCE_DESC const d3dDesc = _tex.m_res->GetDesc();
-	g_device->m_d3dDev->GetCopyableFootprints(&d3dDesc, 0, 1, 0, &footprint, &numRows, &rowSizes, &totalBytes);
+	uint32_t const numSubresources = d3dDesc.MipLevels;
+	g_device->m_d3dDev->GetCopyableFootprints(&d3dDesc, 0, numSubresources, 0, nullptr, nullptr, nullptr, &totalBytes);
 	KT_ASSERT(totalBytes);
 	ScratchAlloc_D3D12 uploadScratch = g_device->GetFrameResources()->m_uploadAllocator.Alloc(uint32_t(totalBytes), 16);
-	
-	uint8_t* srcPtr = (uint8_t*)_data;
-	uint8_t* destPtr = (uint8_t*)uploadScratch.m_cpuData + footprint.Offset;
-
-	uint32_t const srcPitch = gpu::GetFormatSize(_tex.m_desc.m_format) * _tex.m_desc.m_width;
-	
-	for (uint32_t rowIdx = 0; rowIdx < numRows; ++rowIdx)
-	{
-		memcpy(destPtr, srcPtr, srcPitch);
-		srcPtr += srcPitch;
-		destPtr += footprint.Footprint.RowPitch;
-	}
-
-	D3D12_TEXTURE_COPY_LOCATION destLoc;
-	destLoc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-	destLoc.pResource = _tex.m_res;
-	destLoc.SubresourceIndex = 0;
-
-	D3D12_TEXTURE_COPY_LOCATION srcLoc;
-	srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-	srcLoc.pResource = uploadScratch.m_res;
-	srcLoc.PlacedFootprint = footprint;
-	srcLoc.PlacedFootprint.Offset += uploadScratch.m_offset; // TODO: Is this undefined with alignment? Do we need to pass it into GetCopyableFootprints
 
 	ID3D12CommandAllocator* allocator = g_device->m_commandQueueManager.GraphicsQueue().AcquireAllocator();
 	// TODO: Pool lists
@@ -112,7 +89,27 @@ static void CopyInitialTextureData(AllocatedTexture_D3D12& _tex, void const* _da
 	// TODO: Use direct queue for now, need to work out synchronization and use copy queue.
 	D3D_CHECK(g_device->m_d3dDev->CreateCommandList(1, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&listBase)));
 	ID3D12GraphicsCommandList* list = (ID3D12GraphicsCommandList*)listBase;
-	list->CopyTextureRegion(&destLoc, 0, 0, 0, &srcLoc, nullptr);
+
+	uint32_t const bpp = gpu::GetFormatSize(_tex.m_desc.m_format);
+	D3D12_SUBRESOURCE_DATA* srcData = (D3D12_SUBRESOURCE_DATA*)KT_ALLOCA(sizeof(D3D12_SUBRESOURCE_DATA) * numSubresources);
+	
+	uint32_t mipWidth = d3dDesc.Width;
+	uint32_t mipHeight = d3dDesc.Height;
+
+	uint8_t* pData = (uint8_t*)_data;
+
+	for (uint32_t i = 0; i < numSubresources; ++i)
+	{
+		srcData[i].pData = pData;
+		srcData[i].RowPitch = bpp * mipWidth;
+		srcData[i].SlicePitch = bpp * mipWidth * mipHeight;
+		pData += bpp * mipWidth * mipHeight;
+
+		mipWidth = kt::Max<uint32_t>(1, mipWidth >> 1);
+		mipHeight = kt::Max<uint32_t>(1, mipHeight >> 1);
+	}
+
+	UpdateSubresources<16>(list, _tex.m_res, uploadScratch.m_res, uploadScratch.m_offset, 0, d3dDesc.MipLevels, srcData);
 
 	if (_beforeState != _afterState)
 	{

@@ -132,6 +132,44 @@ bool Texture::LoadFromRGBA8(uint8_t* _texels, uint32_t _width, uint32_t _height,
 			stbir_resize_uint8(m_texels.Data() + mips[i - 1].dataOffs, int(mips[i - 1].x), int(mips[i - 1].y), 0,
 							   m_texels.Data() + mips[i].dataOffs, int(mips[i].x), int(mips[i].y), 0, c_bytesPerPixel);
 		}
+
+		if (!!(_flags & TextureLoadFlags::Normalize))
+		{
+			uint8_t* begin = m_texels.Data() + mips[i].dataOffs;
+			uint8_t* end = m_texels.Data() + mips[i].dataOffs + mips[i].x * mips[i].y * c_bytesPerPixel;
+			while (begin != end)
+			{
+				// Ideally this is done in a higher precision than 8 bit, and before compression - but this is just a sandbox :)
+				uint8_t rgb[3];
+				rgb[0] = begin[0];
+				rgb[1] = begin[1];
+				rgb[2] = begin[2];
+
+				// ignoring alpha
+				kt::Vec3 texel{ float(rgb[0]), float(rgb[1]), float(rgb[2]) };
+				texel *= 1.0f / 255.0f;
+				texel *= 2.0f;
+				texel -= kt::Vec3(1.0f);
+				texel = kt::Clamp(texel, kt::Vec3(-1.0f), kt::Vec3(1.0f));
+				float const len = kt::Length(texel);
+				if (len < 0.001f)
+				{
+					texel = kt::Vec3(0.0f, 0.0f, 0.0f);
+				}
+				else
+				{
+					texel = texel / len;
+				}
+
+				for (uint32_t i = 0; i < 3; ++i)
+				{
+					// [-1,1] -> [0,1] -> [0, 255] -> round
+					begin[i] = uint8_t(kt::Clamp(((texel[i] + 1.0f) * 0.5f * 255.0f + 0.5f), 0.0f, 255.0f));
+				}
+
+				begin += 4;
+			}
+		}
 	}
 
 	CreateGPUBuffer2D(*this, _width, _height, gpuFmt, mipChainLen, _debugName);
