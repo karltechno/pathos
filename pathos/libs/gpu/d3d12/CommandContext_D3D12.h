@@ -40,6 +40,9 @@ enum class DirtyStateFlags : uint32_t
 	RenderTarget	= 0x10,
 	DepthBuffer		= 0x20,
 
+	ViewPort		= 0x40,
+	ScissorRect		= 0x80,
+
 	All = 0xFFFFFFFF
 };
 KT_ENUM_CLASS_FLAG_OPERATORS(DirtyStateFlags);
@@ -93,6 +96,15 @@ struct CommandContext_D3D12
 
 		// TODO: make view handle otherwise this is awkward without base resource for tex/buff.
 		gpu::TextureRef m_srvTex[gpu::c_numShaderSpaces][gpu::c_srvTableSize];
+
+		gpu::Rect m_scissorRect;
+
+		struct
+		{
+			gpu::Rect m_rect;
+			float m_depthMin;
+			float m_depthMax;
+		} m_viewport;
 	} m_state;
 };
 

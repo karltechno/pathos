@@ -144,11 +144,6 @@ void TestbedApp::Tick(float _dt)
 
 	gpu::cmd::SetConstantBuffer(ctx, m_constantBuffer, 0, 0);
 
-	gpu::Rect rect{ float(swapchainW), float(swapchainH) };
-
-	gpu::cmd::SetViewport(ctx, rect, 0.0f, 1.0f);
-	gpu::cmd::SetScissorRect(ctx, rect);
-
 	float const col[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
 	gpu::cmd::ClearRenderTarget(ctx, backbuffer, col);
 	gpu::cmd::ClearDepth(ctx, depth, 1.0f);

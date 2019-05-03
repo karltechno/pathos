@@ -78,6 +78,18 @@ CommandContext_D3D12::CommandContext_D3D12(ContextType _type, Device_D3D12* _dev
 		m_dirtyDescriptors[i] = DirtyDescriptorFlags::All;
 	}
 
+	uint32_t swapchainHeight, swapchainWidth;
+	gpu::GetSwapchainDimensions(swapchainWidth, swapchainHeight);
+	m_state.m_viewport.m_rect = gpu::Rect(float(swapchainWidth), float(swapchainHeight));
+	
+	// TODO: reverse Z
+	m_state.m_viewport.m_depthMin = 0.0f;
+	m_state.m_viewport.m_depthMax = 1.0f;
+
+	m_state.m_scissorRect = m_state.m_viewport.m_rect;
+
+	m_dirtyFlags |= DirtyStateFlags::ViewPort | DirtyStateFlags::ScissorRect;
+
 	ID3D12DescriptorHeap* heap = m_device->m_cbvsrvuavHeap.m_heap;
 	m_cmdList->SetDescriptorHeaps(1, &heap);
 
@@ -275,6 +287,29 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 	{
 		CHECK_QUEUE_FLAGS(this, CommandListFlags_D3D12::Graphics);
 
+		if (!!(m_dirtyFlags & DirtyStateFlags::ViewPort))
+		{
+			D3D12_VIEWPORT vp{};
+			vp.MinDepth = m_state.m_viewport.m_depthMin;
+			vp.MaxDepth = m_state.m_viewport.m_depthMax;
+			vp.TopLeftX = m_state.m_viewport.m_rect.m_topLeft.x;
+			vp.TopLeftY = m_state.m_viewport.m_rect.m_topLeft.y;
+			vp.Height = kt::Abs(m_state.m_viewport.m_rect.m_topLeft.y - m_state.m_viewport.m_rect.m_bottomRight.y);
+			vp.Width = kt::Abs(m_state.m_viewport.m_rect.m_bottomRight.x - m_state.m_viewport.m_rect.m_topLeft.x);
+
+			m_cmdList->RSSetViewports(1, &vp);
+		}
+
+		if (!!(m_dirtyFlags & DirtyStateFlags::ScissorRect))
+		{
+			D3D12_RECT rect;
+			rect.bottom = m_state.m_scissorRect.m_bottomRight.y;
+			rect.right = m_state.m_scissorRect.m_bottomRight.x;
+			rect.top = m_state.m_scissorRect.m_topLeft.y;
+			rect.left = m_state.m_scissorRect.m_topLeft.x;
+			m_cmdList->RSSetScissorRects(1, &rect);
+		}
+
 		if (!!(m_dirtyFlags & DirtyStateFlags::PipelineState))
 		{
 			AllocatedGraphicsPSO_D3D12* pso = m_device->m_psoHandles.Lookup(m_state.m_graphicsPso);
@@ -427,6 +462,7 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 		}
 	}
 
+	// TODO: BROKEN FOR COMPUTE (clear state flags we haven't updated!)
 	m_dirtyFlags = DirtyStateFlags::None;
 }
 
@@ -473,30 +509,29 @@ void SetConstantBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, 
 void SetScissorRect(Context* _ctx, gpu::Rect const& _rect)
 {
 	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
-
-	D3D12_RECT rect;
-	rect.top = _rect.m_topLeft.y;
-	rect.left = _rect.m_topLeft.x;
-	rect.bottom = _rect.m_bottomRight.y;
-	rect.right = _rect.m_bottomRight.x;
-	_ctx->m_cmdList->RSSetScissorRects(1, &rect);
+	
+	if (_rect.m_bottomRight != _ctx->m_state.m_scissorRect.m_bottomRight
+		|| _rect.m_topLeft != _ctx->m_state.m_scissorRect.m_topLeft)
+	{
+		_ctx->m_dirtyFlags |= DirtyStateFlags::ScissorRect;
+		_ctx->m_state.m_scissorRect = _rect;
+	}
 }
 
 void SetViewport(Context* _ctx, gpu::Rect const& _rect, float _minDepth, float _maxDepth)
 {
 	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
 
-	D3D12_VIEWPORT vp;
-	vp.TopLeftX = _rect.m_topLeft.x;
-	vp.TopLeftY = _rect.m_topLeft.y;
-
-	vp.Height = kt::Abs(_rect.m_topLeft.y - _rect.m_bottomRight.y);
-	vp.Width = kt::Abs(_rect.m_bottomRight.x - _rect.m_topLeft.x);
-
-	vp.MinDepth = _minDepth;
-	vp.MaxDepth = _maxDepth;
-
-	_ctx->m_cmdList->RSSetViewports(1, &vp);
+	if (_ctx->m_state.m_viewport.m_depthMax != _maxDepth
+		|| _ctx->m_state.m_viewport.m_depthMin != _minDepth
+		|| _ctx->m_state.m_viewport.m_rect.m_bottomRight != _rect.m_bottomRight
+		|| _ctx->m_state.m_viewport.m_rect.m_topLeft != _rect.m_topLeft)
+	{
+		_ctx->m_dirtyFlags |= DirtyStateFlags::ScissorRect;
+		_ctx->m_state.m_viewport.m_rect = _rect;
+		_ctx->m_state.m_viewport.m_depthMin = _minDepth;
+		_ctx->m_state.m_viewport.m_depthMax = _maxDepth;
+	}
 }
 
 }
