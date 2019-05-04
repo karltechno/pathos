@@ -150,7 +150,7 @@ void SetShaderResource(Context* _ctx, gpu::TextureHandle _handle, uint32_t _idx,
 }
 
 
-void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startVtx, uint32_t _baseVtx, uint32_t _startInstance)
+void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startIndex, uint32_t _baseVertex, uint32_t _startInstance)
 {
 	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
 
@@ -160,7 +160,7 @@ void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _ind
 	
 	//float blend[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 	//_ctx->m_cmdList->OMSetBlendFactor(blend);
-	_ctx->m_cmdList->DrawIndexedInstanced(_indexCount, _instanceCount, _startVtx, _baseVtx, _startInstance);
+	_ctx->m_cmdList->DrawIndexedInstanced(_indexCount, _instanceCount, _startIndex, _baseVertex, _startInstance);
 }
 
 void UpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem, uint32_t _newSize /* = 0xFFFFFFFF */)

@@ -1,4 +1,4 @@
-#include "lib/ShaderOutput.hlsli"
+#include "shaderlib/ShaderOutput.hlsli"
 
 VSOut_XU main(uint vid : SV_VertexID)
 {

@@ -49,50 +49,20 @@ char const* const s_enumStrs[] =
 static core::CVarEnum<MyEnumTest, MyEnumTest::Num> s_enumCvar("app.enumtest", "test", s_enumStrs, MyEnumTest::Hello);
 
 
-static kt::Vec3 const s_testTriVerts[] =
-{
-	{ 0.0f, 1.0f, 100.f },
-	{ 1.0f, -1.0f, 100.f },
-	{ -1.0f, -1.0f, 100.f},
-};
-
-static uint16_t const s_testIndicies[] =
-{
-	0, 1, 2
-};
-
-
-
 void TestbedApp::Setup()
 {
-
-	m_pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/TestTri.ps.cso");
-	m_vertexShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/TestTri.vs.cso");
+	m_pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ObjectShader.ps.cso");
+	m_vertexShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ObjectShader.vs.cso");
 
 	gpu::GraphicsPSODesc psoDesc;
 	psoDesc.m_depthFormat = gpu::Format::D32_Float;
 	psoDesc.m_numRenderTargets = 1;
 	psoDesc.m_renderTargetFormats[0] = gpu::Format::R8G8B8A8_UNorm;
-	psoDesc.m_vertexLayout.Add(gpu::VertexDeclEntry{ gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position, 0, 0 });
+	psoDesc.m_vertexLayout = gfx::Model::FullVertexLayout();
 	psoDesc.m_vs = res::GetData(m_vertexShader)->m_shader;
 	psoDesc.m_ps = res::GetData(m_pixelShader)->m_shader;
 
 	m_pso = gpu::CreateGraphicsPSO(psoDesc);
-
-	gpu::BufferDesc indexBufferDesc;
-	indexBufferDesc.m_flags = gpu::BufferFlags::Index;
-	indexBufferDesc.m_format = gpu::Format::R16_Uint;
-	indexBufferDesc.m_strideInBytes = sizeof(uint16_t);
-	indexBufferDesc.m_sizeInBytes = sizeof(s_testIndicies);
-
-	m_indexBuffer = gpu::CreateBuffer(indexBufferDesc, s_testIndicies);
-
-	gpu::BufferDesc vertexBufferDesc;
-	vertexBufferDesc.m_flags = gpu::BufferFlags::Vertex;
-	vertexBufferDesc.m_format = gpu::Format::Unknown;
-	vertexBufferDesc.m_strideInBytes = sizeof(kt::Vec3);
-	vertexBufferDesc.m_sizeInBytes = sizeof(s_testTriVerts);
-	m_vertexBuffer = gpu::CreateBuffer(vertexBufferDesc, s_testTriVerts);
 
 	m_myCbuffer.myVec4 = kt::Vec4(0.0f);
 
@@ -103,6 +73,19 @@ void TestbedApp::Setup()
 
 	m_modelHandle = res::LoadResourceSync<gfx::Model>("models/DamagedHelmet/DamagedHelmet.gltf");
 
+}
+
+static void DrawModel(gpu::cmd::Context* _cmd, gfx::Model const& _model)
+{
+	gpu::cmd::SetVertexBuffer(_cmd, 0, _model.m_posGpuBuf);
+	gpu::cmd::SetVertexBuffer(_cmd, 1, _model.m_tangentGpuBuf);
+	gpu::cmd::SetVertexBuffer(_cmd, 2, _model.m_uv0GpuBuf);
+	gpu::cmd::SetIndexBuffer(_cmd, _model.m_indexGpuBuf);
+
+	for (gfx::Model::SubMesh const& mesh : _model.m_meshes)
+	{
+		gpu::cmd::DrawIndexedInstanced(_cmd, gpu::PrimitiveType::TriangleList, mesh.m_numIndicies, 1, mesh.m_indexBufferStartOffset, 0, 0);
+	}
 }
 
 
@@ -137,9 +120,6 @@ void TestbedApp::Tick(float _dt)
 	gpu::TextureHandle depth = gpu::BackbufferDepth();
 
 	gpu::cmd::SetGraphicsPSO(ctx, m_pso);
-
-	gpu::cmd::SetIndexBuffer(ctx, m_indexBuffer);
-	gpu::cmd::SetVertexBuffer(ctx, 0, m_vertexBuffer);
 	gpu::cmd::UpdateTransientBuffer(ctx, m_constantBuffer, &m_myCbuffer);
 
 	gpu::cmd::SetConstantBuffer(ctx, m_constantBuffer, 0, 0);
@@ -149,14 +129,15 @@ void TestbedApp::Tick(float _dt)
 	gpu::cmd::ClearDepth(ctx, depth, 1.0f);
 	gpu::cmd::SetRenderTarget(ctx, 0, backbuffer);
 	gpu::cmd::SetDepthBuffer(ctx, depth);
-	gpu::cmd::DrawIndexedInstanced(ctx, gpu::PrimitiveType::TriangleList, 3, 1, 0, 0, 0);
+
 	
 	{
 		// draw test model
-		gfx::Model* model = res::GetData(m_modelHandle);
-		gpu::cmd::SetIndexBuffer(ctx, model->m_indexGpuBuf);
-		gpu::cmd::SetVertexBuffer(ctx, 0, model->m_posGpuBuf);
-		gpu::cmd::DrawIndexedInstanced(ctx, gpu::PrimitiveType::TriangleList, model->m_indicies.Size(), 1, 0, 0, 0);
+		//gfx::Model* model = res::GetData(m_modelHandle);
+		//gpu::cmd::SetIndexBuffer(ctx, model->m_indexGpuBuf);
+		//gpu::cmd::SetVertexBuffer(ctx, 0, model->m_posGpuBuf);
+		//gpu::cmd::DrawIndexedInstanced(ctx, gpu::PrimitiveType::TriangleList, model->m_indicies.Size(), 1, 0, 0, 0);
+		DrawModel(ctx, *res::GetData(m_modelHandle));
 	}
 
 	gpu::cmd::End(ctx);
@@ -165,8 +146,6 @@ void TestbedApp::Tick(float _dt)
 
 void TestbedApp::Shutdown()
 {
-	gpu::Release(m_indexBuffer);
-	gpu::Release(m_vertexBuffer);
 	gpu::Release(m_pso);
 	gpu::Release(m_constantBuffer);
 }

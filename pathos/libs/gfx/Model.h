@@ -34,6 +34,8 @@ struct Model
 
 	static void RegisterResourceLoader();
 
+	static gpu::VertexLayout FullVertexLayout();
+
 	bool LoadFromGLTF(char const* _path);
 
 	struct TangentSpace

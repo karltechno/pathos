@@ -1,4 +1,4 @@
-#include "lib/ShaderOutput.hlsli"
+#include "shaderlib/ShaderOutput.hlsli"
 
 struct ImGui_Vtx
 {

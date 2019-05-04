@@ -41,7 +41,7 @@ void SetConstantBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, 
 void SetShaderResource(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space);
 void SetShaderResource(Context* _ctx, gpu::TextureHandle _handle, uint32_t _idx, uint32_t _space);
 
-void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startVtx, uint32_t _baseVtx, uint32_t _startInstance);
+void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startIndex, uint32_t _baseVertex, uint32_t _startInstance);
 
 void ClearRenderTarget(Context* _ctx, gpu::TextureHandle _handle, float const _color[4]);
 void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth); // TODO: Stencil

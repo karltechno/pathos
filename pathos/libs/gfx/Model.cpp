@@ -50,6 +50,16 @@ void Model::RegisterResourceLoader()
 }
 
 
+gpu::VertexLayout Model::FullVertexLayout()
+{
+	gpu::VertexLayout layout;
+	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position, 0, 0);
+	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Normal, 0, 1);
+	layout.Add(gpu::Format::R32G32B32A32_Float, gpu::VertexSemantic::Tangent, 0, 1);
+	layout.Add(gpu::Format::R32G32_Float, gpu::VertexSemantic::TexCoord, 0, 2);
+	return layout;
+}
+
 uint8_t* AccessorStartOffset(cgltf_accessor* _accessor)
 {
 	return (uint8_t*)_accessor->buffer_view->buffer->data + _accessor->buffer_view->offset + _accessor->offset;
