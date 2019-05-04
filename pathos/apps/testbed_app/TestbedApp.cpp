@@ -82,6 +82,14 @@ static void DrawModel(gpu::cmd::Context* _cmd, gfx::Model const& _model)
 	gpu::cmd::SetVertexBuffer(_cmd, 2, _model.m_uv0GpuBuf);
 	gpu::cmd::SetIndexBuffer(_cmd, _model.m_indexGpuBuf);
 
+	gfx::Material const& mat = _model.m_materials[0];
+
+	gpu::cmd::SetShaderResource(_cmd, res::GetData(mat.m_diffuseTex)->m_gpuTex, 0, 0);
+	gpu::cmd::SetShaderResource(_cmd, res::GetData(mat.m_normalTex)->m_gpuTex, 1, 0);
+	gpu::cmd::SetShaderResource(_cmd, res::GetData(mat.m_metallicRoughnessTex)->m_gpuTex, 2, 0);
+	//gpu::cmd::SetShaderResource(_cmd, res::GetData(mat.m_ao)->m_gpuTex, 3, 0);
+
+
 	for (gfx::Model::SubMesh const& mesh : _model.m_meshes)
 	{
 		gpu::cmd::DrawIndexedInstanced(_cmd, gpu::PrimitiveType::TriangleList, mesh.m_numIndicies, 1, mesh.m_indexBufferStartOffset, 0, 0);

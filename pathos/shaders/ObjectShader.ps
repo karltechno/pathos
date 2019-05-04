@@ -1,4 +1,5 @@
 #include "shaderlib/ShaderOutput.hlsli"
+#include "shaderlib/GlobalSamplers.hlsli"
 
 struct TestData
 {
@@ -6,18 +7,23 @@ struct TestData
     float4x4 mvp;
 };
 
-Texture2D<float4> g_diffuse : register(t0);
-Texture2D<float4> g_normal : register(t1);
-Texture2D<float4> g_metalRoughness : register(t2);
-Texture2D<float4> g_ao : register(t3);
-
+Texture2D<float4> g_diffuse : register(t0, space0);
+Texture2D<float4> g_normal : register(t1, space0);
+Texture2D<float4> g_metalRoughness : register(t2, space0);
+Texture2D<float4> g_ao : register(t3, space0);
 
 ConstantBuffer<TestData> g_data : register(b0, space0);
+
+static const float3 SKY_DIR = normalize(float3(0.1, 0.5, 1.0));
 
 float4 main(in VSOut_ObjectFull _input) : SV_Target
 {
     float3 normal = normalize(_input.normal);
     float3 tangent = normalize(_input.tangentSign.xyz);
     float3x3 tbn = float3x3(tangent, ReconstructBitangent(normal, _input.tangentSign), normal);
-    return float4(tbn[2] * 0.5 + 0.5, 1.0);
+
+    float3 normalTex = normalize(g_normal.Sample(g_samplerLinearWrap, _input.uv).xyz * 2.0 - 1.0);
+    normalTex = mul(normalTex, tbn);
+    float3 diffuse = g_diffuse.Sample(g_samplerLinearWrap, _input.uv).xyz;
+    return float4(max(dot(SKY_DIR, normalTex), 0.5) * diffuse, 1.0);
 }   
