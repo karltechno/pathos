@@ -148,10 +148,36 @@ void SetSRV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t 
 {
 	if (_ctx->m_state.m_srvs[_space][_idx].Handle() != _handle)
 	{
+#if KT_DEBUG
+		if (_handle.IsValid())
+		{
+			AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
+			KT_ASSERT(res);
+			KT_ASSERT(res->m_srv.ptr);
+		}
+#endif
 		_ctx->m_state.m_srvs[_space][_idx].Acquire(_handle);
 		_ctx->SetDescriptorsDirty(_space, DirtyDescriptorFlags::SRV);
 	}
 }
+
+void SetUAV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t _space)
+{
+	if (_ctx->m_state.m_uavs[_space][_idx].Handle() != _handle)
+	{
+#if KT_DEBUG
+		if (_handle.IsValid())
+		{
+			AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
+			KT_ASSERT(res);
+			KT_ASSERT(res->m_uav.ptr);
+		}
+#endif
+		_ctx->m_state.m_uavs[_space][_idx].Acquire(_handle);
+		_ctx->SetDescriptorsDirty(_space, DirtyDescriptorFlags::UAV);
+	}
+}
+
 
 
 void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startIndex, uint32_t _baseVertex, uint32_t _startInstance)
@@ -265,7 +291,7 @@ void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth)
 	_ctx->m_cmdList->ClearDepthStencilView(tex->m_dsv, D3D12_CLEAR_FLAG_DEPTH, _depth, 0, 0, nullptr);
 }
 
-D3D12_GPU_DESCRIPTOR_HANDLE UpdateDescriptorTable(CommandContext_D3D12* _ctx, kt::Slice<D3D12_CPU_DESCRIPTOR_HANDLE> const& _srcHandles)
+D3D12_GPU_DESCRIPTOR_HANDLE AllocAndCopyFromDescriptorRing(CommandContext_D3D12* _ctx, kt::Slice<D3D12_CPU_DESCRIPTOR_HANDLE> const& _srcHandles)
 {
 	UINT const tableSize = _srcHandles.Size();
 	UINT* sourceSizes = (UINT*)KT_ALLOCA(tableSize * sizeof(UINT));
@@ -336,17 +362,24 @@ void CommandContext_D3D12::MarkDirtyIfBound(gpu::ResourceHandle _handle)
 	{
 		m_dirtyFlags |= DirtyStateFlags::IndexBuffer;
 	}
-	
-	for (uint32_t space = 0; space < gpu::c_numShaderSpaces; ++space)
+
+	auto checkTableFn = [this](uint32_t _space, kt::Slice<gpu::ResourceRef> const& _table, gpu::ResourceHandle _handle, DirtyDescriptorFlags _flags)
 	{
-		for (gpu::BufferRef const& buff : m_state.m_cbvs[space])
+		for (gpu::ResourceRef const& ref : _table)
 		{
-			if (buff.Handle() == _handle)
+			if (ref.Handle() == _handle)
 			{
-				SetDescriptorsDirty(space, DirtyDescriptorFlags::CBV);
+				SetDescriptorsDirty(_space, _flags);
 				break;
 			}
 		}
+	};
+	
+	for (uint32_t space = 0; space < gpu::c_numShaderSpaces; ++space)
+	{
+		checkTableFn(space, kt::MakeSlice(m_state.m_cbvs[space]), _handle, DirtyDescriptorFlags::CBV);
+		checkTableFn(space, kt::MakeSlice(m_state.m_srvs[space]), _handle, DirtyDescriptorFlags::SRV);
+		checkTableFn(space, kt::MakeSlice(m_state.m_uavs[space]), _handle, DirtyDescriptorFlags::UAV);
 	}
 }
 
@@ -452,28 +485,66 @@ void CommandContext_D3D12::ApplyGraphicsStateChanges()
 	}
 }
 
+template <D3D12_CPU_DESCRIPTOR_HANDLE(*GetCpuDescriptorFnT)(AllocatedResource_D3D12* _res), uint32_t TableSizeT>
+static D3D12_GPU_DESCRIPTOR_HANDLE CreateDescriptorTableImpl
+(
+	CommandContext_D3D12* _ctx, 
+	gpu::ResourceRef (&_resources)[TableSizeT], 
+	D3D12_GPU_DESCRIPTOR_HANDLE _nullTablePtr,
+	D3D12_CPU_DESCRIPTOR_HANDLE _nullDescriptor
+)
+{
+	bool anyNotNull = false;
+	D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptors[TableSizeT];
+	for (uint32_t i = 0; i < TableSizeT; ++i)
+	{
+		gpu::ResourceRef const& resRef = _resources[i];
+		if (!resRef.IsValid())
+		{
+			cpuDescriptors[i] = _nullDescriptor;
+		}
+		else
+		{
+			anyNotNull = true;
+			AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(resRef);
+			KT_ASSERT(res);
+			CHECK_TRANSIENT_TOUCHED_THIS_FRAME(_ctx, res);
+			D3D12_CPU_DESCRIPTOR_HANDLE const descriptor = GetCpuDescriptorFnT(res);
+			KT_ASSERT(descriptor.ptr);
+			cpuDescriptors[i] = descriptor;
+		}
+	}
+
+	if (anyNotNull)
+	{
+		return AllocAndCopyFromDescriptorRing(_ctx, kt::MakeSlice(cpuDescriptors));
+	}
+	else
+	{
+		return _nullTablePtr;
+	}
+}
+
+static D3D12_CPU_DESCRIPTOR_HANDLE GetCbvFromRes(AllocatedResource_D3D12* _res)
+{
+	return _res->m_cbv;
+}
+
+static D3D12_CPU_DESCRIPTOR_HANDLE GetUavFromRes(AllocatedResource_D3D12* _res)
+{
+	return _res->m_uav;
+}
+
+static D3D12_CPU_DESCRIPTOR_HANDLE GetSrvFromRes(AllocatedResource_D3D12* _res)
+{
+	return _res->m_srv;
+}
+
 void CommandContext_D3D12::ApplyDescriptorStateChanges(uint32_t _spaceIdx, DirtyDescriptorFlags _dirtyFlags, CommandListFlags_D3D12 _dispatchType)
 {
 	if (!!(_dirtyFlags & DirtyDescriptorFlags::CBV))
 	{
-		D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptors[gpu::c_cbvTableSize];
-		for (uint32_t i = 0; i < gpu::c_cbvTableSize; ++i)
-		{
-			gpu::BufferRef const& bufRef = m_state.m_cbvs[_spaceIdx][i];
-			if (!bufRef.IsValid())
-			{
-				cpuDescriptors[i] = m_device->m_nullCbv;
-			}
-			else
-			{
-				AllocatedResource_D3D12* buf = m_device->m_resourceHandles.Lookup(bufRef);
-				CHECK_TRANSIENT_TOUCHED_THIS_FRAME(this, buf);
-				KT_ASSERT(buf);
-				KT_ASSERT(buf->m_cbv.ptr);
-				cpuDescriptors[i] = buf->m_cbv;
-			}
-		}
-		D3D12_GPU_DESCRIPTOR_HANDLE const gpuDest = UpdateDescriptorTable(this, kt::MakeSlice(cpuDescriptors));
+		D3D12_GPU_DESCRIPTOR_HANDLE const gpuDest = CreateDescriptorTableImpl<GetCbvFromRes>(this, m_state.m_cbvs[_spaceIdx], m_device->m_nullCbvTable, m_device->m_nullCbv);
 		// TODO: Hardcoded root offset.
 		if (!!(_dispatchType & CommandListFlags_D3D12::Graphics))
 		{
@@ -487,24 +558,7 @@ void CommandContext_D3D12::ApplyDescriptorStateChanges(uint32_t _spaceIdx, Dirty
 
 	if (!!(_dirtyFlags & DirtyDescriptorFlags::SRV))
 	{
-		D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptors[gpu::c_srvTableSize];
-		for (uint32_t i = 0; i < gpu::c_srvTableSize; ++i)
-		{
-			gpu::ResourceRef const& resRef = m_state.m_srvs[_spaceIdx][i];
-			if (!resRef.IsValid())
-			{
-				cpuDescriptors[i] = m_device->m_nullCbv;
-			}
-			else
-			{
-				AllocatedResource_D3D12* resData = m_device->m_resourceHandles.Lookup(resRef);
-				KT_ASSERT(resData);
-				KT_ASSERT(resData->m_srv.ptr);
-				cpuDescriptors[i] = resData->m_srv;
-			}
-		}
-
-		D3D12_GPU_DESCRIPTOR_HANDLE const gpuDest = UpdateDescriptorTable(this, kt::MakeSlice(cpuDescriptors));
+		D3D12_GPU_DESCRIPTOR_HANDLE const gpuDest = CreateDescriptorTableImpl<GetSrvFromRes>(this, m_state.m_srvs[_spaceIdx], m_device->m_nullSrvTable, m_device->m_nullSrv);
 		// TODO: Hardcoded root offset.
 		if (!!(_dispatchType & CommandListFlags_D3D12::Graphics))
 		{
@@ -515,9 +569,23 @@ void CommandContext_D3D12::ApplyDescriptorStateChanges(uint32_t _spaceIdx, Dirty
 			m_cmdList->SetComputeRootDescriptorTable(1 + 3 * _spaceIdx, gpuDest);
 		}
 	}
+
+	if (!!(_dirtyFlags & DirtyDescriptorFlags::UAV))
+	{
+		D3D12_GPU_DESCRIPTOR_HANDLE const gpuDest = CreateDescriptorTableImpl<GetUavFromRes>(this, m_state.m_uavs[_spaceIdx], m_device->m_nullUavTable, m_device->m_nullUav);
+		// TODO: Hardcoded root offset.
+		if (!!(_dispatchType & CommandListFlags_D3D12::Graphics))
+		{
+			m_cmdList->SetGraphicsRootDescriptorTable(2 + 3 * _spaceIdx, gpuDest);
+		}
+		else
+		{
+			m_cmdList->SetComputeRootDescriptorTable(2 + 3 * _spaceIdx, gpuDest);
+		}
+	}
 }
 
-void SetConstantBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space)
+void SetCBV(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space)
 {
 	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Compute);
 	if (_ctx->m_state.m_cbvs[_space][_idx].Handle() != _handle)

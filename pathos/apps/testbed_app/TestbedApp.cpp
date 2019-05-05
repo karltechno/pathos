@@ -130,7 +130,7 @@ void TestbedApp::Tick(float _dt)
 	gpu::cmd::SetPSO(ctx, m_pso);
 	gpu::cmd::UpdateTransientBuffer(ctx, m_constantBuffer, &m_myCbuffer, sizeof(m_myCbuffer));
 
-	gpu::cmd::SetConstantBuffer(ctx, m_constantBuffer, 0, 0);
+	gpu::cmd::SetCBV(ctx, m_constantBuffer, 0, 0);
 
 	float const col[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
 	gpu::cmd::ClearRenderTarget(ctx, backbuffer, col);

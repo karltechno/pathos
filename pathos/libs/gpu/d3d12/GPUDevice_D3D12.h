@@ -225,6 +225,12 @@ struct Device_D3D12
 	FreeListDescriptorHeap_D3D12 m_stagingHeap;
 
 	D3D12_CPU_DESCRIPTOR_HANDLE m_nullCbv;
+	D3D12_CPU_DESCRIPTOR_HANDLE m_nullSrv;
+	D3D12_CPU_DESCRIPTOR_HANDLE m_nullUav;
+
+	D3D12_GPU_DESCRIPTOR_HANDLE m_nullCbvTable;
+	D3D12_GPU_DESCRIPTOR_HANDLE m_nullSrvTable;
+	D3D12_GPU_DESCRIPTOR_HANDLE m_nullUavTable;
 
 	FrameUploadPagePool_D3D12 m_uploadPagePool;
 
@@ -249,6 +255,9 @@ struct Device_D3D12
 	uint32_t m_frameCounter = 0;
 
 	bool m_withDebugLayer = false;
+
+private:
+	void InitDescriptorHeaps();
 };
 
 }

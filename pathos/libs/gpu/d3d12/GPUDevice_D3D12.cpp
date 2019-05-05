@@ -1015,6 +1015,71 @@ static void CreateRootSigs(ID3D12Device* _dev, ID3D12RootSignature*& o_gfx, ID3D
 	}
 }
 
+void Device_D3D12::InitDescriptorHeaps()
+{
+	// Shared heaps resources
+	{
+		m_rtvHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1024, false, "Main RTV Heap");
+		m_dsvHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 256, false, "Main DSV Heap");
+
+		m_stagingHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 2048, false, "CBV/SRV/UAV Staging Heap");
+	}
+
+	uint32_t constexpr c_totalCbvSrvUavDescriptors = 4096 * 4;
+
+	m_cbvsrvuavHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, c_totalCbvSrvUavDescriptors, true, "CBV/SRV/UAV GPU Heap");
+
+	m_nullCbv = m_stagingHeap.AllocOne();
+	m_nullSrv = m_stagingHeap.AllocOne();
+	m_nullUav = m_stagingHeap.AllocOne();
+
+	// TODO: Anything better than this?
+	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
+	uavDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+	srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = 1;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+	m_d3dDev->CreateConstantBufferView(nullptr, m_nullCbv);
+	m_d3dDev->CreateUnorderedAccessView(nullptr, nullptr, &uavDesc, m_nullUav);
+	m_d3dDev->CreateShaderResourceView(nullptr, &srvDesc, m_nullSrv);
+
+	// Create null tables
+	uint32_t const totalNullDescriptors = gpu::c_uavTableSize + gpu::c_srvTableSize + gpu::c_cbvTableSize;
+	D3D12_CPU_DESCRIPTOR_HANDLE nullTableBeginCpu = m_cbvsrvuavHeap.HandleBeginCPU();
+	D3D12_GPU_DESCRIPTOR_HANDLE nullTableBeginGpu = m_cbvsrvuavHeap.HandleBeginGPU();
+
+	m_nullCbvTable = nullTableBeginGpu;
+	for (uint32_t i = 0; i < gpu::c_cbvTableSize; ++i)
+	{
+		m_d3dDev->CopyDescriptorsSimple(1, nullTableBeginCpu, m_nullCbv, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		nullTableBeginCpu.ptr += m_cbvsrvuavHeap.m_descriptorIncrementSize;
+		nullTableBeginGpu.ptr += m_cbvsrvuavHeap.m_descriptorIncrementSize;
+	}
+
+	m_nullSrvTable = nullTableBeginGpu;
+	for (uint32_t i = 0; i < gpu::c_srvTableSize; ++i)
+	{
+		m_d3dDev->CopyDescriptorsSimple(1, nullTableBeginCpu, m_nullSrv, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		nullTableBeginCpu.ptr += m_cbvsrvuavHeap.m_descriptorIncrementSize;
+		nullTableBeginGpu.ptr += m_cbvsrvuavHeap.m_descriptorIncrementSize;
+	}
+
+	m_nullUavTable = nullTableBeginGpu;
+	for (uint32_t i = 0; i < gpu::c_uavTableSize; ++i)
+	{
+		m_d3dDev->CopyDescriptorsSimple(1, nullTableBeginCpu, m_nullUav, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		nullTableBeginCpu.ptr += m_cbvsrvuavHeap.m_descriptorIncrementSize;
+		nullTableBeginGpu.ptr += m_cbvsrvuavHeap.m_descriptorIncrementSize;
+	}
+
+	m_descriptorcbvsrvuavRingBuffer.Init(&m_cbvsrvuavHeap, totalNullDescriptors, c_totalCbvSrvUavDescriptors - totalNullDescriptors);
+}
+
 void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 {
 	m_resourceHandles.Init(kt::GetDefaultAllocator(), 1024 * 8);
@@ -1083,9 +1148,14 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		}
 	}
 
+	// Todo: capabilities.
+	D3D12_FEATURE_DATA_D3D12_OPTIONS opts;
+	D3D12_FEATURE_DATA_D3D12_OPTIONS1 opts1;
+	D3D_CHECK(m_d3dDev->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &opts, sizeof(opts)));
+	D3D_CHECK(m_d3dDev->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &opts1, sizeof(opts1)));
+
 	m_commandQueueManager.Init(m_d3dDev);
 
-	// Todo: capabilities.
 
 	// Swapchain
 	{
@@ -1110,22 +1180,10 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		D3D_CHECK(dxgiFactory->CreateSwapChainForHwnd(m_commandQueueManager.GraphicsQueue().D3DCommandQueue(), HWND(_nativeWindowHandle), &swapChainDesc, nullptr, nullptr, &m_swapChain));
 	}
 
-	// Shared heaps resources
-	{
-		m_rtvHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1024, false, "Main RTV Heap");
-		m_dsvHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 256, false, "Main DSV Heap");
-
-		m_stagingHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1024, false, "CBV/SRV/UAV Staging Heap");
-	}
-
 	// Frame data
-
 	m_uploadPagePool.Init(m_d3dDev);
 
-	uint32_t constexpr c_totalCbvSrvUavDescriptors = 4096 * 4;
-
-	m_cbvsrvuavHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, c_totalCbvSrvUavDescriptors, true, "CBV/SRV/UAV GPU Heap");
-	m_descriptorcbvsrvuavRingBuffer.Init(&m_cbvsrvuavHeap, 0, c_totalCbvSrvUavDescriptors);
+	InitDescriptorHeaps();
 
 	for (uint32_t i = 0; i < c_maxBufferedFrames; ++i)
 	{
@@ -1139,14 +1197,10 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		m_framesResources[i].m_uploadAllocator.Init(&m_uploadPagePool);
 	}
 
-	//DebugCreateGraphicsPSO();
 	CreateRootSigs(m_d3dDev, m_graphicsRootSig, m_computeRootSig);
 
 	gpu::TextureDesc const depthDesc = gpu::TextureDesc::Desc2D(m_swapChainWidth, m_swapChainHeight, TextureUsageFlags::DepthStencil, Format::D32_Float);
 	m_backbufferDepth.AcquireNoRef(gpu::CreateTexture(depthDesc, nullptr, "Backbuffer Depth"));
-
-	m_nullCbv = m_stagingHeap.AllocOne();
-	m_d3dDev->CreateConstantBufferView(nullptr, m_nullCbv);
 }
 
 Device_D3D12::Device_D3D12()

@@ -37,8 +37,9 @@ void SetIndexBuffer(Context* _ctx, gpu::BufferHandle _handle);
 void SetRenderTarget(Context* _ctx, uint32_t _idx, gpu::TextureHandle _handle);
 void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle);
 
-void SetConstantBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space);
+void SetCBV(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space);
 void SetSRV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t _space);
+void SetUAV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t _space);
 
 void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startIndex, uint32_t _baseVertex, uint32_t _startInstance);
 

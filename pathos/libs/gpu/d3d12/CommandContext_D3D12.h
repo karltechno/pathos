@@ -95,9 +95,9 @@ struct CommandContext_D3D12
 		gpu::TextureRef m_depthBuffer;
 		gpu::TextureRef m_renderTargets[gpu::c_maxRenderTargets];
 	
-		gpu::BufferRef m_cbvs[gpu::c_numShaderSpaces][gpu::c_cbvTableSize];		
-
+		gpu::ResourceRef m_cbvs[gpu::c_numShaderSpaces][gpu::c_cbvTableSize];
 		gpu::ResourceRef m_srvs[gpu::c_numShaderSpaces][gpu::c_srvTableSize];
+		gpu::ResourceRef m_uavs[gpu::c_numShaderSpaces][gpu::c_srvTableSize];
 
 		gpu::Rect m_scissorRect;
 

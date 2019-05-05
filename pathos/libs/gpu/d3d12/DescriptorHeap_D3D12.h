@@ -55,7 +55,7 @@ private:
 
 struct RingBufferDescriptorHeap_D3D12
 {
-	void Init(DescriptorHeap_D3D12* _baseHeap, uint64_t _rangeOffsetInBytes, uint64_t _numDescriptors);
+	void Init(DescriptorHeap_D3D12* _baseHeap, uint64_t _beginOffsetInDescriptors, uint64_t _numDescriptors);
 	bool Alloc(uint32_t _numDescriptors, D3D12_CPU_DESCRIPTOR_HANDLE& o_cpuBase, D3D12_GPU_DESCRIPTOR_HANDLE& o_gpuBase);
 
 	void OnBeginFrame(uint32_t _frameIdx);

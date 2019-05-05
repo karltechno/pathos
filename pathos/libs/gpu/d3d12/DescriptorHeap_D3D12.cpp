@@ -91,9 +91,10 @@ void FreeListDescriptorHeap_D3D12::Free(D3D12_CPU_DESCRIPTOR_HANDLE _ptr)
 }
 
 
-void RingBufferDescriptorHeap_D3D12::Init(DescriptorHeap_D3D12* _baseHeap, uint64_t _rangeOffsetInBytes, uint64_t _numDescriptors)
+void RingBufferDescriptorHeap_D3D12::Init(DescriptorHeap_D3D12* _baseHeap, uint64_t _beginOffsetInDescriptors, uint64_t _numDescriptors)
 {
-	m_ringBuffer.Init(_baseHeap->m_heapStartGPU.ptr + _rangeOffsetInBytes, _numDescriptors * _baseHeap->m_descriptorIncrementSize, (uint8_t*)_baseHeap->m_heapStartCPU.ptr);
+	uint64_t const byteBeginOffset = _beginOffsetInDescriptors * _baseHeap->m_descriptorIncrementSize;
+	m_ringBuffer.Init(_baseHeap->m_heapStartGPU.ptr + byteBeginOffset, _numDescriptors * _baseHeap->m_descriptorIncrementSize, (uint8_t*)_baseHeap->m_heapStartCPU.ptr + byteBeginOffset);
 	m_handleIncrement = _baseHeap->m_descriptorIncrementSize;
 	for (uint64_t& i : m_endOfFrameHeads)
 	{

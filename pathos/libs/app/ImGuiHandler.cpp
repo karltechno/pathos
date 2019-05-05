@@ -277,7 +277,7 @@ void ImGuiHandler::InternalRender()
 	gpu::cmd::SetPSO(ctx, m_pso);
 	gpu::cmd::SetVertexBuffer(ctx, 0, m_vtxBuf);
 	gpu::cmd::SetIndexBuffer(ctx, m_idxBuf);
-	gpu::cmd::SetConstantBuffer(ctx, m_cbuf, 0, 0);
+	gpu::cmd::SetCBV(ctx, m_cbuf, 0, 0);
 
 	uint32_t vtxOffs = 0;
 	uint32_t idxOffs = 0;
