@@ -140,11 +140,11 @@ void SetIndexBuffer(Context* _ctx, gpu::BufferHandle _handle)
 	}
 }
 
-void SetShaderResource(Context* _ctx, gpu::TextureHandle _handle, uint32_t _idx, uint32_t _space)
+void SetSRV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t _space)
 {
-	if (_ctx->m_state.m_srvTex[_space][_idx].Handle() != _handle)
+	if (_ctx->m_state.m_srvs[_space][_idx].Handle() != _handle)
 	{
-		_ctx->m_state.m_srvTex[_space][_idx].Acquire(_handle);
+		_ctx->m_state.m_srvs[_space][_idx].Acquire(_handle);
 		_ctx->m_dirtyDescriptors[_space] |= DirtyDescriptorFlags::SRV;
 	}
 }
@@ -310,7 +310,7 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 
 		if (!!(m_dirtyFlags & DirtyStateFlags::PipelineState))
 		{
-			AllocatedGraphicsPSO_D3D12* pso = m_device->m_psoHandles.Lookup(m_state.m_graphicsPso);
+			AllocatedPSO_D3D12* pso = m_device->m_psoHandles.Lookup(m_state.m_graphicsPso);
 			KT_ASSERT(pso);
 			m_state.m_numRenderTargets = pso->m_psoDesc.m_numRenderTargets;
 			m_cmdList->SetPipelineState(pso->m_pso);
@@ -430,17 +430,17 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 				D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptors[gpu::c_srvTableSize];
 				for (uint32_t i = 0; i < gpu::c_srvTableSize; ++i)
 				{
-					gpu::TextureRef const& texRef = m_state.m_srvTex[spaceIdx][i];
-					if (!texRef.IsValid())
+					gpu::ResourceRef const& resRef = m_state.m_srvs[spaceIdx][i];
+					if (!resRef.IsValid())
 					{
 						cpuDescriptors[i] = m_device->m_nullCbv;
 					}
 					else
 					{
-						AllocatedResource_D3D12* texData = m_device->m_resourceHandles.Lookup(texRef);
-						KT_ASSERT(texData);
-						KT_ASSERT(texData->m_srv.ptr);
-						cpuDescriptors[i] = texData->m_srv;
+						AllocatedResource_D3D12* resData = m_device->m_resourceHandles.Lookup(resRef);
+						KT_ASSERT(resData);
+						KT_ASSERT(resData->m_srv.ptr);
+						cpuDescriptors[i] = resData->m_srv;
 					}
 				}
 

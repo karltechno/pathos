@@ -94,8 +94,7 @@ struct CommandContext_D3D12
 	
 		gpu::BufferRef m_cbvs[gpu::c_numShaderSpaces][gpu::c_cbvTableSize];		
 
-		// TODO: make view handle otherwise this is awkward without base resource for tex/buff.
-		gpu::TextureRef m_srvTex[gpu::c_numShaderSpaces][gpu::c_srvTableSize];
+		gpu::ResourceRef m_srvs[gpu::c_numShaderSpaces][gpu::c_srvTableSize];
 
 		gpu::Rect m_scissorRect;
 
