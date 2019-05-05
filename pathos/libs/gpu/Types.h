@@ -41,12 +41,10 @@ bool operator!=(TaggedHandle<T> const& _lhs, TaggedHandle<T> const& _rhs)
 }
 
 struct ShaderTag;
-struct GraphicsPSOTag;
-struct BufferTag;
-struct TextureTag;
+struct PSOTag;
 struct ResourceTag;
 
-using GraphicsPSOHandle	= TaggedHandle<GraphicsPSOTag>;
+using PSOHandle			= TaggedHandle<PSOTag>;
 using ShaderHandle		= TaggedHandle<ShaderTag>;
 using ResourceHandle	= TaggedHandle<ResourceTag>;
 

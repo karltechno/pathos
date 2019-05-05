@@ -111,18 +111,17 @@ struct AllocatedResource_D3D12 : AllocatedObjectBase_D3D12
 struct AllocatedShader_D3D12;
 
 
-struct AllocatedGraphicsPSO_D3D12 : AllocatedObjectBase_D3D12
+struct AllocatedPSO_D3D12 : AllocatedObjectBase_D3D12
 {
-	void Init(ID3D12Device* _device, gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps, gpu::ShaderHandle _vsHandle, gpu::ShaderHandle _pshandle);
+	void InitAsCompute(gpu::ShaderHandle _handle, gpu::ShaderBytecode const _byteCode);
+	void InitAsGraphics(gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps);
 	void Destroy();
 
-	void CreateD3DPSO(ID3D12Device* _device, gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps);
+	bool IsCompute() const { return m_cs.IsValid(); }
 
 	gpu::GraphicsPSODesc m_psoDesc;
 	
-	// Explicitly hold onto shaders to ensure hot reload always works.
-	gpu::ShaderHandle m_vs;
-	gpu::ShaderHandle m_ps;
+	gpu::ShaderHandle m_cs;
 
 	ID3D12PipelineState* m_pso = nullptr;
 };
@@ -200,7 +199,7 @@ struct Device_D3D12
 		kt::Array<ID3D12DeviceChild*> m_deferredDeletions;
 	};
 
-	using PSOCache = kt::HashMap<uint64_t, GraphicsPSORef, kt::HashMap_KeyOps_IdentityInt<uint64_t>>;
+	using PSOCache = kt::HashMap<uint64_t, PSORef, kt::HashMap_KeyOps_IdentityInt<uint64_t>>;
 
 	FrameResources* GetFrameResources()
 	{
@@ -236,7 +235,7 @@ struct Device_D3D12
 
 	kt::VersionedHandlePool<AllocatedResource_D3D12>	m_resourceHandles;
 	kt::VersionedHandlePool<AllocatedShader_D3D12>		m_shaderHandles;
-	kt::VersionedHandlePool<AllocatedGraphicsPSO_D3D12>	m_psoHandles;
+	kt::VersionedHandlePool<AllocatedPSO_D3D12>	m_psoHandles;
 
 	PSOCache m_psoCache;
 

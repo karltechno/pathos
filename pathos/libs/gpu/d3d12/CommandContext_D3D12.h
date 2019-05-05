@@ -67,6 +67,8 @@ struct CommandContext_D3D12
 	void ApplyStateChanges(CommandListFlags_D3D12 _dispatchType);
 	void MarkDirtyIfBound(gpu::ResourceHandle _handle);
 
+	void SetDescriptorsDirty(uint32_t _space, DirtyDescriptorFlags _flags);
+
 	Device_D3D12* m_device;
 
 	D3D12_COMMAND_LIST_TYPE m_d3dType;
@@ -75,7 +77,8 @@ struct CommandContext_D3D12
 	ID3D12CommandAllocator* m_cmdAllocator;
 
 	DirtyStateFlags m_dirtyFlags = DirtyStateFlags::All;
-	DirtyDescriptorFlags m_dirtyDescriptors[gpu::c_numShaderSpaces];
+	DirtyDescriptorFlags m_dirtyDescriptorsGraphics[gpu::c_numShaderSpaces];
+	DirtyDescriptorFlags m_dirtyDescriptorsCompute[gpu::c_numShaderSpaces];
 
 	ContextType m_ctxType;
 	CommandListFlags_D3D12 m_cmdListFlags;
@@ -86,7 +89,7 @@ struct CommandContext_D3D12
 		gpu::BufferRef m_vertexStreams[gpu::c_maxVertexStreams];
 		gpu::BufferRef m_indexBuffer;
 
-		gpu::GraphicsPSORef m_graphicsPso;
+		gpu::PSORef m_pso;
 		uint32_t m_numRenderTargets = 0;
 
 		gpu::TextureRef m_depthBuffer;
@@ -105,6 +108,10 @@ struct CommandContext_D3D12
 			float m_depthMax;
 		} m_viewport;
 	} m_state;
+
+private:
+	void ApplyGraphicsStateChanges();
+	void ApplyDescriptorStateChanges(uint32_t _spaceIdx, DirtyDescriptorFlags _dirtyFlags, CommandListFlags_D3D12 _dispatchType);
 };
 
 }

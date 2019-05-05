@@ -274,7 +274,7 @@ void ImGuiHandler::InternalRender()
 	viewport.m_bottomRight = kt::Vec2(drawData->DisplaySize.x, drawData->DisplaySize.y);
 	viewport.m_topLeft = kt::Vec2(0.0f);
 	gpu::cmd::SetViewport(ctx, viewport, 0.0f, 1.0f);
-	gpu::cmd::SetGraphicsPSO(ctx, m_pso);
+	gpu::cmd::SetPSO(ctx, m_pso);
 	gpu::cmd::SetVertexBuffer(ctx, 0, m_vtxBuf);
 	gpu::cmd::SetIndexBuffer(ctx, m_idxBuf);
 	gpu::cmd::SetConstantBuffer(ctx, m_cbuf, 0, 0);
@@ -293,7 +293,7 @@ void ImGuiHandler::InternalRender()
 			// TODO: User callback
 			gpu::TextureHandle texHandle;
 			texHandle.m_packed = uint32_t(cmd->TextureId);
-			gpu::cmd::SetShaderResource(ctx, texHandle, 0, 0);
+			gpu::cmd::SetSRV(ctx, texHandle, 0, 0);
 			gpu::Rect rect;
 			rect.m_topLeft = kt::Vec2(cmd->ClipRect.x, cmd->ClipRect.y) - clipOffs;
 			rect.m_bottomRight = kt::Vec2(cmd->ClipRect.z, cmd->ClipRect.w) - clipOffs;

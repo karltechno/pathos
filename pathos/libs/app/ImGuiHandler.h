@@ -36,7 +36,7 @@ private:
 	gpu::BufferRef m_vtxBuf;
 	gpu::BufferRef m_cbuf;
 	gpu::TextureRef m_fontTex;
-	gpu::GraphicsPSORef m_pso;
+	gpu::PSORef m_pso;
 };
 
 }

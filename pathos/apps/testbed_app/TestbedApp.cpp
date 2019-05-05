@@ -84,9 +84,9 @@ static void DrawModel(gpu::cmd::Context* _cmd, gfx::Model const& _model)
 
 	gfx::Material const& mat = _model.m_materials[0];
 
-	gpu::cmd::SetShaderResource(_cmd, res::GetData(mat.m_diffuseTex)->m_gpuTex, 0, 0);
-	gpu::cmd::SetShaderResource(_cmd, res::GetData(mat.m_normalTex)->m_gpuTex, 1, 0);
-	gpu::cmd::SetShaderResource(_cmd, res::GetData(mat.m_metallicRoughnessTex)->m_gpuTex, 2, 0);
+	gpu::cmd::SetSRV(_cmd, res::GetData(mat.m_diffuseTex)->m_gpuTex, 0, 0);
+	gpu::cmd::SetSRV(_cmd, res::GetData(mat.m_normalTex)->m_gpuTex, 1, 0);
+	gpu::cmd::SetSRV(_cmd, res::GetData(mat.m_metallicRoughnessTex)->m_gpuTex, 2, 0);
 	//gpu::cmd::SetShaderResource(_cmd, res::GetData(mat.m_ao)->m_gpuTex, 3, 0);
 
 
@@ -127,7 +127,7 @@ void TestbedApp::Tick(float _dt)
 	gpu::TextureHandle backbuffer = gpu::CurrentBackbuffer();
 	gpu::TextureHandle depth = gpu::BackbufferDepth();
 
-	gpu::cmd::SetGraphicsPSO(ctx, m_pso);
+	gpu::cmd::SetPSO(ctx, m_pso);
 	gpu::cmd::UpdateTransientBuffer(ctx, m_constantBuffer, &m_myCbuffer, sizeof(m_myCbuffer));
 
 	gpu::cmd::SetConstantBuffer(ctx, m_constantBuffer, 0, 0);

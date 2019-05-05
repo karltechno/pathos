@@ -28,7 +28,7 @@ struct TestbedApp : app::GraphicsApp
 	gfx::Camera m_cam;
 	app::CameraController_Free m_camController;
 
-	gpu::GraphicsPSOHandle m_pso;
+	gpu::PSOHandle m_pso;
 	gpu::BufferHandle m_constantBuffer;
 
 	res::ResourceHandle<gfx::ShaderResource> m_pixelShader;

@@ -117,7 +117,7 @@ bool operator!=(HandleRef<T> const& _lhs, HandleRef<T> const& _rhs)
 	return _lhs.Handle() != _rhs.Handle();
 }
 
-using GraphicsPSORef	= HandleRef<GraphicsPSOHandle>;
+using PSORef			= HandleRef<PSOHandle>;
 using ShaderRef			= HandleRef<ShaderHandle>;
 using ResourceRef		= HandleRef<ResourceHandle>;
 using BufferRef			= HandleRef<BufferHandle>;

@@ -29,7 +29,7 @@ void End(Context* _ctx);
 
 ContextType GetContextType(Context* _ctx);
 
-void SetGraphicsPSO(Context* _ctx, gpu::GraphicsPSOHandle _pso);
+void SetPSO(Context* _ctx, gpu::PSOHandle _pso);
 
 void SetVertexBuffer(Context* _ctx, uint32_t _streamIdx, gpu::BufferHandle _handle);
 void SetIndexBuffer(Context* _ctx, gpu::BufferHandle _handle);

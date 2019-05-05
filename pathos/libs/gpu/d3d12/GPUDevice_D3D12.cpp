@@ -363,36 +363,21 @@ struct AllocatedShader_D3D12 : AllocatedObjectBase_D3D12
 	ShaderBytecode m_byteCode;
 	ShaderType m_shaderType;
 	
-	kt::InplaceArray<GraphicsPSOHandle, 4> m_linkedPsos;
+	kt::InplaceArray<PSOHandle, 4> m_linkedPsos;
 };
 
-void AllocatedGraphicsPSO_D3D12::Init
-(
-	ID3D12Device* _device, 
-	gpu::GraphicsPSODesc const& _desc, 
-	gpu::ShaderBytecode const& _vs, 
-	gpu::ShaderBytecode const& _ps, 
-	gpu::ShaderHandle _vsHandle, 
-	gpu::ShaderHandle _pshandle
-)
+static ID3D12PipelineState* CreateD3DComputePSO(ID3D12Device* _device, gpu::ShaderBytecode const& _cs)
 {
-	gpu::AddRef(_vsHandle);
-	gpu::AddRef(_pshandle);
-
-	m_vs = _vsHandle;
-	m_ps = _pshandle;
-	m_psoDesc = _desc;
-
-	CreateD3DPSO(_device, _desc, _vs, _ps);
-
-	// TODO: Debug name
-	AllocatedObjectBase_D3D12::Init(nullptr);
+	D3D12_COMPUTE_PIPELINE_STATE_DESC desc{};
+	desc.CS = D3D12_SHADER_BYTECODE{ _cs.m_data, _cs.m_size };
+	ID3D12PipelineState* state;
+	D3D_CHECK(_device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&state)));
+	return state;
 }
 
-void AllocatedGraphicsPSO_D3D12::CreateD3DPSO(ID3D12Device* _device, gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps)
-{
-	KT_ASSERT(!m_pso);
 
+static ID3D12PipelineState* CreateD3DGraphicsPSO(ID3D12Device* _device, gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps)
+{
 	// Create a new PSO.
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC d3dDesc{};
 
@@ -474,8 +459,39 @@ void AllocatedGraphicsPSO_D3D12::CreateD3DPSO(ID3D12Device* _device, gpu::Graphi
 		inputElements[i].InstanceDataStepRate = 0;
 	}
 
-	D3D_CHECK(_device->CreateGraphicsPipelineState(&d3dDesc, IID_PPV_ARGS(&m_pso)));
+	ID3D12PipelineState* pso;
+	D3D_CHECK(_device->CreateGraphicsPipelineState(&d3dDesc, IID_PPV_ARGS(&pso)));
+	return pso;
 }
+
+void AllocatedPSO_D3D12::InitAsCompute(gpu::ShaderHandle _handle, gpu::ShaderBytecode const _byteCode)
+{
+	KT_ASSERT(!m_pso);
+	m_cs = _handle;
+	m_pso = CreateD3DComputePSO(g_device->m_d3dDev, _byteCode);
+
+	// TODO: Debug name
+	AllocatedObjectBase_D3D12::Init(nullptr);
+}
+
+void AllocatedPSO_D3D12::InitAsGraphics
+(
+	gpu::GraphicsPSODesc const& _desc, 
+	gpu::ShaderBytecode const& _vs, 
+	gpu::ShaderBytecode const& _ps
+)
+{
+	KT_ASSERT(!m_pso);
+	m_psoDesc = _desc;
+	gpu::AddRef(m_psoDesc.m_vs);
+	gpu::AddRef(m_psoDesc.m_ps);
+	
+	m_pso = CreateD3DGraphicsPSO(g_device->m_d3dDev, _desc, _vs, _ps);
+
+	// TODO: Debug name
+	AllocatedObjectBase_D3D12::Init(nullptr);
+}
+
 
 
 bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const* _initialData, char const* _debugName /* = nullptr */)
@@ -617,8 +633,8 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 
 	if (_initialData)
 	{
-		m_state = bestInitialState;
 		CopyInitialTextureData(*this, _initialData, m_state, bestInitialState);
+		m_state = bestInitialState;
 	}
 
 	return true;
@@ -649,7 +665,7 @@ void AllocatedResource_D3D12::InitFromBackbuffer(ID3D12Resource* _res, gpu::Form
 	}
 }
 
-void AllocatedGraphicsPSO_D3D12::Destroy()
+void AllocatedPSO_D3D12::Destroy()
 {
 	if (m_pso)
 	{
@@ -657,17 +673,25 @@ void AllocatedGraphicsPSO_D3D12::Destroy()
 		m_pso = nullptr;
 	}
 
-	if (m_ps.IsValid())
+	if (m_psoDesc.m_ps.IsValid())
 	{
-		gpu::Release(m_ps);
-		m_ps = gpu::ShaderHandle{};
+		gpu::Release(m_psoDesc.m_ps);
+		m_psoDesc.m_ps = gpu::ShaderHandle{};
 	}
 
-	if (m_vs.IsValid())
+	if (m_psoDesc.m_vs.IsValid())
 	{
-		gpu::Release(m_vs);
-		m_vs = gpu::ShaderHandle{};
+		gpu::Release(m_psoDesc.m_vs);
+		m_psoDesc.m_vs = gpu::ShaderHandle{};
 	}
+
+	if (m_cs.IsValid())
+	{
+		gpu::Release(m_cs);
+		m_cs = gpu::ShaderHandle{};
+	}
+
+	m_psoDesc = gpu::GraphicsPSODesc{};
 }
 
 
@@ -873,7 +897,7 @@ static void CreateRootSigs(ID3D12Device* _dev, ID3D12RootSignature*& o_gfx, ID3D
 
 	// Point Wrap
 	{
-		samplers[1].AddressU = samplers[1].AddressV = samplers[1].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+		samplers[1].AddressU = samplers[1].AddressV = samplers[1].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 		samplers[1].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
 		samplers[1].MinLOD = 0.0f;
 		samplers[1].MaxLOD = D3D12_FLOAT32_MAX;
@@ -1225,21 +1249,21 @@ gpu::ShaderHandle CreateShader(ShaderType _type, gpu::ShaderBytecode const& _byt
 	return gpu::ShaderHandle{ handle };
 }
 
-gpu::GraphicsPSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc)
+gpu::PSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc)
 {
 	// Make sure VS and PS are valid.
 	AllocatedShader_D3D12* psShader = g_device->m_shaderHandles.Lookup(_desc.m_ps);
 	if (!psShader || psShader->m_shaderType != ShaderType::Pixel)
 	{
 		KT_ASSERT(!"Invalid pixel shader handle passed to CreateGraphicsPSO.");
-		return gpu::GraphicsPSOHandle{};
+		return gpu::PSOHandle{};
 	}
 
 	AllocatedShader_D3D12* vsShader = g_device->m_shaderHandles.Lookup(_desc.m_vs);
 	if (!vsShader || vsShader->m_shaderType != ShaderType::Vertex)
 	{
 		KT_ASSERT(!"Invalid vertex shader handle passed to CreateGraphicsPSO.");
-		return gpu::GraphicsPSOHandle{};
+		return gpu::PSOHandle{};
 	}
 
 	uint64_t const hash = kt::XXHash_64(&_desc, sizeof(gpu::GraphicsPSODesc));
@@ -1247,23 +1271,47 @@ gpu::GraphicsPSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc)
 
 	if (it != g_device->m_psoCache.End())
 	{
-		gpu::GraphicsPSOHandle const handle = it->m_val;
-		AllocatedGraphicsPSO_D3D12* allocatedPso = g_device->m_psoHandles.Lookup(handle);
+		gpu::PSOHandle const handle = it->m_val;
+		AllocatedPSO_D3D12* allocatedPso = g_device->m_psoHandles.Lookup(handle);
 		KT_ASSERT(allocatedPso);
 		KT_ASSERT(memcmp(&_desc, &allocatedPso->m_psoDesc, sizeof(gpu::GraphicsPSODesc)) == 0);
 		allocatedPso->AddRef();
 		return handle;
 	}
 
-	AllocatedGraphicsPSO_D3D12* psoData;
-	gpu::GraphicsPSOHandle const psoHandle = gpu::GraphicsPSOHandle(g_device->m_psoHandles.Alloc(psoData));
-	psoData->Init(g_device->m_d3dDev, _desc, vsShader->m_byteCode, psShader->m_byteCode, _desc.m_vs, _desc.m_ps);
-	g_device->m_psoCache.Insert(hash, gpu::GraphicsPSORef{ psoHandle });
+	AllocatedPSO_D3D12* psoData;
+	gpu::PSOHandle const psoHandle = gpu::PSOHandle(g_device->m_psoHandles.Alloc(psoData));
+	psoData->InitAsGraphics(_desc, vsShader->m_byteCode, psShader->m_byteCode);
+	g_device->m_psoCache.Insert(hash, gpu::PSORef{ psoHandle });
 
 	psShader->m_linkedPsos.PushBack(psoHandle);
 	vsShader->m_linkedPsos.PushBack(psoHandle);
 
 	return psoHandle;
+}
+
+gpu::PSOHandle CreateComputePSO(gpu::ShaderHandle _shader)
+{
+	AllocatedShader_D3D12* allocatedShader = g_device->m_shaderHandles.Lookup(_shader);
+	KT_ASSERT(allocatedShader);
+	KT_ASSERT(allocatedShader->m_shaderType == gpu::ShaderType::Compute);
+	
+	if (allocatedShader->m_linkedPsos.Size() == 0)
+	{
+		AllocatedPSO_D3D12* psoData;
+		gpu::PSOHandle const newPsoHandle = gpu::PSOHandle{ g_device->m_psoHandles.Alloc(psoData) };
+		KT_ASSERT(newPsoHandle.IsValid());
+		psoData->InitAsCompute(_shader, allocatedShader->m_byteCode);
+		// TODO: should shader hold onto a ref?
+		allocatedShader->m_linkedPsos.PushBack(newPsoHandle);
+		return newPsoHandle;
+	}
+	else
+	{
+		KT_ASSERT(allocatedShader->m_linkedPsos.Size() == 1);
+		gpu::AddRef(allocatedShader->m_linkedPsos[0]);
+		return allocatedShader->m_linkedPsos[0];
+	}
 }
 
 void ReloadShader(ShaderHandle _handle, ShaderBytecode const& _newBytecode)
@@ -1281,30 +1329,55 @@ void ReloadShader(ShaderHandle _handle, ShaderBytecode const& _newBytecode)
 	uint32_t numPsos = 0;
 	KT_UNUSED(numPsos);
 
-	for (kt::Array<gpu::GraphicsPSOHandle>::Iterator it = shader->m_linkedPsos.Begin();
-		 it != shader->m_linkedPsos.End();
-		 /* */)
+	if (shader->m_shaderType == ShaderType::Compute)
 	{
-		AllocatedGraphicsPSO_D3D12* psoData = g_device->m_psoHandles.Lookup(*it);
-		if (!psoData)
+		if (shader->m_linkedPsos.Size() != 0)
 		{
-			it = shader->m_linkedPsos.EraseSwap(it);
-			continue;
+			KT_ASSERT(shader->m_linkedPsos.Size() == 1);
+			AllocatedPSO_D3D12* pso = g_device->m_psoHandles.Lookup(shader->m_linkedPsos[0]);
+			if (!pso)
+			{
+				shader->m_linkedPsos.Clear();
+			}
+			else
+			{
+				if (pso->m_pso)
+				{
+					g_device->GetFrameResources()->m_deferredDeletions.PushBack(pso->m_pso);
+					pso->m_pso = nullptr;
+				}
+				pso->m_pso = CreateD3DComputePSO(g_device->m_d3dDev, shader->m_byteCode);
+			}
 		}
-
-		ShaderBytecode const& vsBytecode = g_device->m_shaderHandles.Lookup(psoData->m_vs)->m_byteCode;
-		ShaderBytecode const& psBytecode = g_device->m_shaderHandles.Lookup(psoData->m_ps)->m_byteCode; 
-
-		if (psoData->m_pso)
-		{
-			g_device->GetFrameResources()->m_deferredDeletions.PushBack(psoData->m_pso);
-			psoData->m_pso = nullptr;
-		}
-
-		psoData->CreateD3DPSO(g_device->m_d3dDev, psoData->m_psoDesc, vsBytecode, psBytecode);
-		++numPsos;
-		++it;
 	}
+	else
+	{
+		for (kt::Array<gpu::PSOHandle>::Iterator it = shader->m_linkedPsos.Begin();
+			 it != shader->m_linkedPsos.End();
+			 /* */)
+		{
+			AllocatedPSO_D3D12* psoData = g_device->m_psoHandles.Lookup(*it);
+			if (!psoData)
+			{
+				it = shader->m_linkedPsos.EraseSwap(it);
+				continue;
+			}
+
+			ShaderBytecode const& vsBytecode = g_device->m_shaderHandles.Lookup(psoData->m_psoDesc.m_vs)->m_byteCode;
+			ShaderBytecode const& psBytecode = g_device->m_shaderHandles.Lookup(psoData->m_psoDesc.m_ps)->m_byteCode;
+
+			if (psoData->m_pso)
+			{
+				g_device->GetFrameResources()->m_deferredDeletions.PushBack(psoData->m_pso);
+				psoData->m_pso = nullptr;
+			}
+
+			psoData->m_pso = CreateD3DGraphicsPSO(g_device->m_d3dDev, psoData->m_psoDesc, vsBytecode, psBytecode);
+			++numPsos;
+			++it;
+		}
+	}
+
 
 	KT_LOG_INFO("Shader \"%s\" reloaded, %u PSO(s) re-compiled.", shader->m_debugName.Data(), numPsos);
 }
@@ -1350,7 +1423,7 @@ void AddRef(gpu::ShaderHandle _handle)
 	AddRefImpl(_handle, g_device->m_shaderHandles);
 }
 
-void AddRef(gpu::GraphicsPSOHandle _handle)
+void AddRef(gpu::PSOHandle _handle)
 {
 	AddRefImpl(_handle, g_device->m_psoHandles);
 }
@@ -1365,7 +1438,7 @@ void Release(gpu::ShaderHandle _handle)
 	ReleaseRefImpl(_handle, g_device->m_shaderHandles);
 }
 
-void Release(gpu::GraphicsPSOHandle _handle)
+void Release(gpu::PSOHandle _handle)
 {
 	ReleaseRefImpl(_handle, g_device->m_psoHandles);
 }
@@ -1524,6 +1597,19 @@ bool GetResourceInfo(gpu::ResourceHandle _handle, gpu::ResourceType& _type, gpu:
 
 	return false;
 }
+
+bool GetShaderInfo(ShaderHandle _handle, ShaderType& o_type, char const*& o_name)
+{
+	if (AllocatedShader_D3D12* shader = g_device->m_shaderHandles.Lookup(_handle))
+	{
+		o_type = shader->m_shaderType;
+		o_name = shader->m_debugName.Data();
+		return true;
+	}
+
+	return false;
+}
+
 
 
 }
