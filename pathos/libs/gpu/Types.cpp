@@ -32,7 +32,7 @@ gpu::TextureDesc TextureDesc::Desc1D(uint32_t _width, TextureUsageFlags _flags, 
 
 	desc.m_width = _width;
 
-	desc.m_type = TextureType::Texture2D;
+	desc.m_type = ResourceType::Texture2D;
 	return desc;
 }
 
@@ -48,7 +48,7 @@ gpu::TextureDesc TextureDesc::Desc2D(uint32_t _width, uint32_t _height, TextureU
 	desc.m_height = _height;
 	desc.m_width = _width;
 	
-	desc.m_type = TextureType::Texture2D;
+	desc.m_type = ResourceType::Texture2D;
 	return desc;
 }
 
@@ -64,7 +64,7 @@ gpu::TextureDesc TextureDesc::Desc3D(uint32_t _width, uint32_t _height, uint32_t
 	desc.m_width = _width;
 	desc.m_depth = _depth;
 
-	desc.m_type = TextureType::Texture2D;
+	desc.m_type = ResourceType::Texture2D;
 	return desc;
 }
 

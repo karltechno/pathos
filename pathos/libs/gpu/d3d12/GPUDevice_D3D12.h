@@ -53,16 +53,33 @@ struct AllocatedObjectBase_D3D12
 	uint32_t m_refs = 0;
 };
 
-struct AllocatedBuffer_D3D12 : AllocatedObjectBase_D3D12
+struct AllocatedResource_D3D12 : AllocatedObjectBase_D3D12
 {
-	bool Init(BufferDesc const& _desc, void const* _initialData, char const* _debugName = nullptr);
+	AllocatedResource_D3D12()
+		: m_bufferDesc{}
+	{}
+
+	bool InitAsBuffer(BufferDesc const& _desc, void const* _initialData, char const* _debugName = nullptr);
+
+	bool InitAsTexture(TextureDesc const& _desc, void const* _initialData, char const* _debugName = nullptr);
+	void InitFromBackbuffer(ID3D12Resource* _res, gpu::Format _format, uint32_t _height, uint32_t _width);
+
 	void Destroy();
 
 	void UpdateViews();
 
 	void UpdateTransientSize(uint32_t _size);
 
-	gpu::BufferDesc m_desc;
+	bool IsBuffer() const;
+	bool IsTexture() const;
+
+	gpu::ResourceType m_type = gpu::ResourceType::Num_ResourceType;
+
+	union
+	{
+		gpu::BufferDesc m_bufferDesc;
+		gpu::TextureDesc m_textureDesc;
+	};
 
 	ID3D12Resource* m_res = nullptr;
 
@@ -77,6 +94,9 @@ struct AllocatedBuffer_D3D12 : AllocatedObjectBase_D3D12
 	D3D12_CPU_DESCRIPTOR_HANDLE m_uav = {};
 	D3D12_CPU_DESCRIPTOR_HANDLE m_cbv = {};
 
+	D3D12_CPU_DESCRIPTOR_HANDLE m_rtv = {};
+	D3D12_CPU_DESCRIPTOR_HANDLE m_dsv = {};
+
 	// Current state.
 	D3D12_RESOURCE_STATES m_state = D3D12_RESOURCE_STATE_COMMON;
 
@@ -84,26 +104,6 @@ struct AllocatedBuffer_D3D12 : AllocatedObjectBase_D3D12
 	void* m_mappedCpuData = nullptr;
 
 	uint32_t m_lastFrameTouched = 0xFFFFFFFF;
-
-	bool m_ownsResource = false;
-};
-
-struct AllocatedTexture_D3D12 : AllocatedObjectBase_D3D12
-{
-	bool Init(TextureDesc const& _desc, void const* _initialData, char const* _debugName = nullptr);
-	void InitFromBackbuffer(ID3D12Resource* _res, gpu::Format _format, uint32_t _height, uint32_t _width);
-	void Destroy();
-
-	gpu::TextureDesc m_desc;
-	ID3D12Resource* m_res = nullptr;
-
-	D3D12_GPU_VIRTUAL_ADDRESS m_gpuAddress = 0;
-
-	D3D12_CPU_DESCRIPTOR_HANDLE m_srv = {};
-	D3D12_CPU_DESCRIPTOR_HANDLE m_rtv = {};
-	D3D12_CPU_DESCRIPTOR_HANDLE m_dsv = {};
-
-	D3D12_RESOURCE_STATES m_state = D3D12_RESOURCE_STATE_COMMON;
 
 	bool m_ownsResource = false;
 };
@@ -168,7 +168,7 @@ struct FrameUploadAllocator_D3D12
 	
 	void ClearOnBeginFrame();
 
-	void Alloc(AllocatedBuffer_D3D12& o_res);
+	void Alloc(AllocatedResource_D3D12& o_res);
 	ScratchAlloc_D3D12 Alloc(uint32_t _size, uint32_t _align);
 
 private:
@@ -234,8 +234,7 @@ struct Device_D3D12
 	DescriptorHeap_D3D12 m_cbvsrvuavHeap;
 	RingBufferDescriptorHeap_D3D12 m_descriptorcbvsrvuavRingBuffer;
 
-	kt::VersionedHandlePool<AllocatedBuffer_D3D12>		m_bufferHandles;
-	kt::VersionedHandlePool<AllocatedTexture_D3D12>		m_textureHandles;
+	kt::VersionedHandlePool<AllocatedResource_D3D12>	m_resourceHandles;
 	kt::VersionedHandlePool<AllocatedShader_D3D12>		m_shaderHandles;
 	kt::VersionedHandlePool<AllocatedGraphicsPSO_D3D12>	m_psoHandles;
 

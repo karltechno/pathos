@@ -28,22 +28,18 @@ gpu::TextureHandle CurrentBackbuffer();
 gpu::TextureHandle BackbufferDepth();
 gpu::Format	BackbufferFormat();
 
-bool GetBufferInfo(gpu::BufferHandle _handle, gpu::BufferDesc& o_desc, char const*& o_name);
-bool GetTextureInfo(gpu::TextureHandle _handle, gpu::TextureDesc& o_desc, char const*& o_name);
+bool GetResourceInfo(gpu::ResourceHandle _handle, gpu::ResourceType& _type, gpu::BufferDesc* o_bufferDesc = nullptr, gpu::TextureDesc* o_textureDesc = nullptr, char const** o_name = nullptr);
 bool GetShaderInfo(gpu::TextureHandle _handle, gpu::ShaderType& o_type, char const*& o_name);
 
-void AddRef(gpu::BufferHandle _handle);
-void AddRef(gpu::TextureHandle _handle);
+void AddRef(gpu::ResourceHandle _handle);
 void AddRef(gpu::ShaderHandle _handle);
 void AddRef(gpu::GraphicsPSOHandle _handle);
 
-void Release(gpu::BufferHandle _handle);
-void Release(gpu::TextureHandle _handle);
+void Release(gpu::ResourceHandle _handle);
 void Release(gpu::ShaderHandle _handle);
 void Release(gpu::GraphicsPSOHandle _handle);
 
 // Debugging:
-void EnumBufferHandles(kt::StaticFunction<void(gpu::BufferHandle), 32> const& _ftor);
-void EnumTextureHandles(kt::StaticFunction<void(gpu::TextureHandle), 32> const& _ftor);
+void EnumResourceHandles(kt::StaticFunction<void(gpu::ResourceHandle), 32> const& _ftor);
 }
 

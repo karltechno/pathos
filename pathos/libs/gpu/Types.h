@@ -44,17 +44,55 @@ struct ShaderTag;
 struct GraphicsPSOTag;
 struct BufferTag;
 struct TextureTag;
+struct ResourceTag;
 
 using GraphicsPSOHandle	= TaggedHandle<GraphicsPSOTag>;
 using ShaderHandle		= TaggedHandle<ShaderTag>;
-using BufferHandle		= TaggedHandle<BufferTag>;
-using TextureHandle		= TaggedHandle<TextureTag>;
+using ResourceHandle	= TaggedHandle<ResourceTag>;
+
+struct BufferHandle : ResourceHandle
+{
+	BufferHandle() = default;
+
+	explicit BufferHandle(ResourceHandle _handle)
+		: ResourceHandle(_handle)
+	{
+	}
+};
+
+struct TextureHandle : ResourceHandle
+{
+	TextureHandle() = default;
+
+	explicit TextureHandle(ResourceHandle _handle)
+		: ResourceHandle(_handle)
+	{
+	}
+};
+
 
 struct ShaderBytecode
 {
 	void* m_data = nullptr;
 	size_t m_size = 0;
 };
+
+enum class ResourceType : uint32_t
+{
+	Buffer,
+
+	Texture1D,
+	Texture2D,
+	Texture3D,
+	TextureCube,
+
+	Num_ResourceType
+};
+
+inline bool IsTexture(ResourceType _type)
+{
+	return _type == ResourceType::Texture1D || _type == ResourceType::Texture2D || _type == ResourceType::Texture3D || _type == ResourceType::TextureCube;
+}
 
 // Texture/Buffer format.
 enum class Format : uint32_t
@@ -84,7 +122,7 @@ enum class Format : uint32_t
 uint32_t GetFormatSize(gpu::Format _fmt);
 char const* GetFormatName(gpu::Format _fmt);
 
-bool IsDepthFormat(Format _fmt);
+bool IsDepthFormat(gpu::Format _fmt);
 
 enum class BufferFlags : uint32_t
 {
@@ -101,15 +139,6 @@ enum class BufferFlags : uint32_t
 };
 
 KT_ENUM_CLASS_FLAG_OPERATORS(BufferFlags);
-
-enum class TextureType : uint32_t
-{
-	Texture1D,
-	Texture2D,
-	Texture3D,
-
-	Num_ResourceType
-};
 
 enum class TextureUsageFlags
 {
@@ -130,7 +159,7 @@ struct TextureDesc
 	static TextureDesc Desc2D(uint32_t _width, uint32_t _height, TextureUsageFlags _flags, Format _fmt);
 	static TextureDesc Desc3D(uint32_t _width, uint32_t _height, uint32_t _depth, TextureUsageFlags _flags, Format _fmt);
 
-	TextureType m_type = TextureType::Num_ResourceType;
+	ResourceType m_type = ResourceType::Num_ResourceType;
 	Format m_format = Format::Num_Format;
 	TextureUsageFlags m_usageFlags = TextureUsageFlags::None;
 

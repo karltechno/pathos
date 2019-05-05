@@ -65,7 +65,7 @@ struct CommandContext_D3D12
 	~CommandContext_D3D12();
 
 	void ApplyStateChanges(CommandListFlags_D3D12 _dispatchType);
-	void MarkDirtyIfBound(gpu::BufferHandle _handle);
+	void MarkDirtyIfBound(gpu::ResourceHandle _handle);
 
 	Device_D3D12* m_device;
 

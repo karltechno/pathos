@@ -70,7 +70,7 @@ static void CopyInitialResourceData(ID3D12Resource* _resource, void const* _data
 	listBase->Release();
 }
 
-static void CopyInitialTextureData(AllocatedTexture_D3D12& _tex, void const* _data, D3D12_RESOURCE_STATES _beforeState, D3D12_RESOURCE_STATES _afterState)
+static void CopyInitialTextureData(AllocatedResource_D3D12& _tex, void const* _data, D3D12_RESOURCE_STATES _beforeState, D3D12_RESOURCE_STATES _afterState)
 {
 	// TODO: Texture arrays.
 	// TODO: Cubemaps.
@@ -91,7 +91,7 @@ static void CopyInitialTextureData(AllocatedTexture_D3D12& _tex, void const* _da
 	D3D_CHECK(g_device->m_d3dDev->CreateCommandList(1, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&listBase)));
 	ID3D12GraphicsCommandList* list = (ID3D12GraphicsCommandList*)listBase;
 
-	uint32_t const bpp = gpu::GetFormatSize(_tex.m_desc.m_format);
+	uint32_t const bpp = gpu::GetFormatSize(_tex.m_textureDesc.m_format);
 	D3D12_SUBRESOURCE_DATA* srcData = (D3D12_SUBRESOURCE_DATA*)KT_ALLOCA(sizeof(D3D12_SUBRESOURCE_DATA) * numSubresources);
 	
 	uint32_t mipWidth = d3dDesc.Width;
@@ -128,34 +128,34 @@ static void CopyInitialTextureData(AllocatedTexture_D3D12& _tex, void const* _da
 	listBase->Release();
 }
 
-bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, void const* _initialData, char const* _debugName)
+bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* _initialData, char const* _debugName)
 {
 	KT_ASSERT(!m_res);
 
-	m_desc = _desc;
+	m_bufferDesc = _desc;
 
 	uint32_t const initialDataSize = _desc.m_sizeInBytes;
 
 	// constant buffers need to be a multiple of 256.
-	if (!!(m_desc.m_flags & gpu::BufferFlags::Constant))
+	if (!!(m_bufferDesc.m_flags & gpu::BufferFlags::Constant))
 	{
-		m_desc.m_sizeInBytes = uint32_t(kt::AlignUp(m_desc.m_sizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
+		m_bufferDesc.m_sizeInBytes = uint32_t(kt::AlignUp(m_bufferDesc.m_sizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
 	}
 
 	D3D12_RESOURCE_STATES bestInitialState = D3D12_RESOURCE_STATE_COMMON;
-	if (!!(m_desc.m_flags & (BufferFlags::Constant | BufferFlags::Vertex)))
+	if (!!(m_bufferDesc.m_flags & (BufferFlags::Constant | BufferFlags::Vertex)))
 	{
 		bestInitialState = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
 	}
-	else if (!!(m_desc.m_flags & BufferFlags::Index))
+	else if (!!(m_bufferDesc.m_flags & BufferFlags::Index))
 	{
 		bestInitialState = D3D12_RESOURCE_STATE_INDEX_BUFFER;
 	}
-	else if (!!(m_desc.m_flags & BufferFlags::ShaderResource))
+	else if (!!(m_bufferDesc.m_flags & BufferFlags::ShaderResource))
 	{
 		bestInitialState = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 	}
-	else if (!!(m_desc.m_flags & BufferFlags::UnorderedAccess))
+	else if (!!(m_bufferDesc.m_flags & BufferFlags::UnorderedAccess))
 	{
 		bestInitialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 	}
@@ -165,17 +165,17 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, void const* _initialDa
 	m_state = creationState;
 
 
-	if (!!(m_desc.m_flags & BufferFlags::Constant))
+	if (!!(m_bufferDesc.m_flags & BufferFlags::Constant))
 	{
 		m_cbv = g_device->m_stagingHeap.AllocOne();
 	}
 
-	if (!!(m_desc.m_flags & BufferFlags::UnorderedAccess))
+	if (!!(m_bufferDesc.m_flags & BufferFlags::UnorderedAccess))
 	{
 		m_uav = g_device->m_stagingHeap.AllocOne();
 	}
 
-	if (!(m_desc.m_flags & BufferFlags::Transient))
+	if (!(m_bufferDesc.m_flags & BufferFlags::Transient))
 	{
 		m_ownsResource = true;
 		// Create a committed buffer if not transient. 
@@ -185,18 +185,18 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, void const* _initialDa
 		desc.Alignment = 0;
 		desc.DepthOrArraySize = 1;
 		desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-		desc.Flags = !!(m_desc.m_flags & BufferFlags::UnorderedAccess) ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE;
+		desc.Flags = !!(m_bufferDesc.m_flags & BufferFlags::UnorderedAccess) ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE;
 		desc.Format = DXGI_FORMAT_UNKNOWN;
 		desc.Height = 1;
 		desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 		desc.MipLevels = 1;
 		desc.SampleDesc.Count = 1;
 		desc.SampleDesc.Quality = 0;
-		desc.Width = m_desc.m_sizeInBytes;
+		desc.Width = m_bufferDesc.m_sizeInBytes;
 
 		if (!SUCCEEDED(g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &desc, creationState, nullptr, IID_PPV_ARGS(&m_res))))
 		{
-			KT_LOG_ERROR("CreateCommittedResource failed to create buffer size %u.", m_desc.m_sizeInBytes);
+			KT_LOG_ERROR("CreateCommittedResource failed to create buffer size %u.", m_bufferDesc.m_sizeInBytes);
 			return false;
 		}
 
@@ -235,7 +235,7 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, void const* _initialDa
 	return true;
 }
 
-void AllocatedBuffer_D3D12::Destroy()
+void AllocatedResource_D3D12::Destroy()
 {
 	if (m_ownsResource && m_res)
 	{
@@ -262,47 +262,72 @@ void AllocatedBuffer_D3D12::Destroy()
 		m_cbv.ptr = 0;
 	}
 
+	if (m_rtv.ptr)
+	{
+		g_device->m_rtvHeap.Free(m_rtv);
+		m_dsv.ptr = 0;
+	}
+
+	if (m_dsv.ptr)
+	{
+		g_device->m_dsvHeap.Free(m_dsv);
+		m_dsv.ptr = 0;
+	}
+
 	m_mappedCpuData = nullptr;
 	m_lastFrameTouched = 0xFFFFFFFF;
+	m_type = ResourceType::Num_ResourceType;
 }
 
 
-void AllocatedBuffer_D3D12::UpdateViews()
+void AllocatedResource_D3D12::UpdateViews()
 {
-	if (!!(m_desc.m_flags & BufferFlags::Constant))
+	if (!!(m_bufferDesc.m_flags & BufferFlags::Constant))
 	{
 		KT_ASSERT(m_cbv.ptr);
 		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc{};
 		cbvDesc.BufferLocation = m_gpuAddress;
-		cbvDesc.SizeInBytes = m_desc.m_sizeInBytes;
+		cbvDesc.SizeInBytes = m_bufferDesc.m_sizeInBytes;
 		g_device->m_d3dDev->CreateConstantBufferView(&cbvDesc, m_cbv);
 	}
 
-	if (!!(m_desc.m_flags & BufferFlags::ShaderResource))
+	if (!!(m_bufferDesc.m_flags & BufferFlags::ShaderResource))
 	{
 		KT_ASSERT(m_srv.ptr);
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-		srvDesc.Format = ToDXGIFormat(m_desc.m_format);
+		srvDesc.Format = ToDXGIFormat(m_bufferDesc.m_format);
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		srvDesc.Buffer.FirstElement = 0;
-		srvDesc.Buffer.NumElements = m_desc.m_strideInBytes / m_desc.m_sizeInBytes;
-		srvDesc.Buffer.StructureByteStride = m_desc.m_strideInBytes;
+		srvDesc.Buffer.NumElements = m_bufferDesc.m_strideInBytes / m_bufferDesc.m_sizeInBytes;
+		srvDesc.Buffer.StructureByteStride = m_bufferDesc.m_strideInBytes;
 		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 		g_device->m_d3dDev->CreateShaderResourceView(m_res, &srvDesc, m_srv);
 	}
 }
 
-void AllocatedBuffer_D3D12::UpdateTransientSize(uint32_t _size)
+void AllocatedResource_D3D12::UpdateTransientSize(uint32_t _size)
 {
-	if (!!(m_desc.m_flags & gpu::BufferFlags::Constant))
+	KT_ASSERT(!!(m_bufferDesc.m_flags & gpu::BufferFlags::Transient));
+	if (!!(m_bufferDesc.m_flags & gpu::BufferFlags::Constant))
 	{
-		m_desc.m_sizeInBytes = uint32_t(kt::AlignUp(_size, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
+		m_bufferDesc.m_sizeInBytes = uint32_t(kt::AlignUp(_size, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
 	}
 	else
 	{
-		m_desc.m_sizeInBytes = _size;
+		m_bufferDesc.m_sizeInBytes = _size;
 	}
+}
+
+bool AllocatedResource_D3D12::IsBuffer() const
+{
+	return m_type == ResourceType::Buffer;
+}
+
+bool AllocatedResource_D3D12::IsTexture() const
+{
+	KT_ASSERT(m_type != ResourceType::Num_ResourceType);
+	return !IsBuffer();
 }
 
 struct AllocatedShader_D3D12 : AllocatedObjectBase_D3D12
@@ -453,11 +478,11 @@ void AllocatedGraphicsPSO_D3D12::CreateD3DPSO(ID3D12Device* _device, gpu::Graphi
 }
 
 
-bool AllocatedTexture_D3D12::Init(TextureDesc const& _desc, void const* _initialData, char const* _debugName /* = nullptr */)
+bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const* _initialData, char const* _debugName /* = nullptr */)
 {
 	KT_ASSERT(!m_res);
-	m_desc = _desc;
-
+	m_textureDesc = _desc;
+	m_type = _desc.m_type;
 	m_ownsResource = true;
 
 	D3D12_RESOURCE_STATES bestInitialState = D3D12_RESOURCE_STATE_COMMON;
@@ -520,20 +545,20 @@ bool AllocatedTexture_D3D12::Init(TextureDesc const& _desc, void const* _initial
 
 	switch (_desc.m_type)
 	{
-		case TextureType::Texture1D:
+		case ResourceType::Texture1D:
 		{
 			d3dDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE1D;
 			d3dDesc.Width = _desc.m_width;
 		} break;
 
-		case TextureType::Texture2D:
+		case ResourceType::Texture2D:
 		{
 			d3dDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 			d3dDesc.Width = _desc.m_width;
 			d3dDesc.Height = _desc.m_height;
 		} break;
 
-		case TextureType::Texture3D:
+		case ResourceType::Texture3D:
 		{
 			d3dDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
 			d3dDesc.Width = _desc.m_width;
@@ -547,7 +572,6 @@ bool AllocatedTexture_D3D12::Init(TextureDesc const& _desc, void const* _initial
 			return false;
 		} break;
 	}
-
 
 	D3D12_CLEAR_VALUE depthClear;
 	D3D12_CLEAR_VALUE* pClearVal = nullptr;
@@ -600,12 +624,14 @@ bool AllocatedTexture_D3D12::Init(TextureDesc const& _desc, void const* _initial
 	return true;
 }
 
-void AllocatedTexture_D3D12::InitFromBackbuffer(ID3D12Resource* _res, gpu::Format _format, uint32_t _height, uint32_t _width)
+void AllocatedResource_D3D12::InitFromBackbuffer(ID3D12Resource* _res, gpu::Format _format, uint32_t _height, uint32_t _width)
 {
+	m_type = ResourceType::Texture2D;
+
 	m_res = _res;
 	m_ownsResource = true;
 	
-	m_desc = TextureDesc::Desc2D(_width, _height, TextureUsageFlags::RenderTarget, _format);
+	m_textureDesc = TextureDesc::Desc2D(_width, _height, TextureUsageFlags::RenderTarget, _format);
 
 	m_rtv = g_device->m_rtvHeap.AllocOne();
 	m_srv = g_device->m_stagingHeap.AllocOne();
@@ -620,34 +646,6 @@ void AllocatedTexture_D3D12::InitFromBackbuffer(ID3D12Resource* _res, gpu::Forma
 	if (m_res)
 	{
 		D3D_SET_DEBUG_NAME(m_res, m_debugName.Data());
-	}
-}
-
-void AllocatedTexture_D3D12::Destroy()
-{
-	if (m_res && m_ownsResource)
-	{
-		g_device->GetFrameResources()->m_deferredDeletions.PushBack(m_res);
-	}
-
-	m_res = nullptr;
-
-	if (m_srv.ptr)
-	{
-		g_device->m_stagingHeap.Free(m_srv);
-		m_srv.ptr = 0;
-	}
-
-	if (m_rtv.ptr)
-	{
-		g_device->m_rtvHeap.Free(m_rtv);
-		m_dsv.ptr = 0;
-	}
-
-	if (m_dsv.ptr)
-	{
-		g_device->m_dsvHeap.Free(m_dsv);
-		m_dsv.ptr = 0;
 	}
 }
 
@@ -797,9 +795,9 @@ ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _a
 	KT_UNREACHABLE;
 }
 
-void FrameUploadAllocator_D3D12::Alloc(AllocatedBuffer_D3D12& o_res)
+void FrameUploadAllocator_D3D12::Alloc(AllocatedResource_D3D12& o_res)
 {
-	ScratchAlloc_D3D12 scratch = Alloc(o_res.m_desc.m_sizeInBytes, RequiredTransientAlignment(o_res.m_desc));
+	ScratchAlloc_D3D12 scratch = Alloc(o_res.m_bufferDesc.m_sizeInBytes, RequiredTransientAlignment(o_res.m_bufferDesc));
 	o_res.m_mappedCpuData = scratch.m_cpuData;
 	o_res.m_res = scratch.m_res;
 	o_res.m_offset = scratch.m_offset;
@@ -995,9 +993,8 @@ static void CreateRootSigs(ID3D12Device* _dev, ID3D12RootSignature*& o_gfx, ID3D
 
 void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 {
-	m_bufferHandles.Init(kt::GetDefaultAllocator(), 1024 * 8);
+	m_resourceHandles.Init(kt::GetDefaultAllocator(), 1024 * 8);
 	m_shaderHandles.Init(kt::GetDefaultAllocator(), 1024);
-	m_textureHandles.Init(kt::GetDefaultAllocator(), 1024 * 4);
 	m_psoHandles.Init(kt::GetDefaultAllocator(), 1024);
 
 	m_withDebugLayer = _useDebugLayer;
@@ -1109,8 +1106,8 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 	for (uint32_t i = 0; i < c_maxBufferedFrames; ++i)
 	{
 		// Create back buffer
-		AllocatedTexture_D3D12* backbufferData;
-		m_backBuffers[i].AcquireNoRef(gpu::TextureHandle(m_textureHandles.Alloc(backbufferData)));
+		AllocatedResource_D3D12* backbufferData;
+		m_backBuffers[i].AcquireNoRef(gpu::TextureHandle{ gpu::ResourceHandle{ m_resourceHandles.Alloc(backbufferData) } });
 		ID3D12Resource* backbufferRes;
 		D3D_CHECK(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&backbufferRes)));
 		backbufferData->InitFromBackbuffer(backbufferRes, Format::R8G8B8A8_UNorm, m_swapChainHeight, m_swapChainWidth);
@@ -1148,10 +1145,8 @@ Device_D3D12::~Device_D3D12()
 
 	m_psoCache.Clear();
 
-
 	KT_ASSERT(m_psoHandles.NumAllocated() == 0);
-	KT_ASSERT(m_textureHandles.NumAllocated() == 0);
-	KT_ASSERT(m_bufferHandles.NumAllocated() == 0);
+	KT_ASSERT(m_resourceHandles.NumAllocated() == 0);
 	KT_ASSERT(m_shaderHandles.NumAllocated() == 0);
 
 	// TODO: state check/clear handles if not unallocated.
@@ -1183,16 +1178,16 @@ Device_D3D12::~Device_D3D12()
 
 gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initialData, char const* _debugName)
 {
-	AllocatedBuffer_D3D12* res;
-	gpu::BufferHandle const handle = gpu::BufferHandle(g_device->m_bufferHandles.Alloc(res));
+	AllocatedResource_D3D12* res;
+	gpu::ResourceHandle const handle = gpu::ResourceHandle{g_device->m_resourceHandles.Alloc(res)};
 	if (!handle.IsValid())
 	{
 		return gpu::BufferHandle{};
 	}
 
-	if (!res->Init(_desc, _initialData, _debugName))
+	if (!res->InitAsBuffer(_desc, _initialData, _debugName))
 	{
-		g_device->m_bufferHandles.Free(handle);
+		g_device->m_resourceHandles.Free(handle);
 		return gpu::BufferHandle{};
 	}
 
@@ -1201,16 +1196,16 @@ gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initia
 
 gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc, void const* _initialData, char const* _debugName)
 {
-	AllocatedTexture_D3D12* res;
-	kt::VersionedHandle const handle = g_device->m_textureHandles.Alloc(res);
+	AllocatedResource_D3D12* res;
+	gpu::ResourceHandle const handle = gpu::ResourceHandle{ g_device->m_resourceHandles.Alloc(res) };
 	if (!handle.IsValid())
 	{
 		return gpu::TextureHandle{};
 	}
 
-	if (!res->Init(_desc, _initialData, _debugName))
+	if (!res->InitAsTexture(_desc, _initialData, _debugName))
 	{
-		g_device->m_bufferHandles.Free(handle);
+		g_device->m_resourceHandles.Free(handle);
 		return gpu::TextureHandle{};
 	}
 
@@ -1345,14 +1340,9 @@ static void ReleaseRefImpl(HandleT _handle, kt::VersionedHandlePool<DataT>& _poo
 	}
 }
 
-void AddRef(gpu::BufferHandle _handle)
+void AddRef(gpu::ResourceHandle _handle)
 {
-	AddRefImpl(_handle, g_device->m_bufferHandles);
-}
-
-void AddRef(gpu::TextureHandle _handle)
-{
-	AddRefImpl(_handle, g_device->m_textureHandles);
+	AddRefImpl(_handle, g_device->m_resourceHandles);
 }
 
 void AddRef(gpu::ShaderHandle _handle)
@@ -1365,14 +1355,9 @@ void AddRef(gpu::GraphicsPSOHandle _handle)
 	AddRefImpl(_handle, g_device->m_psoHandles);
 }
 
-void Release(gpu::BufferHandle _handle)
+void Release(gpu::ResourceHandle _handle)
 {
-	ReleaseRefImpl(_handle, g_device->m_bufferHandles);
-}
-
-void Release(gpu::TextureHandle _handle)
-{
-	ReleaseRefImpl(_handle, g_device->m_textureHandles);
+	ReleaseRefImpl(_handle, g_device->m_resourceHandles);
 }
 
 void Release(gpu::ShaderHandle _handle)
@@ -1418,7 +1403,7 @@ void Device_D3D12::BeginFrame()
 	m_descriptorcbvsrvuavRingBuffer.OnBeginFrame(m_cpuFrameIdx);
 
 
-	AllocatedTexture_D3D12* backBuffer = m_textureHandles.Lookup(m_backBuffers[m_cpuFrameIdx]);
+	AllocatedResource_D3D12* backBuffer = m_resourceHandles.Lookup(m_backBuffers[m_cpuFrameIdx]);
 
 	ID3D12CommandAllocator* allocator = m_commandQueueManager.GraphicsQueue().AcquireAllocator();
 	ID3D12CommandList* list;
@@ -1443,7 +1428,7 @@ void Device_D3D12::BeginFrame()
 
 void Device_D3D12::EndFrame()
 {
-	AllocatedTexture_D3D12* backBuffer = m_textureHandles.Lookup(m_backBuffers[m_cpuFrameIdx]);
+	AllocatedResource_D3D12* backBuffer = m_resourceHandles.Lookup(m_backBuffers[m_cpuFrameIdx]);
 
 	ID3D12CommandAllocator* allocator = m_commandQueueManager.GraphicsQueue().AcquireAllocator();
 	ID3D12CommandList* list;
@@ -1482,7 +1467,7 @@ void GetSwapchainDimensions(uint32_t& o_width, uint32_t& o_height)
 
 gpu::Format BackbufferFormat()
 {
-	return g_device->m_textureHandles.Lookup(g_device->m_backBuffers[0])->m_desc.m_format;
+	return g_device->m_resourceHandles.Lookup(g_device->m_backBuffers[0])->m_textureDesc.m_format;
 }
 
 
@@ -1501,57 +1486,44 @@ void Device_D3D12::FrameResources::ClearOnBeginFrame()
 }
 
 
-void EnumBufferHandles(kt::StaticFunction<void(gpu::BufferHandle), 32> const& _ftor)
+void EnumResourceHandles(kt::StaticFunction<void(gpu::ResourceHandle), 32> const& _ftor)
 {
-	kt::VersionedHandlePool<AllocatedBuffer_D3D12>& handlePool = g_device->m_bufferHandles;
+	kt::VersionedHandlePool<AllocatedResource_D3D12>& handlePool = g_device->m_resourceHandles;
 
 	for (uint32_t i = handlePool.FirstAllocatedIndex(); 
 		 handlePool.IsIndexInUse(i); 
 		 i = handlePool.NextAllocatedIndex(i))
 	{
-		_ftor(gpu::BufferHandle{ handlePool.HandleForIndex(i) });
+		_ftor(gpu::ResourceHandle{ handlePool.HandleForIndex(i) });
 	}
 }
 
-
-void EnumTextureHandles(kt::StaticFunction<void(gpu::TextureHandle), 32> const& _ftor)
+bool GetResourceInfo(gpu::ResourceHandle _handle, gpu::ResourceType& _type, gpu::BufferDesc* o_bufferDesc, gpu::TextureDesc* o_textureDesc, char const** o_name)
 {
-	kt::VersionedHandlePool<AllocatedTexture_D3D12>& handlePool = g_device->m_textureHandles;
-
-	for (uint32_t i = handlePool.FirstAllocatedIndex();
-		 handlePool.IsIndexInUse(i);
-		 i = handlePool.NextAllocatedIndex(i))
+	if (AllocatedResource_D3D12* res = g_device->m_resourceHandles.Lookup(_handle))
 	{
-		_ftor(gpu::TextureHandle{ handlePool.HandleForIndex(i) });
-	}
-}
-
-
-bool GetBufferInfo(BufferHandle _handle, BufferDesc& o_desc, char const*& o_name)
-{
-	if (AllocatedBuffer_D3D12* buf = g_device->m_bufferHandles.Lookup(_handle))
-	{
-		o_name = buf->m_debugName.Data();
-		o_desc = buf->m_desc;
+		if (o_name)
+		{
+			*o_name = res->m_debugName.Data();
+		}
+		
+		_type = res->m_type;
+		if (res->IsTexture())
+		{
+			if (o_textureDesc)
+			{
+				*o_textureDesc = res->m_textureDesc;
+			}
+		}
+		else if (o_bufferDesc)
+		{
+			*o_bufferDesc = res->m_bufferDesc;
+		}
 		return true;
 	}
 
 	return false;
 }
-
-
-bool GetTextureInfo(TextureHandle _handle, TextureDesc& o_desc, char const*& o_name)
-{
-	if (AllocatedTexture_D3D12* tex = g_device->m_textureHandles.Lookup(_handle))
-	{
-		o_name = tex->m_debugName.Data();
-		o_desc = tex->m_desc;
-		return true;
-	}
-
-	return false;
-}
-
 
 
 }

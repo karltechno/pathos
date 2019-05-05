@@ -15,7 +15,7 @@
 
 #define CHECK_TRANSIENT_TOUCHED_THIS_FRAME(_ctx, _allocatedBuffer) \
 	KT_MACRO_BLOCK_BEGIN \
-		KT_ASSERT(!(_allocatedBuffer->m_desc.m_flags & BufferFlags::Transient) || _allocatedBuffer->m_lastFrameTouched == _ctx->m_device->m_frameCounter); \
+		KT_ASSERT(!(_allocatedBuffer->m_bufferDesc.m_flags & BufferFlags::Transient) || _allocatedBuffer->m_lastFrameTouched == _ctx->m_device->m_frameCounter); \
 	KT_MACRO_BLOCK_END
 
 namespace gpu
@@ -171,9 +171,9 @@ kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _
 {
 	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Copy);
 
-	KT_ASSERT(_ctx->m_device->m_bufferHandles.IsValid(_handle));
-	AllocatedBuffer_D3D12* res = _ctx->m_device->m_bufferHandles.Lookup(_handle);
-	KT_ASSERT(!!(res->m_desc.m_flags & BufferFlags::Transient));
+	KT_ASSERT(_ctx->m_device->m_resourceHandles.IsValid(_handle));
+	AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
+	KT_ASSERT(!!(res->m_bufferDesc.m_flags & BufferFlags::Transient));
 
 	res->UpdateTransientSize(_size);
 
@@ -183,7 +183,7 @@ kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _
 	res->m_lastFrameTouched = _ctx->m_device->m_frameCounter;
 	res->UpdateViews();
 	_ctx->MarkDirtyIfBound(_handle);
-	return kt::MakeSlice((uint8_t*)res->m_mappedCpuData, res->m_desc.m_sizeInBytes);
+	return kt::MakeSlice((uint8_t*)res->m_mappedCpuData, res->m_bufferDesc.m_sizeInBytes);
 }
 
 void EndUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle)
@@ -204,9 +204,10 @@ void SetGraphicsPSO(Context* _ctx, gpu::GraphicsPSOHandle _pso)
 
 void ClearRenderTarget(Context* _ctx, gpu::TextureHandle _handle, float const _color[4])
 {
-	AllocatedTexture_D3D12* tex = _ctx->m_device->m_textureHandles.Lookup(_handle);
+	AllocatedResource_D3D12* tex = _ctx->m_device->m_resourceHandles.Lookup(_handle);
 	// TODO: Flush barriers for render target
 	KT_ASSERT(tex);
+	KT_ASSERT(tex->IsTexture());
 	KT_ASSERT(tex->m_rtv.ptr);
 	KT_ASSERT(tex->m_state == D3D12_RESOURCE_STATE_RENDER_TARGET);
 	_ctx->m_cmdList->ClearRenderTargetView(tex->m_rtv, _color, 0, nullptr);
@@ -219,8 +220,9 @@ void SetRenderTarget(Context* _ctx, uint32_t _idx, gpu::TextureHandle _handle)
 #if KT_DEBUG
 		if (_handle.IsValid())
 		{
-			AllocatedTexture_D3D12* tex = _ctx->m_device->m_textureHandles.Lookup(_handle);
+			AllocatedResource_D3D12* tex = _ctx->m_device->m_resourceHandles.Lookup(_handle);
 			KT_ASSERT(tex);
+			KT_ASSERT(tex->IsTexture());
 			KT_ASSERT(tex->m_rtv.ptr);
 		}
 #endif
@@ -237,8 +239,9 @@ void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle)
 #if KT_DEBUG
 		if (_handle.IsValid())
 		{
-			AllocatedTexture_D3D12* tex = _ctx->m_device->m_textureHandles.Lookup(_handle);
+			AllocatedResource_D3D12* tex = _ctx->m_device->m_resourceHandles.Lookup(_handle);
 			KT_ASSERT(tex);
+			KT_ASSERT(tex->IsTexture());
 			KT_ASSERT(tex->m_dsv.ptr);
 		}
 #endif
@@ -250,10 +253,11 @@ void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle)
 
 void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth)
 {
-	AllocatedTexture_D3D12* tex = _ctx->m_device->m_textureHandles.Lookup(_handle);
+	AllocatedResource_D3D12* tex = _ctx->m_device->m_resourceHandles.Lookup(_handle);
 	// TODO: Flush barriers for depth target?
 	KT_ASSERT(tex);
-	KT_ASSERT(!!(tex->m_desc.m_usageFlags & TextureUsageFlags::DepthStencil));
+	KT_ASSERT(tex->IsTexture());
+	KT_ASSERT(!!(tex->m_textureDesc.m_usageFlags & TextureUsageFlags::DepthStencil));
 	KT_ASSERT(tex->m_dsv.ptr);
 	_ctx->m_cmdList->ClearDepthStencilView(tex->m_dsv, D3D12_CLEAR_FLAG_DEPTH, _depth, 0, 0, nullptr);
 }
@@ -317,13 +321,13 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 			D3D12_INDEX_BUFFER_VIEW idxView = {};
 			if (m_state.m_indexBuffer.IsValid())
 			{
-				AllocatedBuffer_D3D12* idxBuff = m_device->m_bufferHandles.Lookup(m_state.m_indexBuffer);
+				AllocatedResource_D3D12* idxBuff = m_device->m_resourceHandles.Lookup(m_state.m_indexBuffer);
 				KT_ASSERT(idxBuff);
 				CHECK_TRANSIENT_TOUCHED_THIS_FRAME(this, idxBuff);
 
 				idxView.BufferLocation = idxBuff->m_gpuAddress;
-				idxView.Format = ToDXGIFormat(idxBuff->m_desc.m_format);
-				idxView.SizeInBytes = idxBuff->m_desc.m_sizeInBytes;
+				idxView.Format = ToDXGIFormat(idxBuff->m_bufferDesc.m_format);
+				idxView.SizeInBytes = idxBuff->m_bufferDesc.m_sizeInBytes;
 				m_cmdList->IASetIndexBuffer(&idxView);
 			}
 			else
@@ -342,14 +346,14 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 				{
 					maxCount = i + 1;
 
-					AllocatedBuffer_D3D12* bufferRes = m_device->m_bufferHandles.Lookup(m_state.m_vertexStreams[i]);
+					AllocatedResource_D3D12* bufferRes = m_device->m_resourceHandles.Lookup(m_state.m_vertexStreams[i]);
 					KT_ASSERT(bufferRes);
-					KT_ASSERT(!!(bufferRes->m_desc.m_flags & BufferFlags::Vertex));
+					KT_ASSERT(!!(bufferRes->m_bufferDesc.m_flags & BufferFlags::Vertex));
 					CHECK_TRANSIENT_TOUCHED_THIS_FRAME(this, bufferRes);
 
 					bufferViews[i].BufferLocation = bufferRes->m_gpuAddress;
-					bufferViews[i].SizeInBytes = bufferRes->m_desc.m_sizeInBytes;
-					bufferViews[i].StrideInBytes = bufferRes->m_desc.m_strideInBytes;
+					bufferViews[i].SizeInBytes = bufferRes->m_bufferDesc.m_sizeInBytes;
+					bufferViews[i].StrideInBytes = bufferRes->m_bufferDesc.m_strideInBytes;
 				}
 			}
 			m_cmdList->IASetVertexBuffers(0, maxCount, bufferViews);
@@ -361,7 +365,7 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[gpu::c_maxRenderTargets] = {};
 			if (m_state.m_depthBuffer.IsValid())
 			{
-				AllocatedTexture_D3D12* tex = m_device->m_textureHandles.Lookup(m_state.m_depthBuffer);
+				AllocatedResource_D3D12* tex = m_device->m_resourceHandles.Lookup(m_state.m_depthBuffer);
 				KT_ASSERT(tex);
 				KT_ASSERT(tex->m_dsv.ptr);
 				dsv = tex->m_dsv;
@@ -371,7 +375,7 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 			for (uint32_t i = 0; i < numRenderTargets; ++i)
 			{
 				KT_ASSERT(m_state.m_renderTargets[i].IsValid());
-				AllocatedTexture_D3D12* tex = m_device->m_textureHandles.Lookup(m_state.m_renderTargets[i]);
+				AllocatedResource_D3D12* tex = m_device->m_resourceHandles.Lookup(m_state.m_renderTargets[i]);
 				KT_ASSERT(tex);
 				KT_ASSERT(tex->m_rtv.ptr);
 				rtvs[i] = tex->m_rtv;
@@ -402,7 +406,7 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 					}
 					else
 					{
-						AllocatedBuffer_D3D12* buf = m_device->m_bufferHandles.Lookup(bufRef);
+						AllocatedResource_D3D12* buf = m_device->m_resourceHandles.Lookup(bufRef);
 						CHECK_TRANSIENT_TOUCHED_THIS_FRAME(this, buf);
 						KT_ASSERT(buf);
 						KT_ASSERT(buf->m_cbv.ptr);
@@ -433,7 +437,7 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 					}
 					else
 					{
-						AllocatedTexture_D3D12* texData = m_device->m_textureHandles.Lookup(texRef);
+						AllocatedResource_D3D12* texData = m_device->m_resourceHandles.Lookup(texRef);
 						KT_ASSERT(texData);
 						KT_ASSERT(texData->m_srv.ptr);
 						cpuDescriptors[i] = texData->m_srv;
@@ -461,7 +465,7 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 }
 
 
-void CommandContext_D3D12::MarkDirtyIfBound(gpu::BufferHandle _handle)
+void CommandContext_D3D12::MarkDirtyIfBound(gpu::ResourceHandle _handle)
 {
 	for (gpu::BufferRef const& buff : m_state.m_vertexStreams)
 	{

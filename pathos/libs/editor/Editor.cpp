@@ -37,17 +37,23 @@ static void DrawBufferTab()
 
 	ImGui::BeginChild("Buffer List");
 
-	gpu::EnumBufferHandles([](gpu::BufferHandle _handle)
+	gpu::EnumResourceHandles([](gpu::ResourceHandle _handle)
 	{
+		gpu::ResourceType type;
 		gpu::BufferDesc desc;
 		char const* bufferName;
-		gpu::GetBufferInfo(_handle, desc, bufferName);
+		gpu::GetResourceInfo(_handle, type, &desc, nullptr, &bufferName);
+
+		if (gpu::IsTexture(type))
+		{
+			return;
+		}
 
 		bool selected = _handle == s_ctx.m_selectedBuffer;
 		ImGui::PushID(int(_handle.m_packed));
 		if (ImGui::Selectable(bufferName, selected))
 		{
-			s_ctx.m_selectedBuffer = _handle;
+			s_ctx.m_selectedBuffer = gpu::BufferHandle{ _handle };
 		}
 
 		ImGui::PopID();
@@ -57,9 +63,11 @@ static void DrawBufferTab()
 
 	ImGui::NextColumn();
 
+	gpu::ResourceType type;
 	gpu::BufferDesc desc;
 	char const* bufferName;
-	if (!gpu::GetBufferInfo(s_ctx.m_selectedBuffer, desc, bufferName))
+
+	if (!gpu::GetResourceInfo(s_ctx.m_selectedBuffer, type, &desc, nullptr, &bufferName))
 	{
 		ImGui::Text("No selected buffer.");
 		s_ctx.m_selectedBuffer = gpu::BufferHandle{};
@@ -104,17 +112,23 @@ void DrawTextureTab()
 
 	ImGui::BeginChild("Texture List");
 
-	gpu::EnumTextureHandles([](gpu::TextureHandle _handle)
+	gpu::EnumResourceHandles([](gpu::ResourceHandle _handle)
 	{
+		gpu::ResourceType type;
 		gpu::TextureDesc desc;
-		char const* bufferName;
-		gpu::GetTextureInfo(_handle, desc, bufferName);
+		char const* texName;
+		gpu::GetResourceInfo(_handle, type, nullptr, &desc, &texName);
+
+		if (!gpu::IsTexture(type))
+		{
+			return;
+		}
 
 		bool selected = _handle == s_ctx.m_selectedTexture;
 		ImGui::PushID(int(_handle.m_packed));
-		if (ImGui::Selectable(bufferName, selected))
+		if (ImGui::Selectable(texName, selected))
 		{
-			s_ctx.m_selectedTexture = _handle;
+			s_ctx.m_selectedTexture = gpu::TextureHandle{ _handle };
 		}
 
 		ImGui::PopID();
@@ -124,9 +138,11 @@ void DrawTextureTab()
 
 	ImGui::NextColumn();
 
+	gpu::ResourceType type;
 	gpu::TextureDesc desc;
 	char const* texName;
-	if (!gpu::GetTextureInfo(s_ctx.m_selectedTexture, desc, texName))
+
+	if (!gpu::GetResourceInfo(s_ctx.m_selectedTexture, type, nullptr, &desc, &texName))
 	{
 		ImGui::Text("No selected texture.");
 		s_ctx.m_selectedTexture = gpu::TextureHandle{};
