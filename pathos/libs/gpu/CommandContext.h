@@ -46,8 +46,8 @@ void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _ind
 void ClearRenderTarget(Context* _ctx, gpu::TextureHandle _handle, float const _color[4]);
 void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth); // TODO: Stencil
 
-void UpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem, uint32_t _newSize = 0xFFFFFFFF);
-kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _newSize = 0xFFFFFFFF);
+void UpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem, uint32_t _size);
+kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _size);
 void EndUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle);
 
 void SetScissorRect(Context* _ctx, gpu::Rect const& _rect);

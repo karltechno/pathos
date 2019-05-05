@@ -268,7 +268,7 @@ void ImGuiHandler::InternalRender()
 												  drawData->DisplayPos.y,
 												  0.0f, 1.0f);
 	
-	gpu::cmd::UpdateTransientBuffer(ctx, m_cbuf, &cbuf);
+	gpu::cmd::UpdateTransientBuffer(ctx, m_cbuf, &cbuf, sizeof(ImGuiCBuffer));
 
 	gpu::Rect viewport;
 	viewport.m_bottomRight = kt::Vec2(drawData->DisplaySize.x, drawData->DisplaySize.y);

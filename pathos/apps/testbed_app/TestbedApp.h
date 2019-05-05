@@ -17,7 +17,7 @@ struct TestbedApp : app::GraphicsApp
 	void HandleInputEvent(input::Event const& _ev) override;
 
 
-	struct KT_ALIGNAS(256) DummyCbuffer
+	struct KT_ALIGNAS(16) DummyCbuffer
 	{
 		kt::Vec4 myVec4;
 		kt::Mat4 mvp;

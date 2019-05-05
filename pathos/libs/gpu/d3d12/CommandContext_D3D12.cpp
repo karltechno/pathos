@@ -157,20 +157,17 @@ void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _ind
 	_ctx->ApplyStateChanges(CommandListFlags_D3D12::Graphics);
 
 	_ctx->m_cmdList->IASetPrimitiveTopology(ToD3DPrimType(_prim));
-	
-	//float blend[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	//_ctx->m_cmdList->OMSetBlendFactor(blend);
 	_ctx->m_cmdList->DrawIndexedInstanced(_indexCount, _instanceCount, _startIndex, _baseVertex, _startInstance);
 }
 
-void UpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem, uint32_t _newSize /* = 0xFFFFFFFF */)
+void UpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem, uint32_t _size)
 {
-	kt::Slice<uint8_t> slice = BeginUpdateTransientBuffer(_ctx, _handle, _newSize);
-	memcpy(slice.Data(), _mem, slice.Size());
+	kt::Slice<uint8_t> slice = BeginUpdateTransientBuffer(_ctx, _handle, _size);
+	memcpy(slice.Data(), _mem, _size);
 	EndUpdateTransientBuffer(_ctx, _handle);
 }
 
-kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _newSize /*= 0xFFFFFFFF */)
+kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _size)
 {
 	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Copy);
 
@@ -178,10 +175,7 @@ kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _
 	AllocatedBuffer_D3D12* res = _ctx->m_device->m_bufferHandles.Lookup(_handle);
 	KT_ASSERT(!!(res->m_desc.m_flags & BufferFlags::Transient));
 
-	if (_newSize != 0xFFFFFFFF)
-	{
-		res->m_desc.m_sizeInBytes = _newSize;
-	}
+	res->UpdateTransientSize(_size);
 
 	_ctx->m_device->GetFrameResources()->m_uploadAllocator.Alloc(*res);
 

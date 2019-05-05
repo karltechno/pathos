@@ -28,7 +28,8 @@ namespace gpu
 
 Device_D3D12* g_device = nullptr;
 
-static uint32_t GetBufferAlign(gpu::BufferDesc const& _desc)
+// For buffers that will only be in an upload heap.
+static uint32_t RequiredTransientAlignment(gpu::BufferDesc const& _desc)
 {
 	if (!!(_desc.m_flags & gpu::BufferFlags::Constant))
 	{
@@ -133,20 +134,28 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, void const* _initialDa
 
 	m_desc = _desc;
 
+	uint32_t const initialDataSize = _desc.m_sizeInBytes;
+
+	// constant buffers need to be a multiple of 256.
+	if (!!(m_desc.m_flags & gpu::BufferFlags::Constant))
+	{
+		m_desc.m_sizeInBytes = uint32_t(kt::AlignUp(m_desc.m_sizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
+	}
+
 	D3D12_RESOURCE_STATES bestInitialState = D3D12_RESOURCE_STATE_COMMON;
-	if (!!(_desc.m_flags & (BufferFlags::Constant | BufferFlags::Vertex)))
+	if (!!(m_desc.m_flags & (BufferFlags::Constant | BufferFlags::Vertex)))
 	{
 		bestInitialState = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
 	}
-	else if (!!(_desc.m_flags & BufferFlags::Index))
+	else if (!!(m_desc.m_flags & BufferFlags::Index))
 	{
 		bestInitialState = D3D12_RESOURCE_STATE_INDEX_BUFFER;
 	}
-	else if (!!(_desc.m_flags & BufferFlags::ShaderResource))
+	else if (!!(m_desc.m_flags & BufferFlags::ShaderResource))
 	{
 		bestInitialState = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 	}
-	else if (!!(_desc.m_flags & BufferFlags::UnorderedAccess))
+	else if (!!(m_desc.m_flags & BufferFlags::UnorderedAccess))
 	{
 		bestInitialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 	}
@@ -156,17 +165,17 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, void const* _initialDa
 	m_state = creationState;
 
 
-	if (!!(_desc.m_flags & BufferFlags::Constant))
+	if (!!(m_desc.m_flags & BufferFlags::Constant))
 	{
 		m_cbv = g_device->m_stagingHeap.AllocOne();
 	}
 
-	if (!!(_desc.m_flags & BufferFlags::UnorderedAccess))
+	if (!!(m_desc.m_flags & BufferFlags::UnorderedAccess))
 	{
 		m_uav = g_device->m_stagingHeap.AllocOne();
 	}
 
-	if (!(_desc.m_flags & BufferFlags::Transient))
+	if (!(m_desc.m_flags & BufferFlags::Transient))
 	{
 		m_ownsResource = true;
 		// Create a committed buffer if not transient. 
@@ -176,18 +185,18 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, void const* _initialDa
 		desc.Alignment = 0;
 		desc.DepthOrArraySize = 1;
 		desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-		desc.Flags = !!(_desc.m_flags & BufferFlags::UnorderedAccess) ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE;
+		desc.Flags = !!(m_desc.m_flags & BufferFlags::UnorderedAccess) ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE;
 		desc.Format = DXGI_FORMAT_UNKNOWN;
 		desc.Height = 1;
 		desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 		desc.MipLevels = 1;
 		desc.SampleDesc.Count = 1;
 		desc.SampleDesc.Quality = 0;
-		desc.Width = _desc.m_sizeInBytes;
+		desc.Width = m_desc.m_sizeInBytes;
 
 		if (!SUCCEEDED(g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &desc, creationState, nullptr, IID_PPV_ARGS(&m_res))))
 		{
-			KT_LOG_ERROR("CreateCommittedResource failed to create buffer size %u.", _desc.m_sizeInBytes);
+			KT_LOG_ERROR("CreateCommittedResource failed to create buffer size %u.", m_desc.m_sizeInBytes);
 			return false;
 		}
 
@@ -212,14 +221,14 @@ bool AllocatedBuffer_D3D12::Init(BufferDesc const& _desc, void const* _initialDa
 			g_device->GetFrameResources()->m_uploadAllocator.Alloc(*this);
 			m_lastFrameTouched = g_device->m_frameCounter;
 			KT_ASSERT(m_mappedCpuData);
-			memcpy(m_mappedCpuData, _initialData, _desc.m_sizeInBytes);
+			memcpy(m_mappedCpuData, _initialData, initialDataSize);
 			UpdateViews();
 		}
 		else
 		{
 			m_state = bestInitialState;
 			KT_ASSERT(m_res);
-			CopyInitialResourceData(m_res, _initialData, _desc.m_sizeInBytes, creationState, m_state);
+			CopyInitialResourceData(m_res, _initialData, initialDataSize, creationState, m_state);
 		}
 	}
 
@@ -281,6 +290,18 @@ void AllocatedBuffer_D3D12::UpdateViews()
 		srvDesc.Buffer.StructureByteStride = m_desc.m_strideInBytes;
 		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 		g_device->m_d3dDev->CreateShaderResourceView(m_res, &srvDesc, m_srv);
+	}
+}
+
+void AllocatedBuffer_D3D12::UpdateTransientSize(uint32_t _size)
+{
+	if (!!(m_desc.m_flags & gpu::BufferFlags::Constant))
+	{
+		m_desc.m_sizeInBytes = uint32_t(kt::AlignUp(_size, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
+	}
+	else
+	{
+		m_desc.m_sizeInBytes = _size;
 	}
 }
 
@@ -778,7 +799,7 @@ ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _a
 
 void FrameUploadAllocator_D3D12::Alloc(AllocatedBuffer_D3D12& o_res)
 {
-	ScratchAlloc_D3D12 scratch = Alloc(o_res.m_desc.m_sizeInBytes, GetBufferAlign(o_res.m_desc));
+	ScratchAlloc_D3D12 scratch = Alloc(o_res.m_desc.m_sizeInBytes, RequiredTransientAlignment(o_res.m_desc));
 	o_res.m_mappedCpuData = scratch.m_cpuData;
 	o_res.m_res = scratch.m_res;
 	o_res.m_offset = scratch.m_offset;

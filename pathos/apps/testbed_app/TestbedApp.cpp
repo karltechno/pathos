@@ -128,7 +128,7 @@ void TestbedApp::Tick(float _dt)
 	gpu::TextureHandle depth = gpu::BackbufferDepth();
 
 	gpu::cmd::SetGraphicsPSO(ctx, m_pso);
-	gpu::cmd::UpdateTransientBuffer(ctx, m_constantBuffer, &m_myCbuffer);
+	gpu::cmd::UpdateTransientBuffer(ctx, m_constantBuffer, &m_myCbuffer, sizeof(m_myCbuffer));
 
 	gpu::cmd::SetConstantBuffer(ctx, m_constantBuffer, 0, 0);
 

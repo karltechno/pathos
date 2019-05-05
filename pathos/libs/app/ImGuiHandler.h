@@ -25,7 +25,7 @@ public:
 
 private:
 	// TODO: Fix constant buffer size in d3d and remove align hack
-	struct KT_ALIGNAS(256) ImGuiCBuffer
+	struct KT_ALIGNAS(16) ImGuiCBuffer
 	{
 		kt::Mat4 m_orthoMtx;
 	};

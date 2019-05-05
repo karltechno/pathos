@@ -60,6 +60,8 @@ struct AllocatedBuffer_D3D12 : AllocatedObjectBase_D3D12
 
 	void UpdateViews();
 
+	void UpdateTransientSize(uint32_t _size);
+
 	gpu::BufferDesc m_desc;
 
 	ID3D12Resource* m_res = nullptr;
