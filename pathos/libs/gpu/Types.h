@@ -15,7 +15,7 @@ uint32_t constexpr c_uavTableSize = 16;
 
 uint32_t constexpr c_numShaderSpaces = 4;
 
-uint32_t constexpr c_maxBufferedFrames = 2;
+uint32_t constexpr c_maxBufferedFrames = 3;
 
 template <typename Tag>
 struct TaggedHandle : kt::VersionedHandle
