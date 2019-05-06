@@ -104,18 +104,12 @@ void ImGuiHandler::Init(void* _nwh)
 	indexBufferDesc.m_strideInBytes = sizeof(ImDrawIdx);
 	indexBufferDesc.m_format = sizeof(ImDrawIdx) == 2 ? gpu::Format::R16_Uint : gpu::Format::R32_Uint;
 	m_idxBuf = gpu::CreateBuffer(indexBufferDesc, nullptr, "ImGui Idx Buffer");
-
-	gpu::BufferDesc constantBufferDesc;
-	constantBufferDesc.m_flags = gpu::BufferFlags::Constant | gpu::BufferFlags::Transient;
-	constantBufferDesc.m_sizeInBytes = sizeof(ImGuiCBuffer);
-	m_cbuf = gpu::CreateBuffer(constantBufferDesc, nullptr, "ImGui CBuffer");
 }
 
 void ImGuiHandler::Shutdown()
 {
 	m_idxBuf.Reset();
 	m_vtxBuf.Reset();
-	m_cbuf.Reset();
 	m_fontTex.Reset();
 	m_pso.Reset();
 }
@@ -261,14 +255,13 @@ void ImGuiHandler::InternalRender()
 	gpu::cmd::EndUpdateTransientBuffer(ctx, m_idxBuf);
 	gpu::cmd::EndUpdateTransientBuffer(ctx, m_vtxBuf);
 
-	ImGuiCBuffer cbuf;
-	cbuf.m_orthoMtx = kt::Mat4::OrthographicLH_ZO(drawData->DisplayPos.x,
+	kt::Mat4 const mtx = kt::Mat4::OrthographicLH_ZO(drawData->DisplayPos.x,
 												  drawData->DisplayPos.x + drawData->DisplaySize.x,
 												  drawData->DisplayPos.y + drawData->DisplaySize.y,
 												  drawData->DisplayPos.y,
 												  0.0f, 1.0f);
 	
-	gpu::cmd::UpdateTransientBuffer(ctx, m_cbuf, &cbuf, sizeof(ImGuiCBuffer));
+	gpu::cmd::SetTransientCBV(ctx, &mtx, sizeof(mtx), 0, 0);
 
 	gpu::Rect viewport;
 	viewport.m_bottomRight = kt::Vec2(drawData->DisplaySize.x, drawData->DisplaySize.y);
@@ -277,7 +270,6 @@ void ImGuiHandler::InternalRender()
 	gpu::cmd::SetPSO(ctx, m_pso);
 	gpu::cmd::SetVertexBuffer(ctx, 0, m_vtxBuf);
 	gpu::cmd::SetIndexBuffer(ctx, m_idxBuf);
-	gpu::cmd::SetCBV(ctx, m_cbuf, 0, 0);
 
 	uint32_t vtxOffs = 0;
 	uint32_t idxOffs = 0;

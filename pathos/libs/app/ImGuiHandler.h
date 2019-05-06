@@ -24,17 +24,10 @@ public:
 	void EndFrame();
 
 private:
-	// TODO: Fix constant buffer size in d3d and remove align hack
-	struct KT_ALIGNAS(16) ImGuiCBuffer
-	{
-		kt::Mat4 m_orthoMtx;
-	};
-
 	void InternalRender();
 
 	gpu::BufferRef m_idxBuf;
 	gpu::BufferRef m_vtxBuf;
-	gpu::BufferRef m_cbuf;
 	gpu::TextureRef m_fontTex;
 	gpu::PSORef m_pso;
 };
