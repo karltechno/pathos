@@ -209,6 +209,13 @@ void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _ind
 	_ctx->m_cmdList->DrawIndexedInstanced(_indexCount, _instanceCount, _startIndex, _baseVertex, _startInstance);
 }
 
+void Dispatch(Context* _ctx, uint32_t _x, uint32_t _y, uint32_t _z)
+{
+	FlushBarriers(_ctx);
+	_ctx->ApplyStateChanges(CommandListFlags_D3D12::Compute);
+	_ctx->m_cmdList->Dispatch(_x, _y, _z);
+}
+
 void UpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem, uint32_t _size)
 {
 	kt::Slice<uint8_t> slice = BeginUpdateTransientBuffer(_ctx, _handle, _size);
@@ -443,6 +450,14 @@ void FlushBarriers(Context* _ctx)
 	_ctx->m_state.m_batchedBarriers.Clear();
 }
 
+void CopyResource(Context* _ctx, gpu::ResourceHandle _src, gpu::ResourceHandle _dest)
+{
+	AllocatedResource_D3D12* resSrc = _ctx->m_device->m_resourceHandles.Lookup(_src);
+	AllocatedResource_D3D12* resDst = _ctx->m_device->m_resourceHandles.Lookup(_dest);
+	KT_ASSERT(resSrc);
+	KT_ASSERT(resDst);
+	_ctx->m_cmdList->CopyResource(resDst->m_res, resSrc->m_res);
+}
 
 void CommandContext_D3D12::SetDescriptorsDirty(uint32_t _space, DirtyDescriptorFlags _flags)
 {
@@ -644,6 +659,15 @@ void CommandContext_D3D12::ApplyDescriptorStateChanges(uint32_t _spaceIdx, Dirty
 			m_cmdList->SetComputeRootDescriptorTable(2 + 3 * _spaceIdx, gpuDest);
 		}
 	}
+}
+
+void SetTransientCBV(Context* _ctx, void const* _mem, uint32_t _memSize, uint32_t _idx, uint32_t _space)
+{
+	gpu::BufferDesc desc;
+	desc.m_flags = gpu::BufferFlags::Constant | gpu::BufferFlags::Transient;
+	desc.m_sizeInBytes = _memSize;
+	gpu::BufferRef buffer = gpu::CreateBuffer(desc, _mem, "Transient CBuffer");
+	SetCBV(_ctx, buffer, _idx, _space);
 }
 
 void SetCBV(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space)

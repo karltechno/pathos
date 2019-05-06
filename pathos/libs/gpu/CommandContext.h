@@ -37,6 +37,7 @@ void SetIndexBuffer(Context* _ctx, gpu::BufferHandle _handle);
 void SetRenderTarget(Context* _ctx, uint32_t _idx, gpu::TextureHandle _handle);
 void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle);
 
+void SetTransientCBV(Context* _ctx, void const* _mem, uint32_t _memSize, uint32_t _idx, uint32_t _space);
 void SetCBV(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space);
 void SetSRV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t _space);
 void SetUAV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t _space);
@@ -44,7 +45,10 @@ void SetUAV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t 
 void ResourceBarrier(Context* _ctx, gpu::ResourceHandle _handle, gpu::ResourceState _newState);
 void FlushBarriers(Context* _ctx); 
 
+void CopyResource(Context* _ctx, gpu::ResourceHandle _src, gpu::ResourceHandle _dest);
+
 void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startIndex, uint32_t _baseVertex, uint32_t _startInstance);
+void Dispatch(Context* _ctx, uint32_t _x, uint32_t _y, uint32_t _z);
 
 void ClearRenderTarget(Context* _ctx, gpu::TextureHandle _handle, float const _color[4]);
 void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth); // TODO: Stencil

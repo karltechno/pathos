@@ -375,6 +375,7 @@ static ID3D12PipelineState* CreateD3DComputePSO(ID3D12Device* _device, gpu::Shad
 {
 	D3D12_COMPUTE_PIPELINE_STATE_DESC desc{};
 	desc.CS = D3D12_SHADER_BYTECODE{ _cs.m_data, _cs.m_size };
+	desc.pRootSignature = g_device->m_computeRootSig;
 	ID3D12PipelineState* state;
 	D3D_CHECK(_device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&state)));
 	return state;
@@ -472,6 +473,7 @@ static ID3D12PipelineState* CreateD3DGraphicsPSO(ID3D12Device* _device, gpu::Gra
 void AllocatedPSO_D3D12::InitAsCompute(gpu::ShaderHandle _handle, gpu::ShaderBytecode const _byteCode)
 {
 	KT_ASSERT(!m_pso);
+	gpu::AddRef(_handle);
 	m_cs = _handle;
 	m_pso = CreateD3DComputePSO(g_device->m_d3dDev, _byteCode);
 
@@ -629,6 +631,13 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 	{
 		m_srv = g_device->m_stagingHeap.AllocOne();
 		g_device->m_d3dDev->CreateShaderResourceView(m_res, nullptr, m_srv);
+	}
+
+	if (!!(_desc.m_usageFlags & gpu::TextureUsageFlags::UnorderedAccess))
+	{
+		// TODO: Sub resources
+		m_uav = g_device->m_stagingHeap.AllocOne();
+		g_device->m_d3dDev->CreateUnorderedAccessView(m_res, nullptr, nullptr, m_uav);
 	}
 
 	AllocatedObjectBase_D3D12::Init(_debugName);
@@ -1240,6 +1249,8 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 
 	gpu::TextureDesc const depthDesc = gpu::TextureDesc::Desc2D(m_swapChainWidth, m_swapChainHeight, TextureUsageFlags::DepthStencil, Format::D32_Float);
 	m_backbufferDepth.AcquireNoRef(gpu::CreateTexture(depthDesc, nullptr, "Backbuffer Depth"));
+
+	m_cpuFrameIdx = m_swapChain->GetCurrentBackBufferIndex();
 }
 
 Device_D3D12::Device_D3D12()
@@ -1542,7 +1553,7 @@ bool Init(void* _nwh)
 	// TODO: Toggle debug layer
 	g_device = new Device_D3D12();
 	// TODO
-	g_device->Init(_nwh, false);
+	g_device->Init(_nwh, true);
 	return true;
 }
 
@@ -1581,12 +1592,11 @@ void Device_D3D12::EndFrame()
 	m_mainThreadCtx = nullptr;
 
 	m_descriptorcbvsrvuavRingBuffer.OnEndOfFrame(m_cpuFrameIdx);
-	m_frameFences[m_cpuFrameIdx] = m_commandQueueManager.GraphicsQueue().LastPostedFenceValue();
 
 	// Todo: vsync
 	D3D_CHECK(m_swapChain->Present(0, 0));
+	m_frameFences[m_cpuFrameIdx] = m_commandQueueManager.GraphicsQueue().InsertAndIncrementFence();
 	m_cpuFrameIdx = m_swapChain->GetCurrentBackBufferIndex();
-
 	++m_frameCounter;
 }
 
