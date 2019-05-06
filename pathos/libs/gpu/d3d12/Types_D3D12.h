@@ -13,6 +13,6 @@ D3D12_COMPARISON_FUNC ToD3DCmpFn(gpu::ComparisonFn _fn);
 D3D_PRIMITIVE_TOPOLOGY ToD3DPrimType(gpu::PrimitiveType _prim);
 char const* ToD3DSemanticStr(gpu::VertexSemantic _sem);
 
-
+D3D12_RESOURCE_STATES TranslateResourceState(gpu::ResourceState _state);
 
 }

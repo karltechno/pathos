@@ -15,7 +15,7 @@ uint32_t constexpr c_uavTableSize = 16;
 
 uint32_t constexpr c_numShaderSpaces = 4;
 
-uint32_t constexpr c_maxBufferedFrames = 3u;
+uint32_t constexpr c_maxBufferedFrames = 2;
 
 template <typename Tag>
 struct TaggedHandle : kt::VersionedHandle
@@ -68,14 +68,39 @@ struct TextureHandle : ResourceHandle
 	}
 };
 
-
 struct ShaderBytecode
 {
 	void* m_data = nullptr;
 	size_t m_size = 0;
 };
 
-enum class ResourceType : uint32_t
+enum class ResourceState : uint8_t
+{
+	Unknown,
+
+	Common,
+	
+	IndexBuffer,
+	VertexBuffer,
+	ConstantBuffer,
+
+	RenderTarget,
+	
+	DepthStencilTarget,
+	DepthStencilTarget_ReadOnly,
+	
+	ShaderResource_Read,
+	ShaderResource_ReadWrite,
+	
+	CopyDest,
+	CopySrc,
+	
+	Present,
+
+	Num_ResourceState
+};
+
+enum class ResourceType : uint8_t
 {
 	Buffer,
 

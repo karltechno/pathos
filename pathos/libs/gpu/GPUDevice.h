@@ -14,6 +14,8 @@ void Shutdown();
 void BeginFrame();
 void EndFrame();
 
+cmd::Context* GetMainThreadCommandCtx();
+
 gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initialData = nullptr, char const* _debugName = nullptr);
 gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc, void const* _initialData = nullptr, char const* _debugName = nullptr);
 

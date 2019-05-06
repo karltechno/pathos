@@ -13,6 +13,7 @@
 
 struct ID3D12Device2;
 struct IDXGISwapChain4;
+struct IDXGISwapChain3;
 struct IDXGISwapChain1;
 
 #define STORE_GPU_DEBUG_NAME (1) // TODO: Better handling
@@ -22,6 +23,10 @@ namespace gpu
 
 struct Device_D3D12;
 
+namespace cmd
+{
+struct CommandContext_D3D12;
+}
 
 struct AllocatedObjectBase_D3D12
 {
@@ -62,7 +67,7 @@ struct AllocatedResource_D3D12 : AllocatedObjectBase_D3D12
 	bool InitAsBuffer(BufferDesc const& _desc, void const* _initialData, char const* _debugName = nullptr);
 
 	bool InitAsTexture(TextureDesc const& _desc, void const* _initialData, char const* _debugName = nullptr);
-	void InitFromBackbuffer(ID3D12Resource* _res, gpu::Format _format, uint32_t _height, uint32_t _width);
+	void InitFromBackbuffer(ID3D12Resource* _res, uint32_t _idx, gpu::Format _format, uint32_t _height, uint32_t _width);
 
 	void Destroy();
 
@@ -98,7 +103,7 @@ struct AllocatedResource_D3D12 : AllocatedObjectBase_D3D12
 	D3D12_CPU_DESCRIPTOR_HANDLE m_dsv = {};
 
 	// Current state.
-	D3D12_RESOURCE_STATES m_state = D3D12_RESOURCE_STATE_COMMON;
+	gpu::ResourceState m_resState = ResourceState::Common;
 
 	// CPU pointer (if host visible)
 	void* m_mappedCpuData = nullptr;
@@ -212,7 +217,7 @@ struct Device_D3D12
 	ID3D12RootSignature* m_computeRootSig = nullptr;
 
 	ID3D12Device2* m_d3dDev = nullptr;
-	IDXGISwapChain1* m_swapChain = nullptr;
+	IDXGISwapChain3* m_swapChain = nullptr;
 	
 	gpu::TextureRef m_backBuffers[c_maxBufferedFrames];
 
@@ -241,7 +246,9 @@ struct Device_D3D12
 
 	kt::VersionedHandlePool<AllocatedResource_D3D12>	m_resourceHandles;
 	kt::VersionedHandlePool<AllocatedShader_D3D12>		m_shaderHandles;
-	kt::VersionedHandlePool<AllocatedPSO_D3D12>	m_psoHandles;
+	kt::VersionedHandlePool<AllocatedPSO_D3D12>			m_psoHandles;
+
+	cmd::CommandContext_D3D12* m_mainThreadCtx = nullptr;
 
 	PSOCache m_psoCache;
 

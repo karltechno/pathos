@@ -85,4 +85,28 @@ char const* ToD3DSemanticStr(VertexSemantic _sem)
 	return s_toD3dSemStr[uint32_t(_sem)];
 }
 
+D3D12_RESOURCE_STATES TranslateResourceState(ResourceState _state)
+{
+	switch (_state)
+	{
+		case ResourceState::Unknown: return D3D12_RESOURCE_STATE_COMMON;
+		case ResourceState::Common: return D3D12_RESOURCE_STATE_COMMON;
+		case ResourceState::RenderTarget: return D3D12_RESOURCE_STATE_RENDER_TARGET;
+		case ResourceState::DepthStencilTarget: return D3D12_RESOURCE_STATE_DEPTH_WRITE;
+		case ResourceState::DepthStencilTarget_ReadOnly: return D3D12_RESOURCE_STATE_DEPTH_READ;
+		case ResourceState::ShaderResource_Read: return D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+		case ResourceState::ShaderResource_ReadWrite: return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+		case ResourceState::CopyDest: return D3D12_RESOURCE_STATE_COPY_DEST;
+		case ResourceState::CopySrc: return D3D12_RESOURCE_STATE_COPY_SOURCE;
+		case ResourceState::Present: return D3D12_RESOURCE_STATE_PRESENT;
+		case ResourceState::IndexBuffer: return D3D12_RESOURCE_STATE_INDEX_BUFFER;
+
+		case ResourceState::VertexBuffer:
+		case ResourceState::ConstantBuffer:
+			return D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+
+		case ResourceState::Num_ResourceState: KT_UNREACHABLE;
+	}
+}
+
 }

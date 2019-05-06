@@ -3,6 +3,8 @@
 #include "CommandContext.h"
 #include "HandleRef.h"
 
+#include <kt/Array.h>
+
 #include <d3d12.h>
 
 struct ID3D12GraphicsCommandList;
@@ -58,6 +60,11 @@ enum class DirtyDescriptorFlags : uint8_t
 };
 KT_ENUM_CLASS_FLAG_OPERATORS(DirtyDescriptorFlags);
 
+struct Barrier_D3D12
+{
+	gpu::ResourceRef m_res;
+	gpu::ResourceState m_newState;
+};
 
 struct CommandContext_D3D12
 {
@@ -107,6 +114,8 @@ struct CommandContext_D3D12
 			float m_depthMin;
 			float m_depthMax;
 		} m_viewport;
+
+		kt::InplaceArray<Barrier_D3D12, 8u> m_batchedBarriers;
 	} m_state;
 
 private:

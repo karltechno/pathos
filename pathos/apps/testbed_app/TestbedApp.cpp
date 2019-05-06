@@ -122,7 +122,7 @@ void TestbedApp::Tick(float _dt)
 	m_myCbuffer.myVec4 += kt::Vec4(_dt);
 	m_myCbuffer.mvp = m_cam.GetCachedViewProj();
 
-	gpu::cmd::Context* ctx = gpu::cmd::Begin(gpu::cmd::ContextType::Graphics);
+	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
 	gpu::TextureHandle backbuffer = gpu::CurrentBackbuffer();
 	gpu::TextureHandle depth = gpu::BackbufferDepth();
@@ -132,24 +132,14 @@ void TestbedApp::Tick(float _dt)
 
 	gpu::cmd::SetCBV(ctx, m_constantBuffer, 0, 0);
 
-	float const col[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
-	gpu::cmd::ClearRenderTarget(ctx, backbuffer, col);
-	gpu::cmd::ClearDepth(ctx, depth, 1.0f);
+	float const col[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 	gpu::cmd::SetRenderTarget(ctx, 0, backbuffer);
 	gpu::cmd::SetDepthBuffer(ctx, depth);
 
-	
-	{
-		// draw test model
-		//gfx::Model* model = res::GetData(m_modelHandle);
-		//gpu::cmd::SetIndexBuffer(ctx, model->m_indexGpuBuf);
-		//gpu::cmd::SetVertexBuffer(ctx, 0, model->m_posGpuBuf);
-		//gpu::cmd::DrawIndexedInstanced(ctx, gpu::PrimitiveType::TriangleList, model->m_indicies.Size(), 1, 0, 0, 0);
-		DrawModel(ctx, *res::GetData(m_modelHandle));
-	}
+	gpu::cmd::ClearRenderTarget(ctx, backbuffer, col);
+	gpu::cmd::ClearDepth(ctx, depth, 1.0f);
 
-	gpu::cmd::End(ctx);
-
+	DrawModel(ctx, *res::GetData(m_modelHandle));
 }
 
 void TestbedApp::Shutdown()

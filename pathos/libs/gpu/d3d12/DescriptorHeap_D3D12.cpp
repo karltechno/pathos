@@ -55,7 +55,7 @@ uint32_t DescriptorHeap_D3D12::CPUPtrToIndex(D3D12_CPU_DESCRIPTOR_HANDLE _ptr) c
 
 bool DescriptorHeap_D3D12::IsFrom(D3D12_CPU_DESCRIPTOR_HANDLE _ptr) const
 {
-	return _ptr.ptr > m_heapStartCPU.ptr && _ptr.ptr < (m_heapStartCPU.ptr + m_maxDescriptors * m_descriptorIncrementSize);
+	return _ptr.ptr >= m_heapStartCPU.ptr && _ptr.ptr < (m_heapStartCPU.ptr + m_maxDescriptors * m_descriptorIncrementSize);
 }
 
 void FreeListDescriptorHeap_D3D12::Init(ID3D12Device* _dev, D3D12_DESCRIPTOR_HEAP_TYPE _ty, uint32_t _maxDescriptors, bool _shaderVisible, char const* _debugName)
@@ -64,7 +64,7 @@ void FreeListDescriptorHeap_D3D12::Init(ID3D12Device* _dev, D3D12_DESCRIPTOR_HEA
 	uint32_t* freeList = m_freeList.PushBack_Raw(_maxDescriptors);
 	for (uint32_t i = 0; i < _maxDescriptors; ++i)
 	{
-		freeList[i] = i;
+		freeList[i] = (_maxDescriptors - 1) - i;
 	}
 }
 

@@ -80,8 +80,7 @@ uint64_t CommandQueue_D3D12::ExecuteCommandLists(kt::Slice<ID3D12CommandList*> c
 		D3D_CHECK(((ID3D12GraphicsCommandList*)list)->Close());
 	}
 	m_commandQueue->ExecuteCommandLists(_lists.Size(), _lists.Data());
-	m_commandQueue->Signal(m_fence, m_nextFenceVal);
-	return ++m_nextFenceVal;
+	return InsertAndIncrementFence();
 }
 
 ID3D12CommandAllocator* CommandQueue_D3D12::AcquireAllocator()
@@ -131,7 +130,7 @@ void CommandQueue_D3D12::WaitForFenceBlockingCPU(uint64_t _fenceVal)
 	{
 		// Todo: threading.
 		m_fence->SetEventOnCompletion(_fenceVal, m_waitEvent);
-		::WaitForSingleObjectEx(m_waitEvent, INFINITE, false);
+		::WaitForSingleObject(m_waitEvent, INFINITE);
 		m_lastCompletedFenceVal = _fenceVal;
 	}
 }

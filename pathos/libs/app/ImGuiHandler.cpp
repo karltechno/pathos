@@ -241,7 +241,7 @@ void ImGuiHandler::InternalRender()
 {
 	ImDrawData* drawData = ImGui::GetDrawData();
 
-	gpu::cmd::Context* ctx = gpu::cmd::Begin(gpu::cmd::ContextType::Graphics);
+	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
 	gpu::cmd::SetRenderTarget(ctx, 0, gpu::CurrentBackbuffer());
 
@@ -304,8 +304,6 @@ void ImGuiHandler::InternalRender()
 		}
 		vtxOffs += list->VtxBuffer.Size;
 	}
-
-	gpu::cmd::End(ctx);
 }
 
 }

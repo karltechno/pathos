@@ -133,6 +133,7 @@ bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* 
 	KT_ASSERT(!m_res);
 
 	m_bufferDesc = _desc;
+	m_type = ResourceType::Buffer;
 
 	uint32_t const initialDataSize = _desc.m_sizeInBytes;
 
@@ -142,27 +143,30 @@ bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* 
 		m_bufferDesc.m_sizeInBytes = uint32_t(kt::AlignUp(m_bufferDesc.m_sizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
 	}
 
-	D3D12_RESOURCE_STATES bestInitialState = D3D12_RESOURCE_STATE_COMMON;
-	if (!!(m_bufferDesc.m_flags & (BufferFlags::Constant | BufferFlags::Vertex)))
+	gpu::ResourceState bestInitialState = gpu::ResourceState::Common;
+	if (!!(m_bufferDesc.m_flags & BufferFlags::Constant))
 	{
-		bestInitialState = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+		bestInitialState = gpu::ResourceState::ConstantBuffer;
+	}
+	else if (!!(m_bufferDesc.m_flags & BufferFlags::Vertex))
+	{
+		bestInitialState = gpu::ResourceState::VertexBuffer;
 	}
 	else if (!!(m_bufferDesc.m_flags & BufferFlags::Index))
 	{
-		bestInitialState = D3D12_RESOURCE_STATE_INDEX_BUFFER;
+		bestInitialState = gpu::ResourceState::IndexBuffer;
 	}
 	else if (!!(m_bufferDesc.m_flags & BufferFlags::ShaderResource))
 	{
-		bestInitialState = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+		bestInitialState = gpu::ResourceState::ShaderResource_Read;
 	}
 	else if (!!(m_bufferDesc.m_flags & BufferFlags::UnorderedAccess))
 	{
-		bestInitialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+		bestInitialState = gpu::ResourceState::ShaderResource_ReadWrite;
 	}
 
-	D3D12_RESOURCE_STATES const creationState = _initialData ? D3D12_RESOURCE_STATE_COPY_DEST : bestInitialState;
-
-	m_state = creationState;
+	gpu::ResourceState const creationState = _initialData ? gpu::ResourceState::CopyDest : bestInitialState;
+	m_resState = creationState;
 
 
 	if (!!(m_bufferDesc.m_flags & BufferFlags::Constant))
@@ -194,7 +198,7 @@ bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* 
 		desc.SampleDesc.Quality = 0;
 		desc.Width = m_bufferDesc.m_sizeInBytes;
 
-		if (!SUCCEEDED(g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &desc, creationState, nullptr, IID_PPV_ARGS(&m_res))))
+		if (!SUCCEEDED(g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &desc, gpu::TranslateResourceState(creationState), nullptr, IID_PPV_ARGS(&m_res))))
 		{
 			KT_LOG_ERROR("CreateCommittedResource failed to create buffer size %u.", m_bufferDesc.m_sizeInBytes);
 			return false;
@@ -226,9 +230,9 @@ bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* 
 		}
 		else
 		{
-			m_state = bestInitialState;
 			KT_ASSERT(m_res);
-			CopyInitialResourceData(m_res, _initialData, initialDataSize, creationState, m_state);
+			CopyInitialResourceData(m_res, _initialData, initialDataSize, gpu::TranslateResourceState(creationState), gpu::TranslateResourceState(bestInitialState));
+			m_resState = bestInitialState;
 		}
 	}
 
@@ -265,7 +269,7 @@ void AllocatedResource_D3D12::Destroy()
 	if (m_rtv.ptr)
 	{
 		g_device->m_rtvHeap.Free(m_rtv);
-		m_dsv.ptr = 0;
+		m_rtv.ptr = 0;
 	}
 
 	if (m_dsv.ptr)
@@ -275,6 +279,7 @@ void AllocatedResource_D3D12::Destroy()
 	}
 
 	m_mappedCpuData = nullptr;
+	m_gpuAddress = 0;
 	m_lastFrameTouched = 0xFFFFFFFF;
 	m_type = ResourceType::Num_ResourceType;
 }
@@ -477,7 +482,7 @@ void AllocatedPSO_D3D12::InitAsCompute(gpu::ShaderHandle _handle, gpu::ShaderByt
 void AllocatedPSO_D3D12::InitAsGraphics
 (
 	gpu::GraphicsPSODesc const& _desc, 
-	gpu::ShaderBytecode const& _vs, 
+	gpu::ShaderBytecode const& _vs,  
 	gpu::ShaderBytecode const& _ps
 )
 {
@@ -501,29 +506,28 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 	m_type = _desc.m_type;
 	m_ownsResource = true;
 
-	D3D12_RESOURCE_STATES bestInitialState = D3D12_RESOURCE_STATE_COMMON;
+	gpu::ResourceState bestInitialState = gpu::ResourceState::Common;
 
 	// TODO: Something better?
 	if (!!(_desc.m_usageFlags & TextureUsageFlags::DepthStencil))
 	{
-		bestInitialState = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+		bestInitialState = gpu::ResourceState::DepthStencilTarget;
 	}
 	else if (!!(_desc.m_usageFlags & TextureUsageFlags::RenderTarget))
 	{
-		bestInitialState = D3D12_RESOURCE_STATE_RENDER_TARGET;
+		bestInitialState = gpu::ResourceState::RenderTarget;
 	}
 	else if (!!(_desc.m_usageFlags & TextureUsageFlags::ShaderResource))
 	{
-		bestInitialState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+		bestInitialState = gpu::ResourceState::ShaderResource_Read;
 	}
 	else if (!!(_desc.m_usageFlags & TextureUsageFlags::UnorderedAccess))
 	{
-		bestInitialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+		bestInitialState = gpu::ResourceState::ShaderResource_ReadWrite;
 	}
 
-
-	D3D12_RESOURCE_STATES const creationState = _initialData ? D3D12_RESOURCE_STATE_COPY_DEST : bestInitialState;
-	m_state = creationState;
+	gpu::ResourceState const creationState = _initialData ? gpu::ResourceState::CopyDest : bestInitialState;
+	m_resState = creationState;
 
 	D3D12_RESOURCE_DESC d3dDesc = {};
 
@@ -599,13 +603,15 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 		depthClear.DepthStencil.Depth = 1.0f; // TODO: Selectable for reverse Z?
 	}
 
-	HRESULT const hr = g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &d3dDesc, creationState, pClearVal, IID_PPV_ARGS(&m_res));
+	HRESULT const hr = g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &d3dDesc, gpu::TranslateResourceState(creationState), pClearVal, IID_PPV_ARGS(&m_res));
 	if (!SUCCEEDED(hr))
 	{
 		KT_LOG_ERROR("CreateCommittedResource failed (HRESULT: %u)", hr);
 		KT_ASSERT(false);
 		return false;
 	}
+
+	m_gpuAddress = 0;
 
 	if (!!(_desc.m_usageFlags & gpu::TextureUsageFlags::DepthStencil))
 	{
@@ -633,31 +639,37 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 
 	if (_initialData)
 	{
-		CopyInitialTextureData(*this, _initialData, m_state, bestInitialState);
-		m_state = bestInitialState;
+		D3D12_RESOURCE_STATES const destState = gpu::TranslateResourceState(bestInitialState);
+		CopyInitialTextureData(*this, _initialData, gpu::TranslateResourceState(creationState), destState);
+		m_resState = bestInitialState;
 	}
 
 	return true;
 }
 
-void AllocatedResource_D3D12::InitFromBackbuffer(ID3D12Resource* _res, gpu::Format _format, uint32_t _height, uint32_t _width)
+void AllocatedResource_D3D12::InitFromBackbuffer(ID3D12Resource* _res, uint32_t _idx, gpu::Format _format, uint32_t _height, uint32_t _width)
 {
 	m_type = ResourceType::Texture2D;
 
 	m_res = _res;
+	m_gpuAddress = 0;
 	m_ownsResource = true;
 	
 	m_textureDesc = TextureDesc::Desc2D(_width, _height, TextureUsageFlags::RenderTarget, _format);
 
+	// https://docs.microsoft.com/en-us/windows/desktop/direct3d12/using-resource-barriers-to-synchronize-resource-states-in-direct3d-12#initial-states-for-resources
+	// "Swap chain back buffers automatically start out in the D3D12_RESOURCE_STATE_COMMON state."
+	// Note: RenderTarget resource state is the same as common in d3d12.
+	m_resState = gpu::ResourceState::Common;
+
 	m_rtv = g_device->m_rtvHeap.AllocOne();
 	m_srv = g_device->m_stagingHeap.AllocOne();
-
-	m_state = D3D12_RESOURCE_STATE_RENDER_TARGET;
-
 	g_device->m_d3dDev->CreateRenderTargetView(m_res, nullptr, m_rtv);
 	g_device->m_d3dDev->CreateShaderResourceView(m_res, nullptr, m_srv);
 
-	AllocatedObjectBase_D3D12::Init("Backbuffer");
+	kt::String64 name;
+	name.AppendFmt("Backbuffer %u", _idx);
+	AllocatedObjectBase_D3D12::Init(name.Data());
 
 	if (m_res)
 	{
@@ -828,7 +840,7 @@ void FrameUploadAllocator_D3D12::Alloc(AllocatedResource_D3D12& o_res)
 	o_res.m_gpuAddress = scratch.m_addr;
 
 	o_res.m_ownsResource = false;
-	o_res.m_state = D3D12_RESOURCE_STATE_GENERIC_READ;
+	o_res.m_resState = ResourceState::Unknown; // GENERIC_READ, but no code can ever transition out of it! (memory is in upload heap)
 }
 
 static IDXGIAdapter4* GetBestAdaptor(IDXGIFactory4* _dxgiFactory)
@@ -1094,6 +1106,17 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		D3D_CHECK(::D3D12GetDebugInterface(__uuidof(ID3D12Debug), (void**)&d3dDebug));
 		KT_ASSERT(d3dDebug);
 		d3dDebug->EnableDebugLayer();
+
+		ID3D12Debug1 *debug1 = nullptr;
+
+		// TODO: Make this optional
+		D3D_CHECK(d3dDebug->QueryInterface(IID_PPV_ARGS(&debug1)));
+		if (debug1)
+		{
+			debug1->SetEnableGPUBasedValidation(false);
+		}
+		SafeReleaseDX(debug1);
+		SafeReleaseDX(d3dDebug);
 	}
 
 
@@ -1102,7 +1125,6 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 	if (_useDebugLayer)
 	{
 		createFlags |= DXGI_CREATE_FACTORY_DEBUG;
-
 	}
 
 	IDXGIFactory4* dxgiFactory = nullptr;
@@ -1144,6 +1166,21 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 			D3D_CHECK(infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE));
 			D3D_CHECK(infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE));
 			D3D_CHECK(infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, TRUE));
+
+			D3D12_MESSAGE_ID filteredMessages[] = 
+			{ 
+				// Disabled due to debug layer issue after latest NVidia drivers
+				// CPU descriptors are no longer 'virtualized' for quick conversion into actual pointers.
+				// See: https://www.gamedev.net/forums/topic/701611-copydescriptorssimple-copying-between-heaps/?do=findComment&comment=5403086
+				D3D12_MESSAGE_ID_COPY_DESCRIPTORS_INVALID_RANGES 
+			};
+
+			D3D12_INFO_QUEUE_FILTER filter = {};
+			filter.DenyList.pIDList = filteredMessages;
+			filter.DenyList.NumIDs = KT_ARRAY_COUNT(filteredMessages);
+			infoQueue->AddRetrievalFilterEntries(&filter);
+			infoQueue->AddStorageFilterEntries(&filter);
+
 			infoQueue->Release();
 		}
 	}
@@ -1176,8 +1213,10 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		swapChainDesc.BufferCount = gpu::c_maxBufferedFrames;
 		swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 		swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-
-		D3D_CHECK(dxgiFactory->CreateSwapChainForHwnd(m_commandQueueManager.GraphicsQueue().D3DCommandQueue(), HWND(_nativeWindowHandle), &swapChainDesc, nullptr, nullptr, &m_swapChain));
+		IDXGISwapChain1* swapChain;
+		D3D_CHECK(dxgiFactory->CreateSwapChainForHwnd(m_commandQueueManager.GraphicsQueue().D3DCommandQueue(), HWND(_nativeWindowHandle), &swapChainDesc, nullptr, nullptr, &swapChain));
+		D3D_CHECK(swapChain->QueryInterface(IID_PPV_ARGS(&m_swapChain)));
+		swapChain->Release();
 	}
 
 	// Frame data
@@ -1192,7 +1231,7 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		m_backBuffers[i].AcquireNoRef(gpu::TextureHandle{ gpu::ResourceHandle{ m_resourceHandles.Alloc(backbufferData) } });
 		ID3D12Resource* backbufferRes;
 		D3D_CHECK(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&backbufferRes)));
-		backbufferData->InitFromBackbuffer(backbufferRes, Format::R8G8B8A8_UNorm, m_swapChainHeight, m_swapChainWidth);
+		backbufferData->InitFromBackbuffer(backbufferRes, i, Format::R8G8B8A8_UNorm, m_swapChainHeight, m_swapChainWidth);
 
 		m_framesResources[i].m_uploadAllocator.Init(&m_uploadPagePool);
 	}
@@ -1503,7 +1542,7 @@ bool Init(void* _nwh)
 	// TODO: Toggle debug layer
 	g_device = new Device_D3D12();
 	// TODO
-	g_device->Init(_nwh, true);
+	g_device->Init(_nwh, false);
 	return true;
 }
 
@@ -1526,64 +1565,35 @@ void EndFrame()
 void Device_D3D12::BeginFrame()
 {
 	m_commandQueueManager.WaitForFenceBlockingCPU(m_frameFences[m_cpuFrameIdx]);
+
 	m_framesResources[m_cpuFrameIdx].ClearOnBeginFrame();
 	m_descriptorcbvsrvuavRingBuffer.OnBeginFrame(m_cpuFrameIdx);
 
-
-	AllocatedResource_D3D12* backBuffer = m_resourceHandles.Lookup(m_backBuffers[m_cpuFrameIdx]);
-
-	ID3D12CommandAllocator* allocator = m_commandQueueManager.GraphicsQueue().AcquireAllocator();
-	ID3D12CommandList* list;
-	D3D_CHECK(g_device->m_d3dDev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&list)));
-	ID3D12GraphicsCommandList* gfxList = (ID3D12GraphicsCommandList*)list;
-
-	{
-		D3D12_RESOURCE_BARRIER barrier = {};
-		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-		barrier.Transition.pResource = backBuffer->m_res;
-		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-		gfxList->ResourceBarrier(1, &barrier);
-
-		backBuffer->m_state = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	}
-
-	uint64_t const fence = m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(kt::MakeSlice(list));
-	m_commandQueueManager.GraphicsQueue().ReleaseAllocator(allocator, fence);
-	gfxList->Release();
+	m_mainThreadCtx = gpu::cmd::Begin(gpu::cmd::ContextType::Graphics);
+	gpu::cmd::ResourceBarrier(m_mainThreadCtx, m_backBuffers[m_cpuFrameIdx], gpu::ResourceState::RenderTarget);
+	gpu::cmd::FlushBarriers(m_mainThreadCtx);
 }
 
 void Device_D3D12::EndFrame()
 {
-	AllocatedResource_D3D12* backBuffer = m_resourceHandles.Lookup(m_backBuffers[m_cpuFrameIdx]);
-
-	ID3D12CommandAllocator* allocator = m_commandQueueManager.GraphicsQueue().AcquireAllocator();
-	ID3D12CommandList* list;
-	D3D_CHECK(g_device->m_d3dDev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&list)));
-	ID3D12GraphicsCommandList* gfxList = (ID3D12GraphicsCommandList*)list;
-
-	{
-		D3D12_RESOURCE_BARRIER barrier = {};
-		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-		barrier.Transition.pResource = backBuffer->m_res;
-		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-		gfxList->ResourceBarrier(1, &barrier);
-
-		backBuffer->m_state = D3D12_RESOURCE_STATE_PRESENT;
-	}
-
-	uint64_t const fence = m_commandQueueManager.GraphicsQueue().ExecuteCommandLists(kt::MakeSlice(list));
-	m_commandQueueManager.GraphicsQueue().ReleaseAllocator(allocator, fence);
-	gfxList->Release();
+	gpu::cmd::ResourceBarrier(m_mainThreadCtx, m_backBuffers[m_cpuFrameIdx], gpu::ResourceState::Present);
+	gpu::cmd::End(m_mainThreadCtx);
+	m_mainThreadCtx = nullptr;
 
 	m_descriptorcbvsrvuavRingBuffer.OnEndOfFrame(m_cpuFrameIdx);
+	m_frameFences[m_cpuFrameIdx] = m_commandQueueManager.GraphicsQueue().LastPostedFenceValue();
 
 	// Todo: vsync
 	D3D_CHECK(m_swapChain->Present(0, 0));
-	m_frameFences[m_cpuFrameIdx] = m_commandQueueManager.GraphicsQueue().LastPostedFenceValue();
-	m_cpuFrameIdx = (m_cpuFrameIdx + 1) % gpu::c_maxBufferedFrames;
+	m_cpuFrameIdx = m_swapChain->GetCurrentBackBufferIndex();
+
 	++m_frameCounter;
+}
+
+gpu::cmd::Context* GetMainThreadCommandCtx()
+{
+	KT_ASSERT(g_device->m_mainThreadCtx);
+	return g_device->m_mainThreadCtx;
 }
 
 void GetSwapchainDimensions(uint32_t& o_width, uint32_t& o_height)
@@ -1596,7 +1606,6 @@ gpu::Format BackbufferFormat()
 {
 	return g_device->m_resourceHandles.Lookup(g_device->m_backBuffers[0])->m_textureDesc.m_format;
 }
-
 
 void Device_D3D12::FrameResources::ClearOnBeginFrame()
 {
@@ -1611,7 +1620,6 @@ void Device_D3D12::FrameResources::ClearOnBeginFrame()
 
 	m_uploadAllocator.ClearOnBeginFrame();
 }
-
 
 void EnumResourceHandles(kt::StaticFunction<void(gpu::ResourceHandle), 32> const& _ftor)
 {

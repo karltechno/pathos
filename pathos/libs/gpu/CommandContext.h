@@ -41,6 +41,9 @@ void SetCBV(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _s
 void SetSRV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t _space);
 void SetUAV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t _space);
 
+void ResourceBarrier(Context* _ctx, gpu::ResourceHandle _handle, gpu::ResourceState _newState);
+void FlushBarriers(Context* _ctx); 
+
 void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startIndex, uint32_t _baseVertex, uint32_t _startInstance);
 
 void ClearRenderTarget(Context* _ctx, gpu::TextureHandle _handle, float const _color[4]);

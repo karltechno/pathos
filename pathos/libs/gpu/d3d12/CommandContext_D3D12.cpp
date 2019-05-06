@@ -112,6 +112,7 @@ CommandContext_D3D12::~CommandContext_D3D12()
 
 void End(Context* _ctx)
 {
+	FlushBarriers(_ctx);
 	ID3D12CommandList* list = _ctx->m_cmdList;
 
 	uint64_t const fence = _ctx->m_device->m_commandQueueManager.QueueByType(_ctx->m_d3dType).ExecuteCommandLists(kt::MakeSlice(list));
@@ -128,6 +129,16 @@ void SetVertexBuffer(Context* _ctx, uint32_t _streamIdx, gpu::BufferHandle _hand
 	KT_ASSERT(_streamIdx < gpu::c_maxVertexStreams);
 	if (_ctx->m_state.m_vertexStreams[_streamIdx].Handle() != _handle)
 	{
+#if KT_DEBUG
+		if (_handle.IsValid())
+		{
+			AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
+			KT_ASSERT(res);
+			KT_ASSERT(!res->IsTexture());
+			KT_ASSERT(!!(res->m_bufferDesc.m_flags & gpu::BufferFlags::Vertex));
+		}
+#endif
+
 		_ctx->m_state.m_vertexStreams[_streamIdx].Acquire(_handle);
 		_ctx->m_dirtyFlags |= DirtyStateFlags::VertexBuffer;
 	}
@@ -139,6 +150,16 @@ void SetIndexBuffer(Context* _ctx, gpu::BufferHandle _handle)
 
 	if (_ctx->m_state.m_indexBuffer.Handle() != _handle)
 	{
+#if KT_DEBUG
+		if (_handle.IsValid())
+		{
+			AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
+			KT_ASSERT(res);
+			KT_ASSERT(!res->IsTexture());
+			KT_ASSERT(!!(res->m_bufferDesc.m_flags & gpu::BufferFlags::Index));
+		}
+#endif
+
 		_ctx->m_state.m_indexBuffer.Acquire(_handle);
 		_ctx->m_dirtyFlags |= DirtyStateFlags::IndexBuffer;
 	}
@@ -178,12 +199,11 @@ void SetUAV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t 
 	}
 }
 
-
-
 void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startIndex, uint32_t _baseVertex, uint32_t _startInstance)
 {
 	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
 
+	FlushBarriers(_ctx);
 	_ctx->ApplyStateChanges(CommandListFlags_D3D12::Graphics);
 	_ctx->m_cmdList->IASetPrimitiveTopology(ToD3DPrimType(_prim));
 	_ctx->m_cmdList->DrawIndexedInstanced(_indexCount, _instanceCount, _startIndex, _baseVertex, _startInstance);
@@ -238,7 +258,6 @@ void ClearRenderTarget(Context* _ctx, gpu::TextureHandle _handle, float const _c
 	KT_ASSERT(tex);
 	KT_ASSERT(tex->IsTexture());
 	KT_ASSERT(tex->m_rtv.ptr);
-	KT_ASSERT(tex->m_state == D3D12_RESOURCE_STATE_RENDER_TARGET);
 	_ctx->m_cmdList->ClearRenderTargetView(tex->m_rtv, _color, 0, nullptr);
 }
 
@@ -289,6 +308,20 @@ void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth)
 	KT_ASSERT(!!(tex->m_textureDesc.m_usageFlags & TextureUsageFlags::DepthStencil));
 	KT_ASSERT(tex->m_dsv.ptr);
 	_ctx->m_cmdList->ClearDepthStencilView(tex->m_dsv, D3D12_CLEAR_FLAG_DEPTH, _depth, 0, 0, nullptr);
+}
+
+void ResourceBarrier(Context* _ctx, gpu::ResourceHandle _handle, gpu::ResourceState _newState)
+{
+	AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
+	KT_ASSERT(res);
+	if (res->m_resState == _newState)
+	{
+		return;
+	}
+
+	Barrier_D3D12& barrier = _ctx->m_state.m_batchedBarriers.PushBack();
+	barrier.m_res = _handle;
+	barrier.m_newState = _newState;
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE AllocAndCopyFromDescriptorRing(CommandContext_D3D12* _ctx, kt::Slice<D3D12_CPU_DESCRIPTOR_HANDLE> const& _srcHandles)
@@ -382,6 +415,34 @@ void CommandContext_D3D12::MarkDirtyIfBound(gpu::ResourceHandle _handle)
 		checkTableFn(space, kt::MakeSlice(m_state.m_uavs[space]), _handle, DirtyDescriptorFlags::UAV);
 	}
 }
+
+void FlushBarriers(Context* _ctx)
+{
+	if (_ctx->m_state.m_batchedBarriers.Size() == 0)
+	{
+		return;
+	}
+
+	D3D12_RESOURCE_BARRIER* d3dbarriers = (D3D12_RESOURCE_BARRIER*)KT_ALLOCA(_ctx->m_state.m_batchedBarriers.Size() * sizeof(D3D12_RESOURCE_BARRIER));
+	for (uint32_t i = 0; i < _ctx->m_state.m_batchedBarriers.Size(); ++i)
+	{
+		Barrier_D3D12 const& barrier = _ctx->m_state.m_batchedBarriers[i];
+		AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(barrier.m_res);
+		KT_ASSERT(res);
+		D3D12_RESOURCE_STATES const newState = gpu::TranslateResourceState(barrier.m_newState);
+		D3D12_RESOURCE_BARRIER& d3dBarrier = d3dbarriers[i];
+		d3dBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		d3dBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE; // TODO: Split barriers (probably easiest with rendergraph-esque abstraction).
+		d3dBarrier.Transition.StateBefore = gpu::TranslateResourceState(res->m_resState);
+		d3dBarrier.Transition.StateAfter = newState;
+		d3dBarrier.Transition.pResource = res->m_res;
+		d3dBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		res->m_resState = barrier.m_newState;
+	}
+	_ctx->m_cmdList->ResourceBarrier(_ctx->m_state.m_batchedBarriers.Size(), d3dbarriers);
+	_ctx->m_state.m_batchedBarriers.Clear();
+}
+
 
 void CommandContext_D3D12::SetDescriptorsDirty(uint32_t _space, DirtyDescriptorFlags _flags)
 {
