@@ -21,6 +21,8 @@ KT_ENUM_CLASS_FLAG_OPERATORS(TextureLoadFlags);
 
 struct Texture
 {
+	static uint32_t constexpr c_maxMips = 14;
+
 	KT_NO_COPY(Texture);
 
 	Texture() = default;
@@ -35,8 +37,13 @@ struct Texture
 	bool LoadFromMemory(uint8_t* _textureData, uint32_t const _size, TextureLoadFlags _flags = TextureLoadFlags::None, char const* _debugName = nullptr);
 
 	kt::Array<uint8_t> m_texels;
+	uint32_t m_mipOffsets[c_maxMips];
+	uint32_t m_numMips = 0;
+	uint32_t m_width = 0;
+	uint32_t m_height = 0;
+
+
 	gpu::TextureRef m_gpuTex;
-	
 };
 
 using TextureResHandle = res::ResourceHandle<Texture>;

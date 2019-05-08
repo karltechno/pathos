@@ -1,4 +1,7 @@
 #include <kt/Logging.h>
+#include <kt/FilePath.h>
+#include <kt/File.h>
+#include <kt/Serialization.h>
 
 #include <res/ResourceSystem.h>
 
@@ -37,6 +40,80 @@ struct TextureLoader : res::IResourceHandler
 	}
 };
 
+constexpr uint32_t c_textureCacheVersion = 1;
+
+static void Serialize(kt::ISerializer* _s, Texture& _tex)
+{
+	kt::Serialize(_s, _tex.m_width);
+	kt::Serialize(_s, _tex.m_height);
+	kt::Serialize(_s, _tex.m_numMips);
+	kt::Serialize(_s, _tex.m_mipOffsets);
+	kt::Serialize(_s, _tex.m_texels);
+}
+
+static bool LoadFromCache(Texture& o_tex, TextureLoadFlags _loadFlags, char const* _texPath)
+{
+	kt::String512 cachePath(_texPath);
+	cachePath.Append(".cache");
+	
+	if (!kt::FileExists(cachePath.Data()))
+	{
+		return false;
+	}
+
+	KT_LOG_INFO("Found texture cache file: \"%s\".", cachePath.Data());
+	FILE* f = fopen(cachePath.Data(), "rb");
+	if (!f)
+	{
+		KT_LOG_INFO("Failed to open texture cache file: \"%s\"!", cachePath.Data());
+		return false;
+	}
+	KT_SCOPE_EXIT(fclose(f));
+	kt::FileReader reader(f);
+	uint32_t version;
+	if (!reader.Read(version)) { return false; }
+
+	if (version != c_textureCacheVersion)
+	{
+		KT_LOG_INFO("%s has version %u, but texture cache version is %u.", version, c_textureCacheVersion);
+		return false;
+	}
+
+	TextureLoadFlags writtenFlags;
+	reader.Read(writtenFlags);
+	if (writtenFlags != _loadFlags)
+	{
+		KT_LOG_INFO("Cached texture \"%s\" has different load flags than requested.", cachePath.Data());
+		return false;
+	}
+
+	kt::ISerializer serializer(&reader, c_textureCacheVersion);
+	Serialize(&serializer, o_tex);
+
+	return true;
+}
+
+static void WriteToCache(Texture& o_tex, TextureLoadFlags _loadFlags, char const* _texPath)
+{
+	kt::String512 cachePath(_texPath);
+	cachePath.Append(".cache");
+
+	FILE* f = fopen(cachePath.Data(), "wb");
+	if (!f)
+	{
+		KT_LOG_INFO("Failed to open texture cache file for writing: \"%s\"!", cachePath.Data());
+		return;
+	}
+	KT_SCOPE_EXIT(fclose(f));
+	kt::FileWriter writer(f);
+
+	writer.Write(c_textureCacheVersion);
+	writer.Write(_loadFlags);
+	
+	kt::ISerializer serializer(&writer, c_textureCacheVersion);
+	Serialize(&serializer, o_tex);
+}
+
 static void CreateGPUBuffer2D(Texture& _tex, uint32_t _x, uint32_t _y, gpu::Format _fmt, uint32_t _numMips, char const* _debugName = nullptr)
 {
 	gpu::TextureDesc desc = gpu::TextureDesc::Desc2D(_x, _y, gpu::TextureUsageFlags::ShaderResource, _fmt);
@@ -61,6 +138,13 @@ void Texture::RegisterResourceLoader()
 
 bool Texture::LoadFromFile(char const* _fileName, TextureLoadFlags _flags)
 {
+	if (LoadFromCache(*this, _flags, _fileName))
+	{
+		gpu::Format const gpuFmt = !!(_flags & TextureLoadFlags::sRGB) ? gpu::Format::R8G8B8A8_UNorm_SRGB : gpu::Format::R8G8B8A8_UNorm;
+		CreateGPUBuffer2D(*this, m_width, m_height, gpuFmt, m_numMips, _fileName);
+		return true;
+	}
+
 	// TODO: Hack - should use a gpu friendly compressed format, or reconstruct z for normal map, etc.
 	int constexpr c_requiredComp = 4;
 
@@ -74,7 +158,13 @@ bool Texture::LoadFromFile(char const* _fileName, TextureLoadFlags _flags)
 	}
 	KT_SCOPE_EXIT(stbi_image_free(srcTexels));
 
-	return LoadFromRGBA8(srcTexels, uint32_t(x), uint32_t(y), _flags, _fileName);
+	if(LoadFromRGBA8(srcTexels, uint32_t(x), uint32_t(y), _flags, _fileName))
+	{
+		WriteToCache(*this, _flags, _fileName);
+		return true;
+	}
+
+	return false;
 }
 
 bool Texture::LoadFromRGBA8(uint8_t* _texels, uint32_t _width, uint32_t _height, TextureLoadFlags _flags, char const* _debugName)
@@ -92,7 +182,6 @@ bool Texture::LoadFromRGBA8(uint8_t* _texels, uint32_t _width, uint32_t _height,
 	}
 
 	uint32_t const mipChainLen = MipChainLength(_width, _height);
-	uint32_t constexpr c_maxMips = 15;
 	KT_ASSERT(mipChainLen <= c_maxMips);
 
 	struct MipInfo
@@ -106,12 +195,16 @@ bool Texture::LoadFromRGBA8(uint8_t* _texels, uint32_t _width, uint32_t _height,
 
 	uint32_t curDataOffs = 0;
 
+	m_numMips = mipChainLen;
+	m_width = _width;
+	m_height = _height;
 
 	for (uint32_t i = 0; i < mipChainLen; ++i)
 	{
 		mips[i].x = MipDimForLevel(_width, i);
 		mips[i].y = MipDimForLevel(_height, i);
 		mips[i].dataOffs = curDataOffs;
+		m_mipOffsets[i] = curDataOffs;
 		curDataOffs += mips[i].x * mips[i].y * c_bytesPerPixel;
 	}
 
