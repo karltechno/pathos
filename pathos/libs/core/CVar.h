@@ -95,6 +95,11 @@ struct CVarTypedBase : CVarBase
 		return m_current;
 	}
 
+	void Set(T _val)
+	{
+		m_current = _val;
+	}
+
 protected:
 	T m_current;
 

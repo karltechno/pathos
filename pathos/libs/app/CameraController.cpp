@@ -2,83 +2,79 @@
 
 #include <gfx/Camera.h>
 #include <input/InputTypes.h>
+#include <input/Input.h>
 
 #include <kt/Vec3.h>
 #include <kt/Vec4.h>
 #include <kt/Logging.h>
 
+#include <core/CVar.h>
+
 namespace app
 {
 
+static core::CVar<float> s_padRotSpeed("cam.pad_speed_rot", "Gamepad rotation speed.", 4.0f, 0.1f, 25.0f);
+static core::CVar<float> s_padMoveSpeed("cam.pad_rot_sens", "Gamepad movement speed.", 4.0f, 0.1f, 25.0f);
 
-void CameraController_Free::SetPos(kt::Vec3 const& _pos)
+
+void CameraController::UpdateCamera(float _dt, gfx::Camera& _cam)
 {
-	m_displacement = kt::Vec3(0.0f);
-	m_pos = _pos;
+	input::GamepadState pad;
+	kt::Vec3 gamepadDisplacement = kt::Vec3(0.0f);
+	if (input::GetGamepadState(0, pad))
+	{
+		if (!!(pad.m_buttonsPressed & input::GamepadButton::RightShoulder))
+		{
+			s_padMoveSpeed.Set(s_padMoveSpeed * 2.0f);
+		}
+		if (!!(pad.m_buttonsPressed & input::GamepadButton::LeftShoulder))
+		{
+			s_padMoveSpeed.Set(s_padMoveSpeed * 0.5f);
+		}
+
+
+		gamepadDisplacement.x += pad.m_leftThumb[0] * s_padMoveSpeed;
+		gamepadDisplacement.z += pad.m_leftThumb[1] * s_padMoveSpeed;
+
+		gamepadDisplacement.y += pad.m_rightTrigger * s_padMoveSpeed;
+		gamepadDisplacement.y -= pad.m_leftTrigger * s_padMoveSpeed;
+
+		m_frameYaw += pad.m_rightThumb[0] * s_padRotSpeed;
+		m_framePitch -= pad.m_rightThumb[1] * s_padRotSpeed;
+
+
+	}
+
+	m_pitch += m_framePitch * _dt;
+	m_pitch = kt::Clamp(m_pitch, -kt::kPiOverTwo, kt::kPiOverTwo);
+
+	m_yaw += m_frameYaw * _dt;
+	
+	// Keep yaw in [0, PI] and [-PI, 0]
+	if (m_yaw >= kt::kPi)
+	{
+		m_yaw -= 2.0f * kt::kPi;
+	}
+	else if (m_yaw <= -kt::kPi)
+	{
+		m_yaw += 2.0f * kt::kPi;
+	}
+
+	kt::Vec3 const frameDisplacement = (gamepadDisplacement + m_keyboardPerFrameDisplacement) * _dt * 20.0f; // TODO: Multiplier
+
+	m_framePitch = 0.0f;
+	m_frameYaw = 0.0f;
+
+	kt::Mat4 camMtx =  kt::Mat4::RotY(m_yaw) * kt::Mat4::RotX(m_pitch);
+
+	m_pos += kt::MulDir(camMtx, frameDisplacement);
+
+	camMtx.SetPos(m_pos);
+
+	_cam.SetCameraMatrix(camMtx);
 }
 
-void CameraController_Free::MoveUnscaled(kt::Vec3 const& _movement)
-{
-	m_displacement += _movement;
-}
-
-void CameraController_Free::RotateXY(kt::Vec2 const& _xy)
-{
-	kt::Quat rotx;
-	rotx.FromNormalizedAxisAngle(kt::Vec3(0.0f, 1.0f, 0.0f), _xy.x);
-	kt::Quat roty;
-	roty.FromNormalizedAxisAngle(kt::Vec3(1.0f, 0.0f, 0.0f), _xy.y);
-
-	// TODO: Is this right
-	m_rot = m_rot * roty * rotx;
-}
-
-void CameraController_Free::RotateXYZ(kt::Vec3 const& _xyz)
-{
-	m_xyzRot += _xyz;
-}
-
-void CameraController_Free::RotateByQuat(kt::Quat const& _quat)
-{
-	m_rot = m_rot * _quat;
-}
-
-void CameraController_Free::RotateByMatrix(kt::Mat3 const& _mtx)
-{
-	m_rot = m_rot * kt::ToQuat(_mtx);
-}
-
-void CameraController_Free::SetRotation(kt::Mat3 const& _rot)
-{
-	m_rot = kt::ToQuat(_rot);
-}
-
-void CameraController_Free::SetRotation(kt::Quat const& _rot)
-{
-	m_rot = _rot;
-}
-
-void CameraController_Free::UpdateCamera(float _dt, gfx::Camera& _cam)
-{
-	kt::Quat rotx;
-	rotx.FromNormalizedAxisAngle(kt::Vec3(1.0f, 0.0f, 0.0f), m_xyzRot.x * _dt);
-	kt::Quat roty;
-	roty.FromNormalizedAxisAngle(kt::Vec3(0.0f, 1.0f, 0.0f), m_xyzRot.y * _dt);
-	kt::Quat rotz;
-	rotz.FromNormalizedAxisAngle(kt::Vec3(0.0f, 0.0f, 1.0f), m_xyzRot.z * _dt);
-	m_rot = m_rot * rotz * roty * rotx;
-
-	m_xyzRot = kt::Vec3(0.0f);
-	kt::Mat4 mtx = kt::ToMat4(m_rot);
-	kt::Vec3 const frameDisplacement = (m_displacement + m_keyboardPerFrameDisplacement) * _dt * 20.0f; // TODO: Multiplier
-	m_pos += mtx.m_cols[0] * frameDisplacement.x + mtx.m_cols[1] * frameDisplacement.y + mtx.m_cols[2] * frameDisplacement.z;
-
-	m_displacement = kt::Vec3(0.0f);
-	mtx.m_cols[3] = kt::Vec4(m_pos.x, m_pos.y, m_pos.z, 1.0f);
-	_cam.SetCameraMatrix(mtx);
-}
-
-bool CameraController_Free::DefaultInputHandler(input::Event const& _event)
+bool CameraController::DefaultInputHandler(input::Event const& _event)
 {
 	switch (_event.m_type)
 	{
@@ -102,6 +98,12 @@ bool CameraController_Free::DefaultInputHandler(input::Event const& _event)
 			return true;
 		} break;
 
+		case input::Event::Type::MouseMove:
+		{
+			m_frameYaw += float(_event.m_mouseMove.deltaX);
+			m_framePitch += float(_event.m_mouseMove.deltaY);
+		} break;
+
 		default:
 		{
 			return false;
@@ -111,16 +113,5 @@ bool CameraController_Free::DefaultInputHandler(input::Event const& _event)
 	KT_UNREACHABLE;
 }
 
-void CameraController_Free::HandleGamepadAnalog(input::GamepadState const& _state)
-{
-	m_displacement.x += _state.m_leftThumb[0];
-	m_displacement.z += _state.m_leftThumb[1];
-
-	m_displacement.y += _state.m_rightTrigger;
-	m_displacement.y -= _state.m_leftTrigger;
-
-	m_xyzRot.y += _state.m_rightThumb[0];
-	m_xyzRot.x -= _state.m_rightThumb[1];
-}
 
 }
