@@ -161,14 +161,14 @@ static void CopyPrecomputedTangentSpace(Model* _model, cgltf_accessor* _normalAc
 	KT_ASSERT(_normalAccessor->type == cgltf_type_vec3);
 	KT_ASSERT(_tangentAccessor->type == cgltf_type_vec4);
 	KT_ASSERT(_tangentAccessor->count == _normalAccessor->count);
-	uint32_t const normalStride = _normalAccessor->stride;
-	uint32_t const tangentStride = _tangentAccessor->stride;
+	uint32_t const normalStride = uint32_t(_normalAccessor->stride);
+	uint32_t const tangentStride = uint32_t(_tangentAccessor->stride);
 
 	uint8_t const* normalSrc = AccessorStartOffset(_normalAccessor);
 	uint8_t const* tangentSrc = AccessorStartOffset(_tangentAccessor);
 	uint8_t const* tangentEnd = tangentSrc + _tangentAccessor->count;
 	uint32_t const tangentDestBegin = _model->m_tangentStream.Size();
-	_model->m_tangentStream.Resize(tangentDestBegin + _tangentAccessor->count);
+	_model->m_tangentStream.Resize(uint32_t(tangentDestBegin + _tangentAccessor->count));
 	Model::TangentSpace* destPtr = _model->m_tangentStream.Data() + tangentDestBegin;
 	while (tangentSrc != tangentEnd)
 	{
@@ -213,10 +213,10 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 
 			// Copy index buffer.
 			cgltf_accessor* indicies = gltfPrim.indices;
-			subMesh.m_numIndicies = indicies->count;
+			subMesh.m_numIndicies = uint32_t(indicies->count);
 			KT_ASSERT(!indicies->is_sparse); // surely not for index buffers?
 			uint32_t oldIndexSize = _model->m_indicies.Size();
-			_model->m_indicies.Resize(oldIndexSize + indicies->count);
+			_model->m_indicies.Resize(uint32_t(oldIndexSize + indicies->count));
 
 			uint32_t const vertexBegin = _model->m_posStream.Size();
 
@@ -260,7 +260,7 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 							return false;
 						}
 						uint32_t const posStart = _model->m_posStream.Size();
-						_model->m_posStream.Resize(posStart + attrib.data->count);
+						_model->m_posStream.Resize(uint32_t(posStart + attrib.data->count));
 						KT_ASSERT(attrib.data->type == cgltf_type_vec3);
 						CopyVertexStreamGeneric(attrib.data, (uint8_t*)(_model->m_posStream.Data() + posStart), sizeof(kt::Vec3));
 					} break;
@@ -278,7 +278,7 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 							return false;
 						}
 						uint32_t const uvStart = _model->m_uvStream0.Size();
-						_model->m_uvStream0.Resize(uvStart + attrib.data->count);
+						_model->m_uvStream0.Resize(uint32_t(uvStart + attrib.data->count));
 						KT_ASSERT(attrib.data->type == cgltf_type_vec2);
 						CopyVertexStreamGeneric(attrib.data, (uint8_t*)(_model->m_uvStream0.Data() + uvStart), sizeof(kt::Vec2));
 					} break;
@@ -325,7 +325,7 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 					return false;
 				}
 				uint32_t const normalStart = _model->m_tangentStream.Size();
-				_model->m_tangentStream.Resize(normalStart + normalAttr->data->count);
+				_model->m_tangentStream.Resize(uint32_t(normalStart + normalAttr->data->count));
 				KT_ASSERT(normalAttr->data->type == cgltf_type_vec3);
 				uint32_t const normOffs = offsetof(Model::TangentSpace, m_norm);
 				CopyVertexStreamGeneric(normalAttr->data, (uint8_t*)(_model->m_tangentStream.Data() + normalStart) + normOffs, sizeof(kt::Vec3), sizeof(Model::TangentSpace));
@@ -416,7 +416,7 @@ static TextureResHandle LoadTexture(char const* _gltfPath, cgltf_texture const& 
 
 static void LoadMaterials(Model* _model, cgltf_data* _data, char const* _basePath)
 {
-	_model->m_materials.Resize(_data->materials_count);
+	_model->m_materials.Resize(uint32_t(_data->materials_count));
 	for (uint32_t materialIdx = 0; materialIdx < _data->materials_count; ++materialIdx)
 	{
 		Material& modelMat = _model->m_materials[materialIdx];

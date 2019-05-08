@@ -94,8 +94,8 @@ static void CopyInitialTextureData(AllocatedResource_D3D12& _tex, void const* _d
 	uint32_t const bpp = gpu::GetFormatSize(_tex.m_textureDesc.m_format);
 	D3D12_SUBRESOURCE_DATA* srcData = (D3D12_SUBRESOURCE_DATA*)KT_ALLOCA(sizeof(D3D12_SUBRESOURCE_DATA) * numSubresources);
 	
-	uint32_t mipWidth = d3dDesc.Width;
-	uint32_t mipHeight = d3dDesc.Height;
+	uint32_t mipWidth = uint32_t(d3dDesc.Width);
+	uint32_t mipHeight = uint32_t(d3dDesc.Height);
 
 	uint8_t* pData = (uint8_t*)_data;
 
@@ -384,7 +384,6 @@ static ID3D12PipelineState* CreateD3DComputePSO(ID3D12Device* _device, gpu::Shad
 
 static ID3D12PipelineState* CreateD3DGraphicsPSO(ID3D12Device* _device, gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps)
 {
-	// Create a new PSO.
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC d3dDesc{};
 
 	d3dDesc.VS = D3D12_SHADER_BYTECODE{ _vs.m_data, _vs.m_size };
@@ -436,7 +435,7 @@ static ID3D12PipelineState* CreateD3DGraphicsPSO(ID3D12Device* _device, gpu::Gra
 
 	d3dDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
-	d3dDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE; // TODO
+	d3dDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE; // TODO: Specify this.
 
 	d3dDesc.NumRenderTargets = _desc.m_numRenderTargets;
 	for (uint32_t i = 0; i < _desc.m_numRenderTargets; ++i)
@@ -555,9 +554,9 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 
 	d3dDesc.Width = _desc.m_width;
 	d3dDesc.Height = _desc.m_height;
-	d3dDesc.DepthOrArraySize = _desc.m_depth;
+	d3dDesc.DepthOrArraySize = UINT16(_desc.m_depth);
 	d3dDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	d3dDesc.MipLevels = _desc.m_mipLevels;
+	d3dDesc.MipLevels = UINT16(_desc.m_mipLevels);
 	d3dDesc.Format = ToDXGIFormat(_desc.m_format);
 	d3dDesc.Alignment = 0;
 
@@ -585,7 +584,7 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 			d3dDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
 			d3dDesc.Width = _desc.m_width;
 			d3dDesc.Height = _desc.m_height;
-			d3dDesc.DepthOrArraySize = _desc.m_depth;
+			d3dDesc.DepthOrArraySize = UINT16(_desc.m_depth);
 		} break;
 
 		default:
@@ -767,13 +766,18 @@ gpu::FrameUploadPage_D3D12 FrameUploadPagePool_D3D12::AllocPage(uint32_t _minSiz
 	page.m_size = resSize;
 	D3D12_RANGE const readRange{ 0, 0 };
 	D3D_CHECK(page.m_res->Map(0, &readRange, &page.m_mappedPtr));
+
 	return page;
 }
 
 void FrameUploadPagePool_D3D12::ReleasePage(FrameUploadPage_D3D12 const& _page)
 {
+#if 1
 	FrameUploadPage_D3D12& page = m_freePages.PushBack(_page);
 	page.m_curOffset = 0;
+#else
+	_page.m_res->Release();
+#endif
 }
 
 void FrameUploadAllocator_D3D12::Init(FrameUploadPagePool_D3D12* _pagePool)
@@ -813,6 +817,7 @@ ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _a
 		}
 		else
 		{
+			KT_ASSERT(m_numFullPages == m_pages.Size() - 1);
 			page = &m_pages.Back();
 		}
 
@@ -825,7 +830,6 @@ ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _a
 			continue;
 		}
 
-		page->m_curOffset = endAddr - page->m_base;
 		
 		ScratchAlloc_D3D12 alloc;
 
@@ -833,6 +837,13 @@ ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _a
 		alloc.m_addr = page->m_base + alloc.m_offset;
 		alloc.m_res = page->m_res;
 		alloc.m_cpuData = (uint8_t*)page->m_mappedPtr + alloc.m_offset;
+
+		KT_ASSERT(alloc.m_addr >= page->m_base + page->m_curOffset);
+		KT_ASSERT(alloc.m_offset >= page->m_curOffset);
+
+		page->m_curOffset = uint32_t(endAddr - page->m_base);
+
+
 		return alloc;
 
 	} while (true);
@@ -1122,8 +1133,10 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		D3D_CHECK(d3dDebug->QueryInterface(IID_PPV_ARGS(&debug1)));
 		if (debug1)
 		{
-			debug1->SetEnableGPUBasedValidation(false);
+			debug1->SetEnableGPUBasedValidation(true);
+			debug1->SetEnableSynchronizedCommandQueueValidation(true);
 		}
+
 		SafeReleaseDX(debug1);
 		SafeReleaseDX(d3dDebug);
 	}
@@ -1553,7 +1566,7 @@ bool Init(void* _nwh)
 	// TODO: Toggle debug layer
 	g_device = new Device_D3D12();
 	// TODO
-	g_device->Init(_nwh, true);
+	g_device->Init(_nwh, false);
 	return true;
 }
 

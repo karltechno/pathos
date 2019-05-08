@@ -284,7 +284,7 @@ void ImGuiHandler::InternalRender()
 			ImDrawCmd const* cmd = list->CmdBuffer.Data + cmdIdx;
 			// TODO: User callback
 			gpu::TextureHandle texHandle;
-			texHandle.m_packed = uint32_t(cmd->TextureId);
+			texHandle.m_packed = uint32_t(uintptr_t(cmd->TextureId));
 			gpu::cmd::SetSRV(ctx, texHandle, 0, 0);
 			gpu::Rect rect;
 			rect.m_topLeft = kt::Vec2(cmd->ClipRect.x, cmd->ClipRect.y) - clipOffs;

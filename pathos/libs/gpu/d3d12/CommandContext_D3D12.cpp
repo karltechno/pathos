@@ -342,7 +342,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE AllocAndCopyFromDescriptorRing(CommandContext_D3D12*
 
 	D3D12_GPU_DESCRIPTOR_HANDLE tableDestGpu;
 	D3D12_CPU_DESCRIPTOR_HANDLE tableDestCpu;
-	UINT const destSize = gpu::c_cbvTableSize;
+	UINT const destSize = _srcHandles.Size();
 	_ctx->m_device->m_descriptorcbvsrvuavRingBuffer.Alloc(tableSize, tableDestCpu, tableDestGpu);
 	_ctx->m_device->m_d3dDev->CopyDescriptors(1, &tableDestCpu, &destSize, tableSize, _srcHandles.Data(), sourceSizes, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	return tableDestGpu;
@@ -486,10 +486,10 @@ void CommandContext_D3D12::ApplyGraphicsStateChanges()
 	if (!!(m_dirtyFlags & DirtyStateFlags::ScissorRect))
 	{
 		D3D12_RECT rect;
-		rect.bottom = m_state.m_scissorRect.m_bottomRight.y;
-		rect.right = m_state.m_scissorRect.m_bottomRight.x;
-		rect.top = m_state.m_scissorRect.m_topLeft.y;
-		rect.left = m_state.m_scissorRect.m_topLeft.x;
+		rect.bottom = LONG(m_state.m_scissorRect.m_bottomRight.y);
+		rect.right = LONG(m_state.m_scissorRect.m_bottomRight.x);
+		rect.top = LONG(m_state.m_scissorRect.m_topLeft.y);
+		rect.left = LONG(m_state.m_scissorRect.m_topLeft.x);
 		m_cmdList->RSSetScissorRects(1, &rect);
 	}
 

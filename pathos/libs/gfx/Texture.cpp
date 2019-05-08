@@ -161,10 +161,10 @@ bool Texture::LoadFromRGBA8(uint8_t* _texels, uint32_t _width, uint32_t _height,
 					texel = texel / len;
 				}
 
-				for (uint32_t i = 0; i < 3; ++i)
+				for (uint32_t compIdx = 0; compIdx < 3; ++compIdx)
 				{
 					// [-1,1] -> [0,1] -> [0, 255] -> round
-					begin[i] = uint8_t(kt::Clamp(((texel[i] + 1.0f) * 0.5f * 255.0f + 0.5f), 0.0f, 255.0f));
+					begin[compIdx] = uint8_t(kt::Clamp(((texel[compIdx] + 1.0f) * 0.5f * 255.0f + 0.5f), 0.0f, 255.0f));
 				}
 
 				begin += 4;

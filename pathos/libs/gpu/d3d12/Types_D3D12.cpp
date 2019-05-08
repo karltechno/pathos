@@ -105,6 +105,7 @@ D3D12_RESOURCE_STATES TranslateResourceState(ResourceState _state)
 		case ResourceState::ConstantBuffer:
 			return D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
 
+		default:
 		case ResourceState::Num_ResourceState: KT_UNREACHABLE;
 	}
 }
