@@ -31,7 +31,11 @@ private:
 	float m_yaw = 0.0f;
 	float m_pitch = 0.0f;
 
-	kt::Vec3 m_pos = kt::Vec3(0.0f);
+	float m_prevYawAnalog = 0.0f;
+	float m_prevPitchAnalog = 0.0f;
+	kt::Vec3 m_prevDisplacement = kt::Vec3(0.0f);
+
+	kt::Vec3 m_curPos = kt::Vec3(0.0f);
 };
 
 }

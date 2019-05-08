@@ -13,14 +13,41 @@
 namespace app
 {
 
-static core::CVar<float> s_padRotSpeed("cam.pad_speed_rot", "Gamepad rotation speed.", 4.0f, 0.1f, 25.0f);
-static core::CVar<float> s_padMoveSpeed("cam.pad_rot_sens", "Gamepad movement speed.", 4.0f, 0.1f, 25.0f);
+static core::CVar<float> s_padRotSpeed("cam.pad_rot_speed", "Gamepad rotation speed.", 4.0f, 0.1f, 25.0f);
+static core::CVar<float> s_padMoveSpeed("cam.pad_move_speed", "Gamepad movement speed.", 4.0f, 0.1f, 25.0f);
+static core::CVar<float> s_dampConstant("cam.damp_constant", "Dampening constant (lambda in exp decay).", 20.0f, 5.0f, 100.0f);
 
+
+static float Damp(float _a, float _b, float _constant, float _dt)
+{
+	// Apply an exponential decay.
+	return kt::Lerp(_a, _b, 1.0f - expf(-_constant * _dt));
+}
+
+static float ClampYaw(float _yaw)
+{
+	// Keep yaw in [0, PI) and (-PI, 0]
+	if (_yaw > kt::kPi)
+	{
+		return _yaw - 2.0f * kt::kPi;
+	}
+	else if (_yaw < -kt::kPi)
+	{
+		return _yaw + 2.0f * kt::kPi;
+	}
+	return _yaw;
+}
+
+static float ClampPitch(float _pitch)
+{
+	return kt::Clamp(_pitch, -kt::kPiOverTwo, kt::kPiOverTwo);
+}
 
 void CameraController::UpdateCamera(float _dt, gfx::Camera& _cam)
 {
 	input::GamepadState pad;
 	kt::Vec3 gamepadDisplacement = kt::Vec3(0.0f);
+
 	if (input::GetGamepadState(0, pad))
 	{
 		if (!!(pad.m_buttonsPressed & input::GamepadButton::RightShoulder))
@@ -39,37 +66,34 @@ void CameraController::UpdateCamera(float _dt, gfx::Camera& _cam)
 		gamepadDisplacement.y += pad.m_rightTrigger * s_padMoveSpeed;
 		gamepadDisplacement.y -= pad.m_leftTrigger * s_padMoveSpeed;
 
-		m_frameYaw += pad.m_rightThumb[0] * s_padRotSpeed;
-		m_framePitch -= pad.m_rightThumb[1] * s_padRotSpeed;
-
-
+		m_frameYaw += pad.m_rightThumb[0];
+		m_framePitch -= pad.m_rightThumb[1];
 	}
 
-	m_pitch += m_framePitch * _dt;
-	m_pitch = kt::Clamp(m_pitch, -kt::kPiOverTwo, kt::kPiOverTwo);
-
-	m_yaw += m_frameYaw * _dt;
 	
-	// Keep yaw in [0, PI] and [-PI, 0]
-	if (m_yaw >= kt::kPi)
-	{
-		m_yaw -= 2.0f * kt::kPi;
-	}
-	else if (m_yaw <= -kt::kPi)
-	{
-		m_yaw += 2.0f * kt::kPi;
-	}
+	kt::Vec3 totalDisplacement = (gamepadDisplacement + m_keyboardPerFrameDisplacement * s_padMoveSpeed) * _dt * 20.0f; // TODO: Multiplier
 
-	kt::Vec3 const frameDisplacement = (gamepadDisplacement + m_keyboardPerFrameDisplacement) * _dt * 20.0f; // TODO: Multiplier
+	m_prevYawAnalog = Damp(m_prevYawAnalog, m_frameYaw, s_dampConstant, _dt);
+	m_prevPitchAnalog = Damp(m_prevPitchAnalog, m_framePitch, s_dampConstant, _dt);
+
+	m_prevDisplacement.x = Damp(m_prevDisplacement.x, totalDisplacement.x, s_dampConstant, _dt);
+	m_prevDisplacement.y = Damp(m_prevDisplacement.y, totalDisplacement.y, s_dampConstant, _dt);
+	m_prevDisplacement.z = Damp(m_prevDisplacement.z, totalDisplacement.z, s_dampConstant, _dt);
+
+	m_yaw += m_prevYawAnalog * _dt * s_padRotSpeed;
+	m_pitch += m_prevPitchAnalog * _dt * s_padRotSpeed;
+
+	m_yaw = ClampYaw(m_yaw);
+	m_pitch = ClampPitch(m_pitch);
 
 	m_framePitch = 0.0f;
 	m_frameYaw = 0.0f;
 
 	kt::Mat4 camMtx =  kt::Mat4::RotY(m_yaw) * kt::Mat4::RotX(m_pitch);
 
-	m_pos += kt::MulDir(camMtx, frameDisplacement);
+	m_curPos += kt::MulDir(camMtx, m_prevDisplacement);
 
-	camMtx.SetPos(m_pos);
+	camMtx.SetPos(m_curPos);
 
 	_cam.SetCameraMatrix(camMtx);
 }
