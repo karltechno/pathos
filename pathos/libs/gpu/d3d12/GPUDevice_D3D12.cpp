@@ -82,7 +82,7 @@ static void CopyInitialTextureData(AllocatedResource_D3D12& _tex, void const* _d
 	uint32_t const numSubresources = d3dDesc.MipLevels;
 	g_device->m_d3dDev->GetCopyableFootprints(&d3dDesc, 0, numSubresources, 0, nullptr, nullptr, nullptr, &totalBytes);
 	KT_ASSERT(totalBytes);
-	ScratchAlloc_D3D12 uploadScratch = g_device->GetFrameResources()->m_uploadAllocator.Alloc(uint32_t(totalBytes), 16);
+	ScratchAlloc_D3D12 uploadScratch = g_device->GetFrameResources()->m_uploadAllocator.Alloc(uint32_t(totalBytes), D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
 
 	ID3D12CommandAllocator* allocator = g_device->m_commandQueueManager.GraphicsQueue().AcquireAllocator();
 	// TODO: Pool lists
