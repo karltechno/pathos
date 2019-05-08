@@ -29,16 +29,24 @@ namespace gpu
 Device_D3D12* g_device = nullptr;
 
 // For buffers that will only be in an upload heap.
-static uint32_t RequiredTransientAlignment(gpu::BufferDesc const& _desc)
+static uint32_t RequiredUploadHeapAlign(AllocatedResource_D3D12 const& _res)
 {
-	if (!!(_desc.m_flags & gpu::BufferFlags::Constant))
+	if (_res.IsBuffer())
 	{
-		return D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
+		if (!!(_res.m_bufferDesc.m_flags & gpu::BufferFlags::Constant))
+		{
+			return D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
+		}
+		else
+		{
+			return 16; // Anything better ?
+		}
 	}
 	else
 	{
-		return 16; // Anything better ?
+		return D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT;
 	}
+
 }
 
 static void CopyInitialResourceData(ID3D12Resource* _resource, void const* _data, uint32_t _size, D3D12_RESOURCE_STATES _beforeState, D3D12_RESOURCE_STATES _afterState)
@@ -853,7 +861,7 @@ ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _a
 
 void FrameUploadAllocator_D3D12::Alloc(AllocatedResource_D3D12& o_res)
 {
-	ScratchAlloc_D3D12 scratch = Alloc(o_res.m_bufferDesc.m_sizeInBytes, RequiredTransientAlignment(o_res.m_bufferDesc));
+	ScratchAlloc_D3D12 scratch = Alloc(o_res.m_bufferDesc.m_sizeInBytes, RequiredUploadHeapAlign(o_res));
 	o_res.m_mappedCpuData = scratch.m_cpuData;
 	o_res.m_res = scratch.m_res;
 	o_res.m_offset = scratch.m_offset;
