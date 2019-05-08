@@ -119,6 +119,10 @@ static void CreateGPUBuffer2D(Texture& _tex, uint32_t _x, uint32_t _y, gpu::Form
 	gpu::TextureDesc desc = gpu::TextureDesc::Desc2D(_x, _y, gpu::TextureUsageFlags::ShaderResource, _fmt);
 	desc.m_mipLevels = _numMips;
 	_tex.m_gpuTex = gpu::CreateTexture(desc, _tex.m_texels.Data(), _debugName);
+
+	// TODO: Make a flag or something if we ever want to keep data around on CPU. 
+	// Better yet, stream data straight into gpu memory.
+	_tex.m_texels.ClearAndFree();
 }
 
 void Texture::RegisterResourceLoader()
