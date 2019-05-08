@@ -166,11 +166,11 @@ static void CopyPrecomputedTangentSpace(Model* _model, cgltf_accessor* _normalAc
 
 	uint8_t const* normalSrc = AccessorStartOffset(_normalAccessor);
 	uint8_t const* tangentSrc = AccessorStartOffset(_tangentAccessor);
-	uint8_t const* tangentEnd = tangentSrc + _tangentAccessor->count;
+	uint8_t const* tangentSrcEnd = tangentSrc + _tangentAccessor->count * tangentStride;
 	uint32_t const tangentDestBegin = _model->m_tangentStream.Size();
 	_model->m_tangentStream.Resize(uint32_t(tangentDestBegin + _tangentAccessor->count));
 	Model::TangentSpace* destPtr = _model->m_tangentStream.Data() + tangentDestBegin;
-	while (tangentSrc != tangentEnd)
+	while (tangentSrc != tangentSrcEnd)
 	{
 		memcpy(&destPtr->m_norm, normalSrc, sizeof(kt::Vec3));
 		memcpy(&destPtr->m_tangentWithSign, tangentSrc, sizeof(kt::Vec4));
@@ -434,8 +434,15 @@ static void LoadMaterials(Model* _model, cgltf_data* _data, char const* _basePat
 
 			// TODO: Samplers
 			// TOdo: Transform
-			modelMat.m_diffuseTex = LoadTexture(_basePath, *pbrMetalRough.base_color_texture.texture, TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
-			modelMat.m_metallicRoughnessTex = LoadTexture(_basePath, *pbrMetalRough.metallic_roughness_texture.texture, TextureLoadFlags::GenMips);
+			if (pbrMetalRough.base_color_texture.texture)
+			{
+				modelMat.m_diffuseTex = LoadTexture(_basePath, *pbrMetalRough.base_color_texture.texture, TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
+			}
+
+			if (pbrMetalRough.metallic_roughness_texture.texture)
+			{
+				modelMat.m_metallicRoughnessTex = LoadTexture(_basePath, *pbrMetalRough.metallic_roughness_texture.texture, TextureLoadFlags::GenMips);
+			}
 			
 		}
 		else
