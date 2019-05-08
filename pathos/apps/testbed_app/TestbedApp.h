@@ -17,7 +17,7 @@ struct TestbedApp : app::GraphicsApp
 	void HandleInputEvent(input::Event const& _ev) override;
 
 
-	struct KT_ALIGNAS(16) DummyCbuffer
+	struct DummyCbuffer
 	{
 		kt::Vec4 myVec4;
 		kt::Mat4 mvp;
@@ -26,10 +26,12 @@ struct TestbedApp : app::GraphicsApp
 	DummyCbuffer m_myCbuffer;
 
 	gfx::Camera m_cam;
-	app::CameraController_Free m_camController;
+	app::CameraController m_camController;
 
+	gpu::PSOHandle m_csPso;
 	gpu::PSOHandle m_pso;
 	gpu::BufferHandle m_constantBuffer;
+	gpu::TextureHandle m_testTexture;
 
 	res::ResourceHandle<gfx::ShaderResource> m_pixelShader;
 	res::ResourceHandle<gfx::ShaderResource> m_vertexShader;
