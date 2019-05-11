@@ -3,194 +3,97 @@
 #include <core/CVar.h>
 #include <gpu/GPUDevice.h>
 
+#include <kt/Strings.h>
+#include <kt/Array.h>
+
 #include "imgui.h"
+#include "ImGuiHandler.h"
 
 namespace editor
 {
 
+struct WindowData
+{
+	kt::String64 m_name;
+	ImGuiWindowSetupFn m_setupFn;
+	ImGuiWindowUpdateFn m_updateFn;
+	bool m_open = false;
+};
+
+struct WindowGroup
+{
+	kt::String64 m_groupName;
+	kt::Array<ImGuiWindowHandle> m_handles;
+};
+
 struct Context
 {
+	ImGuiHandler m_imgui;
+
+	kt::VersionedHandlePool<WindowData> m_windowHandles;
+	kt::Array<WindowGroup> m_windowGroups;
+
 	bool m_openDemoWindow = false;
 	bool m_openAboutWindow = false;
 	bool m_openMetricsWindow = false;
-
-	bool m_openGpuResourceWindow = false;
-
-	gpu::BufferHandle m_selectedBuffer = gpu::BufferHandle{};
-	gpu::TextureHandle m_selectedTexture = gpu::TextureHandle{};
 } s_ctx;
 
 
-void Init()
+void Init(void* _nwh)
 {
-	
+	s_ctx.m_windowHandles.Init(kt::GetDefaultAllocator(), 256);
+	s_ctx.m_imgui.Init(_nwh);
 }
 
 void Shutdown()
 {
-
+	s_ctx.m_imgui.Shutdown();
 }
 
-static void DrawBufferTab()
+void DrawUserWindowBar()
 {
-	ImGui::Columns(2);
-
-	ImGui::BeginChild("Buffer List");
-
-	gpu::EnumResourceHandles([](gpu::ResourceHandle _handle)
+	for (WindowGroup& grp : s_ctx.m_windowGroups)
 	{
-		gpu::ResourceType type;
-		gpu::BufferDesc desc;
-		char const* bufferName;
-		gpu::GetResourceInfo(_handle, type, &desc, nullptr, &bufferName);
-
-		if (gpu::IsTexture(type))
+		if (ImGui::BeginMenu(grp.m_groupName.Data()))
 		{
-			return;
-		}
-
-		bool selected = _handle == s_ctx.m_selectedBuffer;
-		ImGui::PushID(int(_handle.m_packed));
-		if (ImGui::Selectable(bufferName, selected))
-		{
-			s_ctx.m_selectedBuffer = gpu::BufferHandle{ _handle };
-		}
-
-		ImGui::PopID();
-	});
-
-	ImGui::EndChild();
-
-	ImGui::NextColumn();
-
-	gpu::ResourceType type;
-	gpu::BufferDesc desc;
-	char const* bufferName;
-
-	if (!gpu::GetResourceInfo(s_ctx.m_selectedBuffer, type, &desc, nullptr, &bufferName))
-	{
-		ImGui::Text("No selected buffer.");
-		s_ctx.m_selectedBuffer = gpu::BufferHandle{};
-	}
-	else
-	{
-
-		ImGui::Text("Name: %s", bufferName);
-		ImGui::Text("Size: %u", desc.m_sizeInBytes);
-		ImGui::Text("Stride: %u", desc.m_strideInBytes);
-		ImGui::Text("Format: %s", gpu::GetFormatName(desc.m_format));
-		ImGui::Text("Flags: ");
-
-		bool didAny = false;
-
-		auto writeFlag = [&desc, &didAny](gpu::BufferFlags _flag, char const* _text)
-		{
-			if (!!(desc.m_flags & _flag))
+			for (kt::Array<ImGuiWindowHandle>::Iterator it = grp.m_handles.Begin();
+				 it != grp.m_handles.End();
+				 /* */)
 			{
-				ImGui::SameLine();
-				if (didAny) { ImGui::Text("|"); }
-				ImGui::SameLine();
-				ImGui::Text("%s", _text);
-				didAny = true;
+				if (WindowData* data = s_ctx.m_windowHandles.Lookup((*it).hndl))
+				{
+					ImGui::MenuItem(data->m_name.Data(), nullptr, &data->m_open);
+					++it;
+				}
+				else
+				{
+					// This was deleted.
+					it = grp.m_handles.EraseSwap(it);
+				}
 			}
-		};
-		writeFlag(gpu::BufferFlags::Constant, "Constant");
-		writeFlag(gpu::BufferFlags::Vertex, "Vertex");
-		writeFlag(gpu::BufferFlags::Index, "Index");
-		writeFlag(gpu::BufferFlags::UnorderedAccess, "UAV");
-		writeFlag(gpu::BufferFlags::ShaderResource, "SRV");
-		writeFlag(gpu::BufferFlags::Transient, "Transient");
-
+			ImGui::EndMenu();
+		}
 	}
-
-	ImGui::Columns();
 }
 
-void DrawTextureTab()
+void DrawActiveUserWindows(float _dt)
 {
-	ImGui::Columns(2);
-
-	ImGui::BeginChild("Texture List");
-
-	gpu::EnumResourceHandles([](gpu::ResourceHandle _handle)
+	for (WindowData& data : s_ctx.m_windowHandles)
 	{
-		gpu::ResourceType type;
-		gpu::TextureDesc desc;
-		char const* texName;
-		gpu::GetResourceInfo(_handle, type, nullptr, &desc, &texName);
-
-		if (!gpu::IsTexture(type))
+		if (data.m_open)
 		{
-			return;
-		}
+			if (data.m_setupFn)
+			{
+				data.m_setupFn();
+			}
 
-		bool selected = _handle == s_ctx.m_selectedTexture;
-		ImGui::PushID(int(_handle.m_packed));
-		if (ImGui::Selectable(texName, selected))
-		{
-			s_ctx.m_selectedTexture = gpu::TextureHandle{ _handle };
-		}
-
-		ImGui::PopID();
-	});
-
-	ImGui::EndChild();
-
-	ImGui::NextColumn();
-
-	gpu::ResourceType type;
-	gpu::TextureDesc desc;
-	char const* texName;
-
-	if (!gpu::GetResourceInfo(s_ctx.m_selectedTexture, type, nullptr, &desc, &texName))
-	{
-		ImGui::Text("No selected texture.");
-		s_ctx.m_selectedTexture = gpu::TextureHandle{};
-	}
-	else
-	{
-
-		ImGui::Text("Name: %s", texName);
-		ImGui::Text("Width: %u", desc.m_width);
-		ImGui::Text("Height: %u", desc.m_height);
-		ImGui::Text("Format: %s", gpu::GetFormatName(desc.m_format));
-
-		if (!!(desc.m_usageFlags & gpu::TextureUsageFlags::ShaderResource))
-		{
-			ImTextureID texId = ImTextureID(uintptr_t(s_ctx.m_selectedTexture.m_packed));
-			float const ratio = ImGui::GetContentRegionAvailWidth() / desc.m_width;
-			ImGui::Image(texId, ImVec2(desc.m_width * ratio, desc.m_height * ratio));
-		}
-		else
-		{
-			ImGui::TextWrapped("Texture can't be previewed (wasn't created with shader resource flag).");
+			if (ImGui::Begin(data.m_name.Data()))
+			{
+				data.m_updateFn(_dt);
+			}
+			ImGui::End();
 		}
 	}
-
-	ImGui::Columns();
-}
-
-void GpuResourceWindow()
-{
-	ImGui::SetNextWindowSize(ImVec2(400.0f, 400.0f), ImGuiCond_FirstUseEver);
-	ImGui::Begin("GPU Resources", &s_ctx.m_openGpuResourceWindow);
-
-	ImGui::BeginTabBar("Resource Types");
-
-	if (ImGui::BeginTabItem("Buffers"))
-	{
-		DrawBufferTab();
-		ImGui::EndTabItem();
-	}
-
-	if (ImGui::BeginTabItem("Textures"))
-	{
-		DrawTextureTab();
-		ImGui::EndTabItem();
-	}
-
-	ImGui::EndTabBar();
-	ImGui::End();
 }
 
 void DoEditorImGui(float _dt)
@@ -212,11 +115,6 @@ void DoEditorImGui(float _dt)
 		ImGui::ShowMetricsWindow(&s_ctx.m_openMetricsWindow);
 	}
 
-	if (s_ctx.m_openGpuResourceWindow)
-	{
-		GpuResourceWindow();
-	}
-
 	ImGui::BeginMainMenuBar();
 
 	if (ImGui::BeginMenu("*"))
@@ -234,20 +132,62 @@ void DoEditorImGui(float _dt)
 		ImGui::EndMenu();
 	}
 
-	if (ImGui::BeginMenu("gpu"))
-	{
-		ImGui::MenuItem("Resources", nullptr, &s_ctx.m_openGpuResourceWindow);
-		ImGui::EndMenu();
-	}
-
 	core::DrawImGuiCVarMenuItems();
+
+	DrawUserWindowBar();
+	DrawActiveUserWindows(_dt);
 
 	ImGui::EndMainMenuBar();
 }
 
-void Update(float _dt)
+void BeginFrame(float _dt)
+{
+	s_ctx.m_imgui.BeginFrame(_dt);
+}
+
+void Draw(float _dt)
 {
 	DoEditorImGui(_dt);
+}
+
+void EndFrame()
+{
+	s_ctx.m_imgui.EndFrame();
+}
+
+bool HandleInputEvent(input::Event const& _event)
+{
+	return s_ctx.m_imgui.HandleInputEvent(_event);
+}
+
+ImGuiWindowHandle RegisterWindow(char const* _group, char const* _name, ImGuiWindowUpdateFn&& _updateFn, ImGuiWindowSetupFn&& _setupFn)
+{
+	WindowData* data;
+	ImGuiWindowHandle handle = { s_ctx.m_windowHandles.Alloc(data) };
+	data->m_name = kt::String64(_name);
+	data->m_updateFn = std::move(_updateFn);
+	data->m_setupFn = std::move(_setupFn);
+
+	for (WindowGroup& grp : s_ctx.m_windowGroups)
+	{
+		if (kt::StrCmpI(grp.m_groupName.Data(), _group) == 0)
+		{
+			// todo: check for dupes
+			grp.m_handles.PushBack(handle);
+			return handle;
+		}
+	}
+
+	// new group
+	WindowGroup& grp = s_ctx.m_windowGroups.PushBack();
+	grp.m_groupName = kt::String64(_group);
+	grp.m_handles.PushBack(handle);
+	return handle;
+}
+
+void UnregisterWindow(ImGuiWindowHandle _hndl)
+{
+	s_ctx.m_windowHandles.Free(_hndl.hndl);
 }
 
 }

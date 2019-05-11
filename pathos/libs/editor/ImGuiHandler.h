@@ -9,7 +9,7 @@ namespace input
 struct Event;
 }
 
-namespace app
+namespace editor
 {
 
 class ImGuiHandler

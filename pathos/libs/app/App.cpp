@@ -14,8 +14,14 @@
 #include <kt/Logging.h>
 #include <kt/Vec3.h>
 #include <kt/Vec4.h>
-#include "kt/FilePath.h"
+#include <kt/FilePath.h>
+#include <kt/DebugAllocator.h>
 
+#define PATHOS_CHECK_LEAK (0)
+
+#if PATHOS_CHECK_LEAK
+static kt::LeakCheckAllocator s_leakCheckAllocator;
+#endif
 
 namespace app
 {
@@ -35,7 +41,7 @@ void GraphicsApp::SubsystemPreable(int _argc, char** _argv)
 
 	input::Init(m_window.nwh, [this](input::Event const& _ev)
 	{
-		if (!m_imguiHandler.HandleInputEvent(_ev))
+		if (!editor::HandleInputEvent(_ev))
 		{
 			HandleInputEvent(_ev);
 		}
@@ -44,8 +50,7 @@ void GraphicsApp::SubsystemPreable(int _argc, char** _argv)
 	gfx::RegisterResourceLoaders();
 
 	gpu::Init(m_window.nwh);
-	editor::Init();
-	m_imguiHandler.Init(m_window.nwh);
+	editor::Init(m_window.nwh);
 	core::InitCVars();
 
 	res::Init();
@@ -55,7 +60,6 @@ void GraphicsApp::SubsystemPostable()
 {
 	res::Shutdown();
 	core::ShutdownCVars();
-	m_imguiHandler.Shutdown();
 	editor::Shutdown();
 	gpu::Shutdown();
 	input::Shutdown();
@@ -69,7 +73,14 @@ GraphicsApp::GraphicsApp()
 
 void GraphicsApp::Go(int _argc, char** _argv)
 {
+#if PATHOS_CHECK_LEAK
+	s_leakCheckAllocator.SetAllocatorAndClear(kt::GetDefaultAllocator());
+	kt::SetDefaultAllocator(&s_leakCheckAllocator);
+#endif
+
 	SubsystemPreable(_argc, _argv);
+
+	m_gpuDebugWindow.Register();
 
 	// Setup derived.
 	Setup();
@@ -86,14 +97,12 @@ void GraphicsApp::Go(int _argc, char** _argv)
 
 		PumpMessageLoop(m_window);
 		input::Tick(dt);
-		m_imguiHandler.BeginFrame(dt);
-
-		editor::Update(dt);
-
+		editor::BeginFrame(dt);
 		// Update derived
 		Tick(dt);
-		
-		m_imguiHandler.EndFrame();
+
+		editor::Draw(dt);
+		editor::EndFrame();
 
 		kt::TimePoint const now = kt::TimePoint::Now();
 		tickTime = now - lastFrameStart;
@@ -103,6 +112,8 @@ void GraphicsApp::Go(int _argc, char** _argv)
 	} while (m_keepAlive);
 
 	Shutdown();
+
+	m_gpuDebugWindow.Unregister();
 
 	SubsystemPostable();
 }

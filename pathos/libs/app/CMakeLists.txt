@@ -2,8 +2,6 @@ set(APP_SOURCES
     "App.h"
     "App.cpp"
     "Window.h"
-    "ImGuiHandler.h"
-    "ImGuiHandler.cpp"
     "CameraController.h"
     "CameraController.cpp"
 )

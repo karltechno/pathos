@@ -16,7 +16,7 @@
 #include "imgui.h"
 
 
-namespace app
+namespace editor
 {
 
 void ImGuiHandler::Init(void* _nwh)
@@ -165,13 +165,14 @@ bool ImGuiHandler::HandleInputEvent(input::Event const& _event)
 			}
 		} break;
 
+		case input::Event::Type::MouseMove:
+		{
+			return io.WantCaptureMouse;
+		} break;
+
 		case input::Event::Type::MouseButtonDown:
 		case input::Event::Type::MouseButtonUp:
 		{
-			if (!io.WantCaptureMouse)
-			{
-				return false;
-			}
 			bool const isDown = _event.m_type == input::Event::Type::MouseButtonDown;
 
 			switch (_event.m_mouseButton)
@@ -196,6 +197,8 @@ bool ImGuiHandler::HandleInputEvent(input::Event const& _event)
 				{
 				} break;
 			}
+
+			return io.WantCaptureMouse;
 		} break;
 	
 		default:

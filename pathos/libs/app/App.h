@@ -1,6 +1,7 @@
 #pragma once
 #include "Window.h"
-#include "ImGuiHandler.h"
+
+#include <editor/GPUWindows.h>
 
 namespace input
 {
@@ -30,8 +31,9 @@ private:
 	void SubsystemPreable(int _argc, char** _argv);
 	void SubsystemPostable();
 
+	editor::GPUWindows m_gpuDebugWindow;
+
 	WindowHandle m_window;
-	ImGuiHandler m_imguiHandler;
 	bool m_keepAlive = true;
 };
 
