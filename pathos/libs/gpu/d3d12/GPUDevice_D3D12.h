@@ -96,8 +96,8 @@ struct AllocatedResource_D3D12 : AllocatedObjectBase_D3D12
 
 	// Descriptors
 	D3D12_CPU_DESCRIPTOR_HANDLE m_srv = {};
-	D3D12_CPU_DESCRIPTOR_HANDLE m_uav = {};
 	D3D12_CPU_DESCRIPTOR_HANDLE m_cbv = {};
+	D3D12_CPU_DESCRIPTOR_HANDLE m_uav = {};
 
 	D3D12_CPU_DESCRIPTOR_HANDLE m_rtv = {};
 	D3D12_CPU_DESCRIPTOR_HANDLE m_dsv = {};
@@ -262,6 +262,7 @@ struct Device_D3D12
 	uint32_t m_frameCounter = 0;
 
 	bool m_withDebugLayer = false;
+	bool m_vsync = false;
 
 private:
 	void InitDescriptorHeaps();

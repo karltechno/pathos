@@ -7,4 +7,6 @@ SamplerState g_samplerPointWrap     : register(s1);
 SamplerState g_samplerLinearClamp   : register(s2);
 SamplerState g_samplerLinearWrap    : register(s3);
 
+SamplerState g_samplerAnisoWrap     : register(s4);
+
 #endif // GLOBAL_SAMPLERS_INCLUDED

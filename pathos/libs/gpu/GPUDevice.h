@@ -31,6 +31,8 @@ gpu::TextureHandle CurrentBackbuffer();
 gpu::TextureHandle BackbufferDepth();
 gpu::Format	BackbufferFormat();
 
+void SetVsyncEnabled(bool _vsync);
+
 bool GetResourceInfo(gpu::ResourceHandle _handle, gpu::ResourceType& _type, gpu::BufferDesc* o_bufferDesc = nullptr, gpu::TextureDesc* o_textureDesc = nullptr, char const** o_name = nullptr);
 bool GetShaderInfo(gpu::ShaderHandle _handle, gpu::ShaderType& o_type, char const*& o_name);
 

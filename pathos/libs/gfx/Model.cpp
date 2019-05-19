@@ -100,59 +100,6 @@ static void CopyVertexStreamGeneric(cgltf_accessor* _accessor, uint8_t* _dest, s
 	}
 }
 
-static uint32_t GetMeshVertexIndex(Model* _model, int _face, int _vert)
-{
-	KT_ASSERT(uint32_t(_face * 3) < _model->m_indicies.Size());
-	return _model->m_indicies[uint32_t(_face * 3 + _vert)];
-}
-
-static void FillMikktspaceCallbacks(Model* _model, SMikkTSpaceInterface& o_interface, SMikkTSpaceContext& o_context)
-{
-	o_interface.m_getNumFaces = [](SMikkTSpaceContext const* _ctx) -> int
-	{
-		return (int)((Model*)_ctx->m_pUserData)->m_indicies.Size() / 3;
-	};
-
-	o_interface.m_getNumVerticesOfFace = [](SMikkTSpaceContext const* _ctx, int const _faceIdx) -> int
-	{
-		KT_UNUSED2(_ctx, _faceIdx);
-		return 3;
-	};
-
-	o_interface.m_getPosition = [](SMikkTSpaceContext const* _ctx, float* _outPos, int const _face, int const _vert) -> void
-	{
-		Model* model = (Model*)_ctx->m_pUserData;
-		memcpy(_outPos, &model->m_posStream[GetMeshVertexIndex(model, _face, _vert)], sizeof(kt::Vec3));
-	};
-
-	o_interface.m_getNormal = [](SMikkTSpaceContext const* _ctx, float* _outNorm, int const _face, int const _vert) -> void
-	{
-		Model* model = (Model*)_ctx->m_pUserData;
-		memcpy(_outNorm, &model->m_tangentStream[GetMeshVertexIndex(model, _face, _vert)].m_norm, sizeof(kt::Vec3));
-	};
-
-	o_interface.m_getTexCoord = [](SMikkTSpaceContext const* _ctx, float* _texCoord, int const _face, int const _vert) -> void
-	{
-		Model* model = (Model*)_ctx->m_pUserData;
-		memcpy(_texCoord, &model->m_uvStream0[GetMeshVertexIndex(model, _face, _vert)], sizeof(kt::Vec2));
-	};
-
-	o_interface.m_setTSpaceBasic = [](SMikkTSpaceContext const* _ctx, float const* _tangent, float const _sign, int const _face, int const _vert)
-	{
-		Model* model = (Model*)_ctx->m_pUserData;
-		uint32_t const vertIdx = GetMeshVertexIndex(model, _face, _vert);
-		kt::Vec4& destTangent = model->m_tangentStream[vertIdx].m_tangentWithSign;
-		destTangent.x = _tangent[0];
-		destTangent.y = _tangent[1];
-		destTangent.z = _tangent[2];
-		destTangent.w = -_sign;
-	};
-
-	o_interface.m_setTSpace = nullptr;
-	o_context.m_pInterface = &o_interface;
-	o_context.m_pUserData = _model;
-}
-
 static void CopyPrecomputedTangentSpace(Model* _model, cgltf_accessor* _normalAccessor, cgltf_accessor* _tangentAccessor)
 {
 	// TODO: Stop mixing assert/log. Assert should log.
@@ -178,6 +125,79 @@ static void CopyPrecomputedTangentSpace(Model* _model, cgltf_accessor* _normalAc
 		normalSrc += normalStride;
 		tangentSrc += tangentStride;
 	}
+}
+
+static void GenMikktTangents(Model* _model, uint32_t _idxBegin, uint32_t _idxEnd)
+{
+	SMikkTSpaceContext mikktCtx{};
+	SMikkTSpaceInterface mikktInterface{};
+
+	struct GenTangData
+	{
+		uint32_t GetMeshVertIdx(int _face, int _vert) const
+		{
+			uint32_t const faceIdx = (uint32_t)_face + m_faceBegin;
+			KT_ASSERT(uint32_t(faceIdx * 3) < m_model->m_indicies.Size());
+			return m_model->m_indicies[uint32_t(faceIdx * 3 + _vert)];
+		}
+
+		Model* m_model;
+		uint32_t m_faceBegin;
+		uint32_t m_numFaces;
+	};
+
+	mikktInterface.m_getNumFaces = [](SMikkTSpaceContext const* _ctx) -> int
+	{
+		GenTangData* data = (GenTangData*)_ctx->m_pUserData;
+		return (int)(data->m_numFaces);
+	};
+
+	mikktInterface.m_getNumVerticesOfFace = [](SMikkTSpaceContext const* _ctx, int const _faceIdx) -> int
+	{
+		KT_UNUSED2(_ctx, _faceIdx);
+		return 3;
+	};
+
+	mikktInterface.m_getPosition = [](SMikkTSpaceContext const* _ctx, float* _outPos, int const _face, int const _vert) -> void
+	{
+		GenTangData* data = (GenTangData*)_ctx->m_pUserData;
+		memcpy(_outPos, &data->m_model->m_posStream[data->GetMeshVertIdx(_face, _vert)], sizeof(kt::Vec3));
+	};
+
+	mikktInterface.m_getNormal = [](SMikkTSpaceContext const* _ctx, float* _outNorm, int const _face, int const _vert) -> void
+	{
+		GenTangData* data = (GenTangData*)_ctx->m_pUserData;
+		memcpy(_outNorm, &data->m_model->m_tangentStream[data->GetMeshVertIdx(_face, _vert)].m_norm, sizeof(kt::Vec3));
+	};
+
+	mikktInterface.m_getTexCoord = [](SMikkTSpaceContext const* _ctx, float* _texCoord, int const _face, int const _vert) -> void
+	{
+		GenTangData* data = (GenTangData*)_ctx->m_pUserData;
+		memcpy(_texCoord, &data->m_model->m_uvStream0[data->GetMeshVertIdx(_face, _vert)], sizeof(kt::Vec2));
+	};
+
+	mikktInterface.m_setTSpaceBasic = [](SMikkTSpaceContext const* _ctx, float const* _tangent, float const _sign, int const _face, int const _vert)
+	{
+		GenTangData* data = (GenTangData*)_ctx->m_pUserData;
+		uint32_t const vertIdx = data->GetMeshVertIdx(_face, _vert);
+		kt::Vec4& destTangent = data->m_model->m_tangentStream[vertIdx].m_tangentWithSign;
+		destTangent.x = _tangent[0];
+		destTangent.y = _tangent[1];
+		destTangent.z = _tangent[2];
+		destTangent.w = -_sign;
+	};
+
+	GenTangData tangData;
+	tangData.m_model = _model;
+	tangData.m_numFaces = (_idxEnd - _idxBegin) / 3;
+	tangData.m_faceBegin = _idxBegin / 3;
+
+	mikktInterface.m_setTSpace = nullptr;
+	mikktCtx.m_pInterface = &mikktInterface;
+	mikktCtx.m_pUserData = &tangData;
+
+	tbool const mikktOk = genTangSpaceDefault(&mikktCtx);
+	KT_ASSERT(mikktOk);
 }
 
 static bool LoadMeshes(Model* _model, cgltf_data* _data)
@@ -275,7 +295,8 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 						if (attrib.index != 0)
 						{
 							KT_LOG_ERROR("We don't support more than one uv stream at the moment.");
-							return false;
+							//return false;
+							continue;
 						}
 						uint32_t const uvStart = _model->m_uvStream0.Size();
 						_model->m_uvStream0.Resize(uint32_t(uvStart + attrib.data->count));
@@ -330,16 +351,8 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 				uint32_t const normOffs = offsetof(Model::TangentSpace, m_norm);
 				CopyVertexStreamGeneric(normalAttr->data, (uint8_t*)(_model->m_tangentStream.Data() + normalStart) + normOffs, sizeof(kt::Vec3), sizeof(Model::TangentSpace));
 
-				SMikkTSpaceContext mikktCtx{};
-				SMikkTSpaceInterface mikktInterface{};
-				FillMikktspaceCallbacks(_model, mikktInterface, mikktCtx);
 				// TODO: We should really be recreating index buffer with new tangents (as verticies sharing faces will have different tangent space)
-				tbool const mikktOk = genTangSpaceDefault(&mikktCtx);
-				if (mikktOk == 0)
-				{
-					KT_LOG_ERROR("Failed to generate tangent space for mesh %s", gltfMesh.name ? gltfMesh.name : "Unnamed");
-					return false;
-				}
+				GenMikktTangents(_model, oldIndexSize, _model->m_indicies.Size());
 			}
 		}
 	}
@@ -432,11 +445,20 @@ static void LoadMaterials(Model* _model, cgltf_data* _data, char const* _basePat
 			modelMat.m_rougnessFactor = pbrMetalRough.roughness_factor;
 			modelMat.m_metallicFactor = pbrMetalRough.metallic_factor;
 
+			modelMat.m_alphaCutoff = gltfMat.alpha_cutoff;
+
+			switch (gltfMat.alpha_mode)
+			{
+				case cgltf_alpha_mode_blend:	modelMat.m_alphaMode = Material::AlphaMode::Transparent; break;
+				case cgltf_alpha_mode_mask:		modelMat.m_alphaMode = Material::AlphaMode::Mask; break;
+				case cgltf_alpha_mode_opaque:	modelMat.m_alphaMode = Material::AlphaMode::Opaque; break;
+			}
+
 			// TODO: Samplers
 			// TOdo: Transform
 			if (pbrMetalRough.base_color_texture.texture)
 			{
-				modelMat.m_diffuseTex = LoadTexture(_basePath, *pbrMetalRough.base_color_texture.texture, TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
+				modelMat.m_albedoTex = LoadTexture(_basePath, *pbrMetalRough.base_color_texture.texture, TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
 			}
 
 			if (pbrMetalRough.metallic_roughness_texture.texture)

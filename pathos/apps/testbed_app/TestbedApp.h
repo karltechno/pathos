@@ -1,12 +1,21 @@
 #pragma once
 #include <app/App.h>
 #include <app/CameraController.h>
+
 #include <gpu/Types.h>
+#include <gpu/HandleRef.h>
+
 #include <gfx/Camera.h>
 #include <gfx/Resources.h>
+#include <gfx/Model.h>
+
+#include <gfx/Scene.h>
 #include <res/Resource.h>
 #include <res/ResourceSystem.h>
-#include <gfx/Model.h>
+
+#include <editor/Windows/GFXSceneWindow.h>
+#include <shaderlib/LightingStructs.h>
+
 
 struct TestbedApp : app::GraphicsApp
 {
@@ -16,7 +25,6 @@ struct TestbedApp : app::GraphicsApp
 
 	void HandleInputEvent(input::Event const& _ev) override;
 
-
 	struct DummyCbuffer
 	{
 		kt::Vec4 myVec4;
@@ -25,13 +33,19 @@ struct TestbedApp : app::GraphicsApp
 
 	DummyCbuffer m_myCbuffer;
 
+	shaderlib::TestLightCBuffer m_testLightCbufferData;
+	gpu::BufferRef m_lightCbuffer;
+
+	editor::GFXSceneWindow m_sceneWindow;
+	gfx::Scene m_scene;
+
 	gfx::Camera m_cam;
 	app::CameraController m_camController;
 
-	gpu::PSOHandle m_csPso;
-	gpu::PSOHandle m_pso;
-	gpu::BufferHandle m_constantBuffer;
-	gpu::TextureHandle m_testTexture;
+	gpu::PSORef m_csPso;
+	gpu::PSORef m_pso;
+	gpu::BufferRef m_constantBuffer;
+	gpu::TextureRef m_testTexture;
 
 	res::ResourceHandle<gfx::ShaderResource> m_pixelShader;
 	res::ResourceHandle<gfx::ShaderResource> m_vertexShader;

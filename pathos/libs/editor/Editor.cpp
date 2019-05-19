@@ -2,6 +2,7 @@
 
 #include <core/CVar.h>
 #include <gpu/GPUDevice.h>
+#include <input/InputTypes.h>
 
 #include <kt/Strings.h>
 #include <kt/Array.h>
@@ -36,6 +37,9 @@ struct Context
 	bool m_openDemoWindow = false;
 	bool m_openAboutWindow = false;
 	bool m_openMetricsWindow = false;
+
+	// todo: hide and snap to middle.
+	bool m_lockKbMouse = false;
 } s_ctx;
 
 
@@ -87,7 +91,7 @@ void DrawActiveUserWindows(float _dt)
 				data.m_setupFn();
 			}
 
-			if (ImGui::Begin(data.m_name.Data()))
+			if (ImGui::Begin(data.m_name.Data(), &data.m_open))
 			{
 				data.m_updateFn(_dt);
 			}
@@ -157,7 +161,32 @@ void EndFrame()
 
 bool HandleInputEvent(input::Event const& _event)
 {
-	return s_ctx.m_imgui.HandleInputEvent(_event);
+	if (s_ctx.m_imgui.HandleInputEvent(_event))
+	{
+		return true;
+	}
+
+	switch (_event.m_type)
+	{
+		case input::Event::Type::KeyDown:
+		{
+			if (_event.m_key == input::Key::Tilde)
+			{
+				s_ctx.m_lockKbMouse = !s_ctx.m_lockKbMouse;
+				return true;
+			}
+
+			return s_ctx.m_lockKbMouse;
+		} break;
+
+		case input::Event::Type::KeyUp:
+		case input::Event::Type::MouseMove:
+		{
+			return s_ctx.m_lockKbMouse;
+		} break;
+	}
+
+	return false;
 }
 
 ImGuiWindowHandle RegisterWindow(char const* _group, char const* _name, ImGuiWindowUpdateFn&& _updateFn, ImGuiWindowSetupFn&& _setupFn)

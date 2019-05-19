@@ -48,7 +48,7 @@ static void Serialize(kt::ISerializer* _s, Texture& _tex)
 	kt::Serialize(_s, _tex.m_height);
 	kt::Serialize(_s, _tex.m_numMips);
 	kt::Serialize(_s, _tex.m_mipOffsets);
-	kt::Serialize(_s, _tex.m_texels);
+	kt::Serialize(_s, _tex.m_texelData);
 }
 
 static bool LoadFromCache(Texture& o_tex, TextureLoadFlags _loadFlags, char const* _texPath)
@@ -118,11 +118,7 @@ static void CreateGPUBuffer2D(Texture& _tex, uint32_t _x, uint32_t _y, gpu::Form
 {
 	gpu::TextureDesc desc = gpu::TextureDesc::Desc2D(_x, _y, gpu::TextureUsageFlags::ShaderResource, _fmt);
 	desc.m_mipLevels = _numMips;
-	_tex.m_gpuTex = gpu::CreateTexture(desc, _tex.m_texels.Data(), _debugName);
-
-	// TODO: Make a flag or something if we ever want to keep data around on CPU. 
-	// Better yet, stream data straight into gpu memory.
-	_tex.m_texels.ClearAndFree();
+	_tex.m_gpuTex = gpu::CreateTexture(desc, _tex.m_texelData.Data(), _debugName);
 }
 
 void Texture::RegisterResourceLoader()
@@ -151,7 +147,6 @@ bool Texture::LoadFromFile(char const* _fileName, TextureLoadFlags _flags)
 
 	// TODO: Hack - should use a gpu friendly compressed format, or reconstruct z for normal map, etc.
 	int constexpr c_requiredComp = 4;
-
 	int x, y, comp;
 
 	uint8_t* srcTexels = stbi_load(_fileName, &x, &y, &comp, c_requiredComp);
@@ -167,7 +162,11 @@ bool Texture::LoadFromFile(char const* _fileName, TextureLoadFlags _flags)
 		WriteToCache(*this, _flags, _fileName);
 		return true;
 	}
-
+	
+	// TODO: Make a flag or something if we ever want to keep data around on CPU. 
+	// Better yet, stream data straight into gpu memory.
+	m_texelData.ClearAndFree();
+	
 	return false;
 }
 
@@ -179,8 +178,8 @@ bool Texture::LoadFromRGBA8(uint8_t* _texels, uint32_t _width, uint32_t _height,
 
 	if (!(_flags & TextureLoadFlags::GenMips))
 	{
-		m_texels.Resize(_width * _height * c_bytesPerPixel);
-		memcpy(m_texels.Data(), _texels, m_texels.Size());
+		m_texelData.Resize(_width * _height * c_bytesPerPixel);
+		memcpy(m_texelData.Data(), _texels, m_texelData.Size());
 		CreateGPUBuffer2D(*this, _width, _height, gpuFmt, 1, _debugName);
 		return true;
 	}
@@ -212,28 +211,28 @@ bool Texture::LoadFromRGBA8(uint8_t* _texels, uint32_t _width, uint32_t _height,
 		curDataOffs += mips[i].x * mips[i].y * c_bytesPerPixel;
 	}
 
-	m_texels.Resize(curDataOffs);
+	m_texelData.Resize(curDataOffs);
 
-	memcpy(m_texels.Data(), _texels, c_bytesPerPixel * mips[0].x * mips[0].y);
+	memcpy(m_texelData.Data(), _texels, c_bytesPerPixel * mips[0].x * mips[0].y);
 
 	for (uint32_t i = 1; i < mipChainLen; ++i)
 	{
 		if (!!(_flags & TextureLoadFlags::sRGB))
 		{
 			uint32_t const stbir_flags = !!(_flags & TextureLoadFlags::Premultiplied) ? STBIR_FLAG_ALPHA_PREMULTIPLIED : 0;
-			stbir_resize_uint8_srgb(m_texels.Data() + mips[i - 1].dataOffs, int(mips[i - 1].x), int(mips[i - 1].y), 0,
-									m_texels.Data() + mips[i].dataOffs, int(mips[i].x), int(mips[i].y), 0, c_bytesPerPixel, 3, stbir_flags);
+			stbir_resize_uint8_srgb(m_texelData.Data() + mips[i - 1].dataOffs, int(mips[i - 1].x), int(mips[i - 1].y), 0,
+									m_texelData.Data() + mips[i].dataOffs, int(mips[i].x), int(mips[i].y), 0, c_bytesPerPixel, 3, stbir_flags);
 		}
 		else
 		{
-			stbir_resize_uint8(m_texels.Data() + mips[i - 1].dataOffs, int(mips[i - 1].x), int(mips[i - 1].y), 0,
-							   m_texels.Data() + mips[i].dataOffs, int(mips[i].x), int(mips[i].y), 0, c_bytesPerPixel);
+			stbir_resize_uint8(m_texelData.Data() + mips[i - 1].dataOffs, int(mips[i - 1].x), int(mips[i - 1].y), 0,
+							   m_texelData.Data() + mips[i].dataOffs, int(mips[i].x), int(mips[i].y), 0, c_bytesPerPixel);
 		}
 
 		if (!!(_flags & TextureLoadFlags::Normalize))
 		{
-			uint8_t* begin = m_texels.Data() + mips[i].dataOffs;
-			uint8_t* end = m_texels.Data() + mips[i].dataOffs + mips[i].x * mips[i].y * c_bytesPerPixel;
+			uint8_t* begin = m_texelData.Data() + mips[i].dataOffs;
+			uint8_t* end = m_texelData.Data() + mips[i].dataOffs + mips[i].x * mips[i].y * c_bytesPerPixel;
 			while (begin != end)
 			{
 				// Ideally this is done in a higher precision than 8 bit, and before compression - but this is just a sandbox :)
@@ -285,7 +284,11 @@ bool Texture::LoadFromMemory(uint8_t* _textureData, uint32_t const _size, Textur
 	}
 	KT_SCOPE_EXIT(stbi_image_free(texels));
 
-	return LoadFromRGBA8(_textureData, uint32_t(x), uint32_t(y), _flags, _debugName);
+	bool const ret = LoadFromRGBA8(_textureData, uint32_t(x), uint32_t(y), _flags, _debugName);
+	// TODO: Make a flag or something if we ever want to keep data around on CPU. 
+	// Better yet, stream data straight into gpu memory.
+	m_texelData.ClearAndFree();
+	return ret;
 }
 
 }

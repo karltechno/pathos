@@ -217,6 +217,10 @@ bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* 
 
 		UpdateViews();
 	}
+	else
+	{
+		KT_ASSERT(!(m_bufferDesc.m_flags & BufferFlags::Dynamic) && "Can't be transient and dynamic!");
+	}
 
 	AllocatedObjectBase_D3D12::Init(_debugName);
 
@@ -562,11 +566,11 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 
 	d3dDesc.Width = _desc.m_width;
 	d3dDesc.Height = _desc.m_height;
-	d3dDesc.DepthOrArraySize = UINT16(_desc.m_depth);
 	d3dDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	d3dDesc.MipLevels = UINT16(_desc.m_mipLevels);
 	d3dDesc.Format = ToDXGIFormat(_desc.m_format);
 	d3dDesc.Alignment = 0;
+	d3dDesc.DepthOrArraySize = UINT16(_desc.m_arraySlices);
 
 	// TODO: MSAA
 	d3dDesc.SampleDesc.Count = 1;
@@ -593,6 +597,14 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 			d3dDesc.Width = _desc.m_width;
 			d3dDesc.Height = _desc.m_height;
 			d3dDesc.DepthOrArraySize = UINT16(_desc.m_depth);
+		} break;
+
+		case ResourceType::TextureCube:
+		{
+			d3dDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+			d3dDesc.Width = _desc.m_width;
+			d3dDesc.Height = _desc.m_height;
+			d3dDesc.DepthOrArraySize = UINT16(6 * _desc.m_arraySlices);
 		} break;
 
 		default:
@@ -907,7 +919,7 @@ static void CreateRootSigs(ID3D12Device* _dev, ID3D12RootSignature*& o_gfx, ID3D
 	D3D12_ROOT_SIGNATURE_DESC graphicsDesc = {};
 	D3D12_ROOT_SIGNATURE_DESC computeDesc = {};
 
-	D3D12_STATIC_SAMPLER_DESC samplers[4] = {};
+	D3D12_STATIC_SAMPLER_DESC samplers[5] = {};
 
 	graphicsDesc.pStaticSamplers = samplers;
 	graphicsDesc.NumStaticSamplers = KT_ARRAY_COUNT(samplers);
@@ -969,6 +981,19 @@ static void CreateRootSigs(ID3D12Device* _dev, ID3D12RootSignature*& o_gfx, ID3D
 		samplers[3].RegisterSpace = 0;
 		samplers[3].ShaderRegister = 3;
 		samplers[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	}
+
+	// Linear aniso
+	{
+		samplers[4].AddressU = samplers[4].AddressV = samplers[4].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		samplers[4].Filter = D3D12_FILTER_ANISOTROPIC;
+		samplers[4].MaxAnisotropy = 8;
+		samplers[4].MinLOD = 0.0f;
+		samplers[4].MaxLOD = D3D12_FLOAT32_MAX;
+		samplers[4].MipLODBias = 0.0f;
+		samplers[4].RegisterSpace = 0;
+		samplers[4].ShaderRegister = 4;
+		samplers[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 	}
 
 	D3D12_ROOT_PARAMETER tables[3 * c_numShaderSpaces];
@@ -1439,6 +1464,11 @@ gpu::PSOHandle CreateComputePSO(gpu::ShaderHandle _shader)
 	}
 }
 
+void SetVsyncEnabled(bool _vsync)
+{
+	g_device->m_vsync = _vsync;
+}
+
 void ReloadShader(ShaderHandle _handle, ShaderBytecode const& _newBytecode)
 {
 	AllocatedShader_D3D12* shader = g_device->m_shaderHandles.Lookup(_handle);
@@ -1615,7 +1645,7 @@ void Device_D3D12::EndFrame()
 	m_descriptorcbvsrvuavRingBuffer.OnEndOfFrame(m_cpuFrameIdx);
 
 	// Todo: vsync
-	D3D_CHECK(m_swapChain->Present(0, 0));
+	D3D_CHECK(m_swapChain->Present(m_vsync ? 1 : 0, 0));
 	m_frameFences[m_cpuFrameIdx] = m_commandQueueManager.GraphicsQueue().InsertAndIncrementFence();
 	m_cpuFrameIdx = m_swapChain->GetCurrentBackBufferIndex();
 	++m_frameCounter;
@@ -1640,7 +1670,6 @@ gpu::Format BackbufferFormat()
 
 void Device_D3D12::FrameResources::ClearOnBeginFrame()
 {
-	// Deferred deletions
 	for (ID3D12DeviceChild* obj: m_deferredDeletions)
 	{
 		KT_ASSERT(obj);

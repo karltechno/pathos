@@ -68,6 +68,21 @@ gpu::TextureDesc TextureDesc::Desc3D(uint32_t _width, uint32_t _height, uint32_t
 	return desc;
 }
 
+gpu::TextureDesc TextureDesc::DescCube(uint32_t _width, uint32_t _height, TextureUsageFlags _flags, Format _fmt)
+{
+	gpu::TextureDesc desc{};
+	desc.m_arraySlices = 1;
+	desc.m_format = _fmt;
+	desc.m_usageFlags = _flags;
+	desc.m_format = _fmt;
+
+	desc.m_height = _height;
+	desc.m_width = _width;
+
+	desc.m_type = ResourceType::TextureCube;
+	return desc;
+}
+
 bool IsDepthFormat(Format _fmt)
 {
 	switch (_fmt)

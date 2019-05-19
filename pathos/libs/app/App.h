@@ -1,7 +1,6 @@
 #pragma once
 #include "Window.h"
-
-#include <editor/GPUWindows.h>
+#include <editor/Windows/GPUWindows.h>
 
 namespace input
 {
@@ -16,7 +15,7 @@ struct GraphicsApp
 	GraphicsApp();
 	virtual ~GraphicsApp() {}
 	
-	void Go(int _argc, char** _argv);
+	void Go(WindowHandle _wh, int _argc, char** _argv);
 	void RequestShutdown();
 
 	virtual void Setup() = 0;
@@ -42,6 +41,12 @@ private:
 #define PATHOS_APP_IMPLEMENT_MAIN(MY_APP_TYPE) \
 int main(int _argc, char** _argv) \
 { \
-	MY_APP_TYPE myApp; \
-	myApp.Go(_argc, _argv); \
+	app::WindowHandle PATHOS_INIT(int _argc, char** _argv);\
+	void PATHOS_SHUTDOWN();\
+	app::WindowHandle const wh = PATHOS_INIT(_argc, _argv);\
+	{\
+		MY_APP_TYPE myApp; \
+		myApp.Go(wh, _argc, _argv); \
+	}\
+	PATHOS_SHUTDOWN();\
 }

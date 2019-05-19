@@ -1,5 +1,7 @@
 #include "shaderlib/ShaderOutput.hlsli"
 #include "shaderlib/GlobalSamplers.hlsli"
+#include "shaderlib/LightingCommon.hlsli"
+#include "shaderlib/LightingStructs.h"
 
 struct TestData
 {
@@ -7,14 +9,15 @@ struct TestData
     float4x4 mvp;
 };
 
-Texture2D<float4> g_diffuse : register(t0, space0);
+Texture2D<float4> g_albedo : register(t0, space0);
 Texture2D<float4> g_normal : register(t1, space0);
 Texture2D<float4> g_metalRoughness : register(t2, space0);
 Texture2D<float4> g_ao : register(t3, space0);
 
 ConstantBuffer<TestData> g_data : register(b0, space0);
+ConstantBuffer<TestLightCBuffer> g_lights : register(b1, space0);
 
-static const float3 SKY_DIR = normalize(float3(0.1, 0.5, 1.0));
+static const float3 SKY_DIR = normalize(float3(0.1, 0.5, 0.2));
 
 float4 main(in VSOut_ObjectFull _input) : SV_Target
 {
@@ -22,8 +25,36 @@ float4 main(in VSOut_ObjectFull _input) : SV_Target
     float3 tangent = normalize(_input.tangentSign.xyz);
     float3x3 tbn = float3x3(tangent, ReconstructBitangent(normal, _input.tangentSign), normal);
 
-    float3 normalTex = normalize(g_normal.Sample(g_samplerLinearWrap, _input.uv).xyz * 2.0 - 1.0);
+    float3 color = float3(0.0, 0.0, 0.0);
+
+    float3 view = normalize(g_lights.camPos - _input.posWS); 
+
+    float3 metalRough = g_metalRoughness.Sample(g_samplerAnisoWrap, _input.uv).xyz;
+    float3 normalTex = normalize(g_normal.Sample(g_samplerAnisoWrap, _input.uv).xyz * 2.0 - 1.0);
     normalTex = mul(normalTex, tbn);
-    float3 diffuse = g_diffuse.Sample(g_samplerLinearWrap, _input.uv).xyz;
-    return float4(max(dot(SKY_DIR, normalTex), 0.5) * diffuse, 1.0);
+    normalTex = normal;
+
+    SurfaceData surf;
+    surf.norm = normalTex;
+    surf.posWS = _input.posWS;
+    surf.roughness = max(metalRough.g, 0.01);
+    surf.metalness = metalRough.b;
+    surf.baseCol = g_albedo.Sample(g_samplerAnisoWrap, _input.uv).xyz;
+    surf.f0 = float3(0.04, 0.04, 0.04);
+    surf.f0 = lerp(surf.f0, surf.baseCol, surf.metalness);
+    surf.baseCol -= surf.metalness * surf.baseCol;
+    
+    for(uint i = 0; i < g_lights.numLights; ++i)
+    {
+        LightData light = g_lights.lights[i];
+        color += ComputeLighting_Point(light, surf, view);
+    }
+
+    color += ComputeLighting_Common(g_lights.sunColor, surf, -g_lights.sunDir, view);
+    
+    color += float3(0.2, 0.2, 0.2) * surf.baseCol;
+    
+
+    // float3 ao = g_ao.Sample(g_samplerLinearWrap, _input.uv).xyz;
+    return float4(color, 1.0);
 }   

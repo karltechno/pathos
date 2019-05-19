@@ -223,6 +223,22 @@ void UpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, void const*
 	EndUpdateTransientBuffer(_ctx, _handle);
 }
 
+void UpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem, uint32_t _size, uint32_t _destOffset)
+{
+	// Should this be done on the copy queue and synchronized?
+
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Copy);
+
+	KT_ASSERT(_ctx->m_device->m_resourceHandles.IsValid(_handle));
+	AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
+	KT_ASSERT(!!(res->m_bufferDesc.m_flags & BufferFlags::Dynamic));
+	ScratchAlloc_D3D12 scratch = _ctx->m_device->GetFrameResources()->m_uploadAllocator.Alloc(_size, 16);
+	memcpy(scratch.m_cpuData, _mem, _size);
+	_ctx->m_cmdList->CopyBufferRegion(res->m_res, _destOffset, scratch.m_res, scratch.m_offset, _size);
+}
+
+
+
 kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _size)
 {
 	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Copy);

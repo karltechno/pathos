@@ -71,7 +71,7 @@ void CameraController::UpdateCamera(float _dt, gfx::Camera& _cam)
 	}
 
 	
-	kt::Vec3 totalDisplacement = (gamepadDisplacement + m_keyboardPerFrameDisplacement * s_padMoveSpeed) * _dt * 20.0f; // TODO: Multiplier
+	kt::Vec3 const totalDisplacement = (gamepadDisplacement + m_keyboardPerFrameDisplacement * s_padMoveSpeed);
 
 	m_prevYawAnalog = Damp(m_prevYawAnalog, m_frameYaw, s_dampConstant, _dt);
 	m_prevPitchAnalog = Damp(m_prevPitchAnalog, m_framePitch, s_dampConstant, _dt);
@@ -91,7 +91,7 @@ void CameraController::UpdateCamera(float _dt, gfx::Camera& _cam)
 
 	kt::Mat4 camMtx =  kt::Mat4::RotY(m_yaw) * kt::Mat4::RotX(m_pitch);
 
-	m_curPos += kt::MulDir(camMtx, m_prevDisplacement);
+	m_curPos += kt::MulDir(camMtx, m_prevDisplacement) * _dt;
 
 	camMtx.SetPos(m_curPos);
 

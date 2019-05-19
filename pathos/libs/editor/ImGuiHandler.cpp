@@ -163,6 +163,8 @@ bool ImGuiHandler::HandleInputEvent(input::Event const& _event)
 
 				default: {} break;
 			}
+
+			return io.WantCaptureKeyboard;
 		} break;
 
 		case input::Event::Type::MouseMove:

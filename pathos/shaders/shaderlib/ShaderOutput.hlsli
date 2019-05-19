@@ -25,6 +25,7 @@ struct VSIn_ObjectFull
 struct VSOut_ObjectFull
 {
     float4 pos : SV_Position;
+    float3 posWS : POSITION;
     float2 uv : TEXCOORD;
     float3 normal : NORMAL;
     float4 tangentSign : TANGENT;

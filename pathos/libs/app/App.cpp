@@ -23,21 +23,46 @@
 static kt::LeakCheckAllocator s_leakCheckAllocator;
 #endif
 
+app::WindowHandle PATHOS_INIT(int _argc, char** _argv)
+{
+	KT_UNUSED2(_argc, _argv);
+
+#if PATHOS_CHECK_LEAK
+	s_leakCheckAllocator.SetAllocatorAndClear(kt::GetDefaultAllocator());
+	kt::SetDefaultAllocator(&s_leakCheckAllocator);
+#endif
+
+	app::WindowInitParams params{};
+	params.m_width = 1280;
+	params.m_height = 720;
+	params.m_name = "Pathos";
+	params.m_windowed = true;
+
+	app::WindowHandle const wh = CreatePlatformWindow(params);
+
+	gfx::RegisterResourceLoaders();
+
+	gpu::Init(wh.nwh);
+	editor::Init(wh.nwh);
+	core::InitCVars();
+	res::Init();
+	return wh;
+}
+
+void PATHOS_SHUTDOWN()
+{
+	res::Shutdown();
+	core::ShutdownCVars();
+	editor::Shutdown();
+	gpu::Shutdown();
+}
+
 namespace app
 {
 
 void GraphicsApp::SubsystemPreable(int _argc, char** _argv)
 {
 	KT_UNUSED2(_argc, _argv);
-
-	WindowInitParams params{};
-	params.m_app = this;
-	params.m_width = 1280;
-	params.m_height = 720;
-	params.m_name = "Pathos";
-	params.m_windowed = true;
-
-	m_window = CreatePlatformWindow(params);
 
 	input::Init(m_window.nwh, [this](input::Event const& _ev)
 	{
@@ -46,22 +71,10 @@ void GraphicsApp::SubsystemPreable(int _argc, char** _argv)
 			HandleInputEvent(_ev);
 		}
 	});
-
-	gfx::RegisterResourceLoaders();
-
-	gpu::Init(m_window.nwh);
-	editor::Init(m_window.nwh);
-	core::InitCVars();
-
-	res::Init();
 }
 
 void GraphicsApp::SubsystemPostable()
 {
-	res::Shutdown();
-	core::ShutdownCVars();
-	editor::Shutdown();
-	gpu::Shutdown();
 	input::Shutdown();
 }
 
@@ -71,12 +84,10 @@ GraphicsApp::GraphicsApp()
 }
 
 
-void GraphicsApp::Go(int _argc, char** _argv)
+void GraphicsApp::Go(WindowHandle _wh, int _argc, char** _argv)
 {
-#if PATHOS_CHECK_LEAK
-	s_leakCheckAllocator.SetAllocatorAndClear(kt::GetDefaultAllocator());
-	kt::SetDefaultAllocator(&s_leakCheckAllocator);
-#endif
+	m_window = _wh;
+	app::SetWindowApp(m_window, this);
 
 	SubsystemPreable(_argc, _argv);
 

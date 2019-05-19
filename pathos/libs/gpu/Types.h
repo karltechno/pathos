@@ -159,6 +159,7 @@ enum class BufferFlags : uint32_t
 	Constant			= 0x10,	// Constant buffer
 
 	Transient			= 0x20,	// Transient resource, must be updated the same frame it is used.
+	Dynamic				= 0x40 // Dynamic resource, can be updated.
 };
 
 KT_ENUM_CLASS_FLAG_OPERATORS(BufferFlags);
@@ -181,6 +182,7 @@ struct TextureDesc
 	static TextureDesc Desc1D(uint32_t _width, TextureUsageFlags _flags, Format _fmt);
 	static TextureDesc Desc2D(uint32_t _width, uint32_t _height, TextureUsageFlags _flags, Format _fmt);
 	static TextureDesc Desc3D(uint32_t _width, uint32_t _height, uint32_t _depth, TextureUsageFlags _flags, Format _fmt);
+	static TextureDesc DescCube(uint32_t _width, uint32_t _height, TextureUsageFlags _flags, Format _fmt);
 
 	ResourceType m_type = ResourceType::Num_ResourceType;
 	Format m_format = Format::Num_Format;

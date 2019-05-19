@@ -9,6 +9,8 @@ set(GFX_SOURCES
     "Model.cpp"
     "Texture.h"
     "Texture.cpp"
+    "Scene.h"
+    "Scene.cpp"
 )
 
 add_pathos_lib(gfx "${GFX_SOURCES}")

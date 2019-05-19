@@ -53,6 +53,9 @@ void Dispatch(Context* _ctx, uint32_t _x, uint32_t _y, uint32_t _z);
 void ClearRenderTarget(Context* _ctx, gpu::TextureHandle _handle, float const _color[4]);
 void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth); // TODO: Stencil
 
+// Merge functions?
+void UpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem, uint32_t _size, uint32_t _destOffset = 0);
+
 void UpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem, uint32_t _size);
 kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _size);
 void EndUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle);

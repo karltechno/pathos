@@ -1,7 +1,7 @@
 #pragma once
 #include <gpu/Types.h>
 
-#include "Editor.h"
+#include <editor/Editor.h>
 
 namespace editor
 {

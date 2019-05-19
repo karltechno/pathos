@@ -28,8 +28,10 @@ static LRESULT CALLBACK App_WindowProc(HWND _hwnd, UINT _msg, WPARAM _wparam, LP
 
 		case WM_CLOSE:
 		{
-			app::GraphicsApp* app = (app::GraphicsApp*)::GetWindowLongPtrA(_hwnd, GWLP_USERDATA);
-			app->RequestShutdown();
+			if (app::GraphicsApp* app = (app::GraphicsApp*)::GetWindowLongPtrA(_hwnd, GWLP_USERDATA))
+			{
+				app->RequestShutdown();
+			}
 		} break;
 	}
 
@@ -79,12 +81,17 @@ WindowHandle CreatePlatformWindow(WindowInitParams const& _params)
 		nullptr,
 		nullptr,
 		hinst,
-		_params.m_app
+		nullptr
 	);
 
 	::SetWindowText(hwnd, _params.m_name);
 	::ShowWindow(hwnd, SW_SHOW);
 	return WindowHandle{ (void*)hwnd };
+}
+
+void SetWindowApp(WindowHandle _wh, GraphicsApp* _app)
+{
+	::SetWindowLongPtr(HWND(_wh.nwh), GWLP_USERDATA, LONG_PTR(_app));
 }
 
 void PumpMessageLoop(WindowHandle _hndl)
