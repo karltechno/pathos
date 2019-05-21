@@ -114,11 +114,11 @@ static void WriteToCache(Texture& o_tex, TextureLoadFlags _loadFlags, char const
 	Serialize(&serializer, o_tex);
 }
 
-static void CreateGPUBuffer2D(Texture& _tex, uint32_t _x, uint32_t _y, gpu::Format _fmt, uint32_t _numMips, char const* _debugName = nullptr)
+static void CreateGPUBuffer2D(Texture& _tex, void const* _texelData, uint32_t _x, uint32_t _y, gpu::Format _fmt, uint32_t _numMips, char const* _debugName = nullptr)
 {
 	gpu::TextureDesc desc = gpu::TextureDesc::Desc2D(_x, _y, gpu::TextureUsageFlags::ShaderResource, _fmt);
 	desc.m_mipLevels = _numMips;
-	_tex.m_gpuTex = gpu::CreateTexture(desc, _tex.m_texelData.Data(), _debugName);
+	_tex.m_gpuTex = gpu::CreateTexture(desc, _texelData, _debugName);
 }
 
 void Texture::RegisterResourceLoader()
@@ -141,13 +141,29 @@ bool Texture::LoadFromFile(char const* _fileName, TextureLoadFlags _flags)
 	if (LoadFromCache(*this, _flags, _fileName))
 	{
 		gpu::Format const gpuFmt = !!(_flags & TextureLoadFlags::sRGB) ? gpu::Format::R8G8B8A8_UNorm_SRGB : gpu::Format::R8G8B8A8_UNorm;
-		CreateGPUBuffer2D(*this, m_width, m_height, gpuFmt, m_numMips, _fileName);
+		CreateGPUBuffer2D(*this, m_texelData.Data(), m_width, m_height, gpuFmt, m_numMips, _fileName);
 		return true;
 	}
 
 	// TODO: Hack - should use a gpu friendly compressed format, or reconstruct z for normal map, etc.
 	int constexpr c_requiredComp = 4;
 	int x, y, comp;
+
+	if (stbi_is_hdr(_fileName))
+	{
+		float* hdrPtr = stbi_loadf(_fileName, &x, &y, &comp, c_requiredComp);
+		if (!hdrPtr)
+		{
+			KT_LOG_ERROR("Failed to load hdr image: %s - %s", _fileName, stbi_failure_reason());
+			return false;
+		}
+		KT_SCOPE_EXIT(stbi_image_free(hdrPtr));
+		m_width = uint32_t(x);
+		m_height = uint32_t(y);
+		m_numMips = 1;
+		CreateGPUBuffer2D(*this, hdrPtr, m_width, m_height, gpu::Format::R32G32B32A32_Float, 1, _fileName);
+		return true;
+	}
 
 	uint8_t* srcTexels = stbi_load(_fileName, &x, &y, &comp, c_requiredComp);
 	if (!srcTexels)
@@ -178,9 +194,10 @@ bool Texture::LoadFromRGBA8(uint8_t* _texels, uint32_t _width, uint32_t _height,
 
 	if (!(_flags & TextureLoadFlags::GenMips))
 	{
-		m_texelData.Resize(_width * _height * c_bytesPerPixel);
-		memcpy(m_texelData.Data(), _texels, m_texelData.Size());
-		CreateGPUBuffer2D(*this, _width, _height, gpuFmt, 1, _debugName);
+		m_width = _width;
+		m_height = _height;
+		m_numMips = 1;
+		CreateGPUBuffer2D(*this, _texels, _width, _height, gpuFmt, 1, _debugName);
 		return true;
 	}
 
@@ -268,7 +285,7 @@ bool Texture::LoadFromRGBA8(uint8_t* _texels, uint32_t _width, uint32_t _height,
 		}
 	}
 
-	CreateGPUBuffer2D(*this, _width, _height, gpuFmt, mipChainLen, _debugName);
+	CreateGPUBuffer2D(*this, m_texelData.Data(), _width, _height, gpuFmt, mipChainLen, _debugName);
 	return true;
 }
 
