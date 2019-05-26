@@ -61,6 +61,7 @@ void ImGuiHandler::Init(void* _nwh)
 
 	psoDesc.m_vs = res::GetData(vertexShader)->m_shader;
 	psoDesc.m_ps = res::GetData(pixelShader)->m_shader;
+	psoDesc.m_rasterDesc.m_frontFaceCCW = 0;
 
 	psoDesc.m_vertexLayout
 		.Add(gpu::Format::R32G32_Float, gpu::VertexSemantic::Position)
@@ -260,7 +261,7 @@ void ImGuiHandler::InternalRender()
 	gpu::cmd::EndUpdateTransientBuffer(ctx, m_idxBuf);
 	gpu::cmd::EndUpdateTransientBuffer(ctx, m_vtxBuf);
 
-	kt::Mat4 const mtx = kt::Mat4::OrthographicLH_ZO(drawData->DisplayPos.x,
+	kt::Mat4 const mtx = kt::Mat4::OrthographicRH_ZO(drawData->DisplayPos.x,
 												  drawData->DisplayPos.x + drawData->DisplaySize.x,
 												  drawData->DisplayPos.y + drawData->DisplaySize.y,
 												  drawData->DisplayPos.y,
