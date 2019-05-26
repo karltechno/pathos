@@ -51,7 +51,7 @@ struct CVar : CVarBase
 {
 	CVar()
 	{
-		static_assert(false, "TweakVar should be specialized.");
+		static_assert(false, "CVar should be specialized.");
 	}
 };
 
