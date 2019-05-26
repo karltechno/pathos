@@ -12,6 +12,7 @@
 
 namespace app
 {
+static core::CVar<float> s_mouseSpeed("cam.mouse_speed", "Mouse rotation speed.", 0.1f, 0.001f, 10.0f);
 
 static core::CVar<float> s_padRotSpeed("cam.pad_rot_speed", "Gamepad rotation speed.", 4.0f, 0.1f, 25.0f);
 static core::CVar<float> s_padMoveSpeed("cam.pad_move_speed", "Gamepad movement speed.", 4.0f, 0.1f, 25.0f);
@@ -40,7 +41,7 @@ static float ClampYaw(float _yaw)
 
 static float ClampPitch(float _pitch)
 {
-	return kt::Clamp(_pitch, -kt::kPiOverTwo, kt::kPiOverTwo);
+	return kt::Clamp(_pitch, -(kt::kPiOverTwo - 0.01f), (kt::kPiOverTwo - 0.01f));
 }
 
 void CameraController::UpdateCamera(float _dt, gfx::Camera& _cam)
@@ -70,8 +71,10 @@ void CameraController::UpdateCamera(float _dt, gfx::Camera& _cam)
 		m_framePitch -= pad.m_rightThumb[1];
 	}
 
+	m_framePitch = -m_framePitch;
 	
-	kt::Vec3 const totalDisplacement = (gamepadDisplacement + m_keyboardPerFrameDisplacement * s_padMoveSpeed);
+	kt::Vec3 totalDisplacement = (gamepadDisplacement + m_keyboardPerFrameDisplacement * s_padMoveSpeed);
+	totalDisplacement.z = -totalDisplacement.z;
 
 	m_prevYawAnalog = Damp(m_prevYawAnalog, m_frameYaw, s_dampConstant, _dt);
 	m_prevPitchAnalog = Damp(m_prevPitchAnalog, m_framePitch, s_dampConstant, _dt);
@@ -89,10 +92,14 @@ void CameraController::UpdateCamera(float _dt, gfx::Camera& _cam)
 	m_framePitch = 0.0f;
 	m_frameYaw = 0.0f;
 
-	kt::Mat4 camMtx =  kt::Mat4::RotY(m_yaw) * kt::Mat4::RotX(m_pitch);
+	kt::Vec3 front;
+	front.x = cosf(m_yaw) * cosf(m_pitch);
+	front.y = sinf(m_pitch);
+	front.z = sinf(m_yaw) * cosf(m_pitch);
+
+	kt::Mat4 camMtx = kt::InverseOrthoAffine(kt::Mat4::LookAtRH(m_curPos, front, kt::Vec3(0.0f, 1.0f, 0.0f)));
 
 	m_curPos += kt::MulDir(camMtx, m_prevDisplacement) * _dt;
-
 	camMtx.SetPos(m_curPos);
 
 	_cam.SetCameraMatrix(camMtx);
@@ -124,8 +131,8 @@ bool CameraController::DefaultInputHandler(input::Event const& _event)
 
 		case input::Event::Type::MouseMove:
 		{
-			m_frameYaw += float(_event.m_mouseMove.deltaX);
-			m_framePitch += float(_event.m_mouseMove.deltaY);
+			m_frameYaw += float(_event.m_mouseMove.deltaX) * s_mouseSpeed;
+			m_framePitch += float(_event.m_mouseMove.deltaY) * s_mouseSpeed;
 		} break;
 
 		default:

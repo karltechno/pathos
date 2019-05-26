@@ -10,12 +10,12 @@ void Camera::SetProjection(ProjectionParams const& _params)
 	m_projParams = _params;
 	if (_params.m_type == ProjType::Orthographic)
 	{
-		kt::Mat4::OrthographicLH_ZO(-_params.m_viewWidth * 0.5f, _params.m_viewWidth * 0.5f, _params.m_viewHeight * 0.5f, -_params.m_viewHeight * 0.5f, _params.m_nearPlane, _params.m_farPlane);
+		m_viewToClip = kt::Mat4::OrthographicRH_ZO(-_params.m_viewWidth * 0.5f, _params.m_viewWidth * 0.5f, _params.m_viewHeight * 0.5f, -_params.m_viewHeight * 0.5f, _params.m_nearPlane, _params.m_farPlane);
 	}
 	else
 	{
 		KT_ASSERT(_params.m_type == ProjType::Perspective);
-		m_viewToClip = kt::Mat4::PerspectiveLH_ZO(_params.m_fov, _params.m_viewWidth / _params.m_viewHeight, _params.m_nearPlane, _params.m_farPlane);
+		m_viewToClip = kt::Mat4::PerspectiveRH_ZO(_params.m_fov, _params.m_viewWidth / _params.m_viewHeight, _params.m_nearPlane, _params.m_farPlane);
 		UpdateCachedWorldToClip();
 	}
 }
