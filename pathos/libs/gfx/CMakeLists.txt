@@ -7,6 +7,8 @@ set(GFX_SOURCES
     "Resources.cpp"
     "Model.h"
     "Model.cpp"
+    "Primitive.h"
+    "Primitive.cpp"
     "Texture.h"
     "Texture.cpp"
     "Scene.h"

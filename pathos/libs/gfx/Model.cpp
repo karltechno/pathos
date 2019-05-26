@@ -116,7 +116,7 @@ static void CopyPrecomputedTangentSpace(Model* _model, cgltf_accessor* _normalAc
 	uint8_t const* tangentSrcEnd = tangentSrc + _tangentAccessor->count * tangentStride;
 	uint32_t const tangentDestBegin = _model->m_tangentStream.Size();
 	_model->m_tangentStream.Resize(uint32_t(tangentDestBegin + _tangentAccessor->count));
-	Model::TangentSpace* destPtr = _model->m_tangentStream.Data() + tangentDestBegin;
+	TangentSpace* destPtr = _model->m_tangentStream.Data() + tangentDestBegin;
 	while (tangentSrc != tangentSrcEnd)
 	{
 		memcpy(&destPtr->m_norm, normalSrc, sizeof(kt::Vec3));
@@ -348,8 +348,8 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 				uint32_t const normalStart = _model->m_tangentStream.Size();
 				_model->m_tangentStream.Resize(uint32_t(normalStart + normalAttr->data->count));
 				KT_ASSERT(normalAttr->data->type == cgltf_type_vec3);
-				uint32_t const normOffs = offsetof(Model::TangentSpace, m_norm);
-				CopyVertexStreamGeneric(normalAttr->data, (uint8_t*)(_model->m_tangentStream.Data() + normalStart) + normOffs, sizeof(kt::Vec3), sizeof(Model::TangentSpace));
+				uint32_t const normOffs = offsetof(TangentSpace, m_norm);
+				CopyVertexStreamGeneric(normalAttr->data, (uint8_t*)(_model->m_tangentStream.Data() + normalStart) + normOffs, sizeof(kt::Vec3), sizeof(TangentSpace));
 
 				// TODO: We should really be recreating index buffer with new tangents (as verticies sharing faces will have different tangent space)
 				GenMikktTangents(_model, oldIndexSize, _model->m_indicies.Size());
@@ -401,8 +401,8 @@ static void CreateGPUBuffers(Model* _model, kt::StringView _debugNamePrefix = kt
 	gpu::BufferDesc tangentDesc;
 	tangentDesc.m_flags = gpu::BufferFlags::Vertex;
 	tangentDesc.m_format = gpu::Format::Unknown;
-	tangentDesc.m_sizeInBytes = _model->m_tangentStream.Size() * sizeof(Model::TangentSpace);
-	tangentDesc.m_strideInBytes = sizeof(Model::TangentSpace);
+	tangentDesc.m_sizeInBytes = _model->m_tangentStream.Size() * sizeof(TangentSpace);
+	tangentDesc.m_strideInBytes = sizeof(TangentSpace);
 	_model->m_tangentGpuBuf = gpu::CreateBuffer(tangentDesc, _model->m_tangentStream.Data(), name.Data());
 }
 

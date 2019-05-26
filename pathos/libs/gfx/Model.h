@@ -16,7 +16,12 @@ struct IReader;
 
 namespace gfx
 {
-
+// Todo: move to another file?
+struct TangentSpace
+{
+	kt::Vec3 m_norm;
+	kt::Vec4 m_tangentWithSign;
+};
 
 
 struct Model
@@ -37,12 +42,6 @@ struct Model
 	static gpu::VertexLayout FullVertexLayout();
 
 	bool LoadFromGLTF(char const* _path);
-
-	struct TangentSpace
-	{
-		kt::Vec3 m_norm;
-		kt::Vec4 m_tangentWithSign;
-	};
 
 
 	kt::Array<kt::Vec3> m_posStream;
