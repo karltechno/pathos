@@ -94,7 +94,9 @@ void GraphicsApp::Go(WindowHandle _wh, int _argc, char** _argv)
 	m_gpuDebugWindow.Register();
 
 	// Setup derived.
+	gpu::BeginFrame();
 	Setup();
+	gpu::EndFrame();
 
 	kt::TimePoint lastFrameStart = kt::TimePoint::Now();
 	kt::Duration tickTime = kt::Duration::FromMilliseconds(16.0);
