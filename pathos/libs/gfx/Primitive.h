@@ -11,8 +11,9 @@ struct PrimitiveBuffers
 {
 	enum class GenFlags : uint32_t
 	{
-		GenUVs,
-		GenTangentSpace,
+		PosOnly = 0,
+		GenUVs = 0x1,
+		GenTangentSpace = 0x2,
 		Default = GenUVs | GenTangentSpace
 	};
 
@@ -22,7 +23,7 @@ struct PrimitiveBuffers
 	kt::Array<kt::Vec2> m_uvs;
 	kt::Array<gfx::TangentSpace> m_tangents;
 
-	GenFlags m_genFlags;
+	GenFlags m_genFlags = GenFlags::Default;
 };
 
 KT_ENUM_CLASS_FLAG_OPERATORS(PrimitiveBuffers::GenFlags);
