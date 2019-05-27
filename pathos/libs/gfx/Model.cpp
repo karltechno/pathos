@@ -2,6 +2,8 @@
 
 #include <kt/Logging.h>
 #include <kt/FilePath.h>
+#include <kt/Serialization.h>
+#include <kt/File.h>
 
 #include <res/ResourceSystem.h>
 
@@ -38,6 +40,8 @@ struct ModelLoader : res::IResourceHandler
 		delete (Model*)_ptr;
 	}
 };
+
+
 
 void Model::RegisterResourceLoader()
 {
@@ -406,25 +410,29 @@ static void CreateGPUBuffers(Model* _model, kt::StringView _debugNamePrefix = kt
 	_model->m_tangentGpuBuf = gpu::CreateBuffer(tangentDesc, _model->m_tangentStream.Data(), name.Data());
 }
 
-
-static TextureResHandle LoadTexture(char const* _gltfPath, cgltf_texture const& _gltfTex, TextureLoadFlags _loadFlags)
+static TextureResHandle LoadTexture(char const* _path, TextureLoadFlags _loadFlags)
 {
-	kt::FilePath path(_gltfPath);
-	path = path.GetPath();
-
-	path.Append(_gltfTex.image->uri);
-
 	Texture* tex;
 	bool wasAlreadycreated;
-	TextureResHandle handle = res::CreateEmptyResource(path.Data(), tex, wasAlreadycreated);
+	TextureResHandle handle = res::CreateEmptyResource(_path, tex, wasAlreadycreated);
 	if (wasAlreadycreated)
 	{
 		return handle;
 	}
 
-	tex->LoadFromFile(path.Data(), _loadFlags);
+	tex->LoadFromFile(_path, _loadFlags);
 	// TODO: Delete resource if this fails.
 	return handle;
+}
+
+static TextureResHandle LoadTexture(char const* _gltfPath, char const* _imageUri, TextureLoadFlags _loadFlags)
+{
+	kt::FilePath path(_gltfPath);
+	path = path.GetPath();
+
+	path.Append(_imageUri);
+
+	return LoadTexture(path.Data(), _loadFlags);
 }
 
 static void LoadMaterials(Model* _model, cgltf_data* _data, char const* _basePath)
@@ -458,12 +466,12 @@ static void LoadMaterials(Model* _model, cgltf_data* _data, char const* _basePat
 			// TOdo: Transform
 			if (pbrMetalRough.base_color_texture.texture)
 			{
-				modelMat.m_albedoTex = LoadTexture(_basePath, *pbrMetalRough.base_color_texture.texture, TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
+				modelMat.m_albedoTex = LoadTexture(_basePath, pbrMetalRough.base_color_texture.texture->image->uri, TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
 			}
 
 			if (pbrMetalRough.metallic_roughness_texture.texture)
 			{
-				modelMat.m_metallicRoughnessTex = LoadTexture(_basePath, *pbrMetalRough.metallic_roughness_texture.texture, TextureLoadFlags::GenMips);
+				modelMat.m_metallicRoughnessTex = LoadTexture(_basePath, pbrMetalRough.metallic_roughness_texture.texture->image->uri, TextureLoadFlags::GenMips);
 			}
 			
 		}
@@ -474,18 +482,118 @@ static void LoadMaterials(Model* _model, cgltf_data* _data, char const* _basePat
 
 		if (gltfMat.normal_texture.texture)
 		{
-			modelMat.m_normalTex = LoadTexture(_basePath, *gltfMat.normal_texture.texture, TextureLoadFlags::Normalize | TextureLoadFlags::GenMips);
+			modelMat.m_normalTex = LoadTexture(_basePath, gltfMat.normal_texture.texture->image->uri, TextureLoadFlags::Normalize | TextureLoadFlags::GenMips);
 		}
 
 		if (gltfMat.occlusion_texture.texture)
 		{
-			modelMat.m_occlusionTex = LoadTexture(_basePath, *gltfMat.occlusion_texture.texture, TextureLoadFlags::GenMips);
+			modelMat.m_occlusionTex = LoadTexture(_basePath, gltfMat.occlusion_texture.texture->image->uri, TextureLoadFlags::GenMips);
 		}
 	}
 }
 
+void SerializeMaterial(kt::ISerializer* _s, Material& _mat)
+{
+	kt::Serialize(_s, _mat.m_baseColour);
+	kt::Serialize(_s, _mat.m_rougnessFactor);
+	kt::Serialize(_s, _mat.m_metallicFactor);
+	kt::Serialize(_s, _mat.m_alphaCutoff);
+	kt::Serialize(_s, _mat.m_alphaMode);
+
+	auto serializeTex = [&_s, &_mat](TextureResHandle& _handle, TextureLoadFlags _flags)
+	{
+		bool ok;
+		kt::StaticString<512> pathSerialize;
+
+		if (_s->SerializeMode() == kt::ISerializer::Mode::Read)
+		{
+			kt::Serialize(_s, ok);
+			if (ok)
+			{
+				kt::Serialize(_s, pathSerialize);
+				_handle = LoadTexture(pathSerialize.Data(), _flags);
+			}
+		}
+		else
+		{
+			char const* path = res::GetResourcePath(_handle);
+			ok = path != nullptr;
+			kt::Serialize(_s, ok);
+			if(ok)
+			{
+				pathSerialize = path;
+				kt::Serialize(_s, pathSerialize);
+			}
+		}
+
+	};
+	
+	serializeTex(_mat.m_albedoTex, TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
+	serializeTex(_mat.m_normalTex, TextureLoadFlags::Normalize | TextureLoadFlags::GenMips);
+	serializeTex(_mat.m_metallicRoughnessTex, TextureLoadFlags::GenMips);
+	serializeTex(_mat.m_occlusionTex, TextureLoadFlags::GenMips);
+}
+
+constexpr uint32_t c_modelCacheVersion = 1;
+
+bool SerializeModelCache(char const* _initialPath, kt::ISerializer* _s, Model& _model)
+{
+	uint32_t cache = c_modelCacheVersion;
+	kt::Serialize(_s, cache);
+	if (_s->SerializeMode() == kt::ISerializer::Mode::Read)
+	{
+		if (cache != c_modelCacheVersion)
+		{
+			KT_LOG_INFO("Model cache for %s invalid (current version is %u - file is %u).", _initialPath, c_modelCacheVersion, cache);
+			return false;
+		}
+	}
+
+	kt::Serialize(_s, _model.m_posStream);
+	kt::Serialize(_s, _model.m_tangentStream);
+	kt::Serialize(_s, _model.m_uvStream0);
+	kt::Serialize(_s, _model.m_colourStream);
+	kt::Serialize(_s, _model.m_indicies);
+	kt::Serialize(_s, _model.m_meshes);
+	kt::Serialize(_s, _model.m_materials, SerializeMaterial);
+	
+	return true;
+}
+
+
 bool Model::LoadFromGLTF(char const* _path)
 {
+	// try cache
+	kt::String512 cachePath(_path);
+	cachePath.Append(".cache");
+
+	bool hasReadFromCache = false;
+
+	//kt::ISerializer
+	if (kt::FileExists(cachePath.Data()))
+	{
+		FILE* file = fopen(cachePath.Data(), "rb");
+		
+		if (!file)
+		{
+			KT_LOG_ERROR("Failed to open cache file %s", cachePath.Data());
+		}
+		else
+		{
+			KT_SCOPE_EXIT(fclose(file));
+			kt::FileReader reader(file);
+			kt::ISerializer serializer(&reader, c_modelCacheVersion);
+			hasReadFromCache = SerializeModelCache(_path, &serializer, *this);
+		}
+	}
+
+	if (hasReadFromCache)
+	{
+		kt::FilePath const path(_path);
+		CreateGPUBuffers(this, path.GetFileNameNoExt());
+		return true;
+	}
+
 	cgltf_data* data;
 	cgltf_options opts{};
 	cgltf_result res = cgltf_parse_file(&opts, _path, &data);
@@ -515,6 +623,25 @@ bool Model::LoadFromGLTF(char const* _path)
 	}
 
 	CreateGPUBuffers(this, path.GetFileNameNoExt());
+
+	// Serialize to cache
+
+	{
+		FILE* file = fopen(cachePath.Data(), "wb");
+
+		if (!file)
+		{
+			KT_LOG_ERROR("Failed to open cache file %s", cachePath.Data());
+		}
+		else
+		{
+			KT_SCOPE_EXIT(fclose(file));
+			kt::FileWriter writer(file);
+			kt::ISerializer serializer(&writer, c_modelCacheVersion);
+			SerializeModelCache(_path, &serializer, *this);
+		}
+	}
+
 	return true;
 }
 
