@@ -717,7 +717,7 @@ void SetViewport(Context* _ctx, gpu::Rect const& _rect, float _minDepth, float _
 		|| _ctx->m_state.m_viewport.m_rect.m_bottomRight != _rect.m_bottomRight
 		|| _ctx->m_state.m_viewport.m_rect.m_topLeft != _rect.m_topLeft)
 	{
-		_ctx->m_dirtyFlags |= DirtyStateFlags::ScissorRect;
+		_ctx->m_dirtyFlags |= DirtyStateFlags::ViewPort;
 		_ctx->m_state.m_viewport.m_rect = _rect;
 		_ctx->m_state.m_viewport.m_depthMin = _minDepth;
 		_ctx->m_state.m_viewport.m_depthMax = _maxDepth;
