@@ -4,16 +4,19 @@
 
 #include <core/CVar.h>
 #include <editor/Editor.h>
+#include <gfx/SharedResources.h>
+#include <gfx/Primitive.h>
 #include <gfx/Model.h>
+#include <gfx/EnvMap.h>
 #include <gpu/GPUDevice.h>
 #include <input/Input.h>
-#include <gfx/Primitive.h>
 
 #include <kt/Macros.h>
 #include <kt/Timer.h>
 #include <kt/Logging.h>
 #include <kt/Vec3.h>
 #include <kt/Vec4.h>
+
 #include "imgui.h"
 
 static core::CVar<float> s_camFov("cam.fov", "Camera field of view", 65.0f, 40.0f, 100.0f);
@@ -21,11 +24,6 @@ static core::CVar<bool> s_vsync("app.vsync", "Vsync enabled", true);
 
 void TestbedApp::Setup()
 {
-	m_equiTex.LoadFromFile("textures/qwantani_2k.hdr");
-
-	res::ResourceHandle<gfx::ShaderResource> equics = res::LoadResourceSync<gfx::ShaderResource>("shaders/EquirectToCubemap.cs.cso");
-	m_equiPso = gpu::CreateComputePSO(res::GetData(equics)->m_shader);
-
 	m_sceneWindow.SetScene(&m_scene);
 
 	m_pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ObjectShader.ps.cso");
@@ -37,7 +35,6 @@ void TestbedApp::Setup()
 
 
 	{
-
 		gpu::TextureUsageFlags const flags = gpu::TextureUsageFlags::UnorderedAccess | gpu::TextureUsageFlags::ShaderResource;
 		gpu::TextureDesc const texDesc = gpu::TextureDesc::DescCube(1024, 1024, flags, gpu::Format::R32G32B32A32_Float);
 		m_cubeMap = gpu::CreateTexture(texDesc, nullptr, "CUBE_TEST");
@@ -95,23 +92,10 @@ void TestbedApp::Setup()
 
 	}
 
+	gfx::CreateCubemapFromEquirect("textures/qwantani_2k.hdr", m_cubeMap, gpu::GetMainThreadCommandCtx());
 	{
 		gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
-		gpu::cmd::SetPSO(ctx, m_equiPso);
-		gpu::cmd::ResourceBarrier(ctx, m_cubeMap, gpu::ResourceState::ShaderResource_ReadWrite);
-		gpu::cmd::SetSRV(ctx, m_equiTex.m_gpuTex, 0, 0);
-		gpu::cmd::SetUAV(ctx, m_cubeMap, 0, 0);
-
-		gpu::cmd::Dispatch(ctx, 1024 / 32, 1024 / 32, 6);
-		gpu::cmd::ResourceBarrier(ctx, m_cubeMap, gpu::ResourceState::ShaderResource_Read);
-	}
-
-	{
-		res::ResourceHandle<gfx::ShaderResource> irradCs = res::LoadResourceSync<gfx::ShaderResource>("shaders/BakeIrradianceMap.cs.cso");
-		m_irradPso = gpu::CreateComputePSO(res::GetData(irradCs)->m_shader);
-
-		gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
-		gpu::cmd::SetPSO(ctx, m_irradPso);
+		gpu::cmd::SetPSO(ctx, gfx::GetSharedResources().m_bakeIrradPso);
 		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::ShaderResource_ReadWrite);
 		gpu::cmd::SetSRV(ctx, m_cubeMap, 0, 0);
 		gpu::cmd::SetUAV(ctx, m_irradMap, 0, 0);

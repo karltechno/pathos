@@ -1,6 +1,8 @@
 set(GFX_SOURCES
     "Camera.h"
     "Camera.cpp"
+    "EnvMap.h"
+    "EnvMap.cpp"
     "Material.h"
     "Material.cpp"
     "Resources.h"
@@ -13,6 +15,8 @@ set(GFX_SOURCES
     "Texture.cpp"
     "Scene.h"
     "Scene.cpp"
+    "SharedResources.h"
+    "SharedResources.cpp"
 )
 
 add_pathos_lib(gfx "${GFX_SOURCES}")

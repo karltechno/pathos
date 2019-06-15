@@ -54,9 +54,6 @@ struct TestbedApp : app::GraphicsApp
 	res::ResourceHandle<gfx::ShaderResource> m_vertexShader;
 	res::ResourceHandle<gfx::Model> m_modelHandle;
 
-	gpu::PSORef m_equiPso;
-	gfx::Texture m_equiTex;
-
 	gpu::PSORef m_skyBoxPso;
 
 	gfx::PrimitiveGPUBuffers m_cubeData;
