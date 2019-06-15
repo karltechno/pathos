@@ -8,8 +8,9 @@
 #include <gfx/Camera.h>
 #include <gfx/Resources.h>
 #include <gfx/Model.h>
-
 #include <gfx/Scene.h>
+#include <gfx/Primitive.h>
+
 #include <res/Resource.h>
 #include <res/ResourceSystem.h>
 
@@ -27,7 +28,6 @@ struct TestbedApp : app::GraphicsApp
 
 	struct DummyCbuffer
 	{
-		kt::Vec4 myVec4;
 		kt::Mat4 mvp;
 	};
 
@@ -44,11 +44,22 @@ struct TestbedApp : app::GraphicsApp
 
 	gpu::PSORef m_csPso;
 	gpu::PSORef m_pso;
+	gpu::PSORef m_irradPso;
+
 	gpu::BufferRef m_constantBuffer;
-	gpu::TextureRef m_testTexture;
+	gpu::TextureRef m_cubeMap;
+	gpu::TextureRef m_irradMap;
 
 	res::ResourceHandle<gfx::ShaderResource> m_pixelShader;
 	res::ResourceHandle<gfx::ShaderResource> m_vertexShader;
 	res::ResourceHandle<gfx::Model> m_modelHandle;
+
+	gpu::PSORef m_equiPso;
+	gfx::Texture m_equiTex;
+
+	gpu::PSORef m_skyBoxPso;
+
+	gfx::PrimitiveGPUBuffers m_cubeData;
+
 };
 

@@ -33,6 +33,24 @@ struct SurfaceData
     float3 f0;
 };
 
+SurfaceData CreateSurfaceData
+(
+    float3 norm, 
+    float3 posWS,
+    float metallic, 
+    float roughness,
+    float3 baseCol
+)
+{
+    SurfaceData surf;
+    surf.norm = norm;
+    surf.posWS = posWS;
+    surf.roughness = max(roughness*roughness, 0.001);
+    surf.metalness = metallic;
+    surf.baseCol = lerp(baseCol, float3(0., 0., 0.), surf.metalness);
+    surf.f0 = lerp(float3(0.04, 0.04, 0.04), surf.baseCol, surf.metalness);
+    return surf;
+}
 
 float3 F_Schlick(float3 f0, float v_dot_h)
 {
@@ -63,7 +81,6 @@ float3 SpecularTerm_GGX
 )
 {
     float rough2 = surface.roughness * surface.roughness;
-    // rough2 *= rough2;
     
     float3 F = F_Schlick(surface.f0, v_dot_h);
     float G = G_Smith(n_dot_l, n_dot_v, rough2);
@@ -73,7 +90,7 @@ float3 SpecularTerm_GGX
 
 float3 DiffuseTerm_Lambert(in SurfaceData surface)
 {
-    return surface.baseCol * ((1.0 - surface.metalness) / kPi);
+    return surface.baseCol / kPi;
 }
 
 float3 ComputeLighting_Common(in float3 lightColor, in SurfaceData surface, in float3 L, in float3 V)
@@ -84,11 +101,21 @@ float3 ComputeLighting_Common(in float3 lightColor, in SurfaceData surface, in f
     float v_dot_h = saturate(dot(H, V));
     float n_dot_l = saturate(dot(surface.norm, L));
 
-    float3 specularTerm = SpecularTerm_GGX(n_dot_l, n_dot_v, n_dot_h, v_dot_h, surface);
-    float3 diffuseTerm = DiffuseTerm_Lambert(surface);
+    float3 specularTerm;
+    float3 fresnel;
+
+    {
+        float rough2 = surface.roughness * surface.roughness;
+        
+        fresnel = F_Schlick(surface.f0, v_dot_h);
+        float G = G_Smith(n_dot_l, n_dot_v, rough2);
+        float D = D_GGX(n_dot_h, rough2);
+        specularTerm = (G*D)*fresnel;
+    }
+
+    float3 diffuseTerm = DiffuseTerm_Lambert(surface) * (float3(1., 1., 1.) - fresnel);
     return n_dot_l * lightColor * (diffuseTerm + specularTerm); 
 }
-
 
 float PointLightAtten(float lightDist, float lightDistSq, float lightRadiusRcp)
 {

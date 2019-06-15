@@ -1,8 +1,8 @@
 #include "shaderlib/ShaderOutput.hlsli"
 
-VSOut_XU main(uint vid : SV_VertexID)
+VSOut_PosUV main(uint vid : SV_VertexID)
 {
-    VSOut_XU ret; 
+    VSOut_PosUV ret; 
     ret.pos.x = (float)(vid >> 1) * 4.0 - 1.0;
     ret.pos.y = (float)(vid & 1) * 4.0 - 1.0;
     ret.pos.z = 0.0;

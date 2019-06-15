@@ -5,6 +5,7 @@
 
 namespace kt
 {
+struct ISerializer;
 struct IReader;
 }
 
@@ -46,6 +47,14 @@ ResourceHandle<T> CreateEmptyResource(char const* _path, T*& o_mem, bool& o_reso
 
 void* GetData(ResourceHandleBase _handle, uint32_t _typeTag);
 
+char const* GetResourcePath(ResourceHandleBase _handle, uint32_t _typeTag);
+
+template <typename T>
+char const* GetResourcePath(ResourceHandle<T> _handle)
+{
+	return GetResourcePath(_handle, ResourceHandle<T>::TypeTag());
+}
+
 template <typename T>
 T* GetData(ResourceHandle<T> _handle)
 {
@@ -67,6 +76,14 @@ template <typename T>
 void Reload(ResourceHandle<T> _handle)
 {
 	Reload(_handle, ResourceHandle<T>::TypeTag());
+}
+
+void SerializeResourceHandle(kt::ISerializer* _s, ResourceHandleBase& _handle, uint32_t _typeTag);
+
+template <typename T>
+void SerializeResourceHandle(kt::ISerializer* _s, ResourceHandle<T>& _handle)
+{
+	SerializeResourceHandle(_s, _handle, ResourceHandle<T>::TypeTag());
 }
 
 }

@@ -250,6 +250,19 @@ res::ResourceHandleBase CreateEmptyResource(char const* _path, void*& o_mem, uin
 	return retHandle;
 }
 
+char const* GetResourcePath(ResourceHandleBase _handle, uint32_t _typeTag)
+{
+	ResourceContainer::InternalResource* res = s_ctx.m_resourceContainers[_typeTag].m_handles.Lookup(_handle);
+	if (res)
+	{
+		return res->m_path;
+	}
+	else
+	{
+		return nullptr;
+	}
+}
+
 void* GetData(ResourceHandleBase _handle, uint32_t _typeTag)
 {
 	KT_ASSERT(_typeTag < s_ctx.m_resourceContainers.Size());
@@ -290,6 +303,35 @@ void Reload(ResourceHandleBase _handle, uint32_t _typeTag)
 	else
 	{
 		KT_LOG_WARNING("Resource type \"%s\" does not support reloading.", container.m_resDebugName);
+	}
+}
+
+void SerializeResourceHandle(kt::ISerializer* _s, ResourceHandleBase& _handle, uint32_t _typeTag)
+{
+	if (_s->SerializeMode() == kt::ISerializer::Mode::Write)
+	{
+		ResourceContainer& container = s_ctx.m_resourceContainers[_typeTag];
+		ResourceContainer::InternalResource* res = container.m_handles.Lookup(_handle);
+		bool isValid = res != nullptr;
+		kt::Serialize(_s, isValid);
+
+		if (isValid)
+		{
+			// Write out the path.
+			kt::StaticString<512> path(res->m_path);
+			kt::Serialize(_s, path);
+		}
+	}
+	else
+	{
+		bool isValid;
+		kt::Serialize(_s, isValid);
+		if (isValid)
+		{
+			kt::StaticString<512> path;
+			kt::Serialize(_s, path);
+			_handle = LoadResourceSync(path.Data(), _typeTag);
+		}
 	}
 }
 

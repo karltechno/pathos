@@ -3,7 +3,7 @@
 
 Texture2D<float4> g_tex : register(t0);
 
-float4 main(in VSOut_XUC _input) : SV_Target
+float4 main(in VSOut_PosUVCol _input) : SV_Target
 {
     return _input.col * g_tex.Sample(g_samplerLinearWrap, _input.uv); 
 }

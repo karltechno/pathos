@@ -7,7 +7,7 @@
 #include <gfx/Model.h>
 #include <gpu/GPUDevice.h>
 #include <input/Input.h>
-
+#include <gfx/Primitive.h>
 
 #include <kt/Macros.h>
 #include <kt/Timer.h>
@@ -19,9 +19,13 @@
 static core::CVar<float> s_camFov("cam.fov", "Camera field of view", 65.0f, 40.0f, 100.0f);
 static core::CVar<bool> s_vsync("app.vsync", "Vsync enabled", true);
 
-
 void TestbedApp::Setup()
 {
+	m_equiTex.LoadFromFile("textures/qwantani_2k.hdr");
+
+	res::ResourceHandle<gfx::ShaderResource> equics = res::LoadResourceSync<gfx::ShaderResource>("shaders/EquirectToCubemap.cs.cso");
+	m_equiPso = gpu::CreateComputePSO(res::GetData(equics)->m_shader);
+
 	m_sceneWindow.SetScene(&m_scene);
 
 	m_pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ObjectShader.ps.cso");
@@ -31,37 +35,97 @@ void TestbedApp::Setup()
 
 	m_csPso = gpu::CreateComputePSO(res::GetData(csShader)->m_shader);
 
-	gpu::GraphicsPSODesc psoDesc;
-	psoDesc.m_depthFormat = gpu::Format::D32_Float;
-	psoDesc.m_numRenderTargets = 1;
-	psoDesc.m_renderTargetFormats[0] = gpu::Format::R8G8B8A8_UNorm;
-	psoDesc.m_vertexLayout = gfx::Model::FullVertexLayout();
-	psoDesc.m_vs = res::GetData(m_vertexShader)->m_shader;
-	psoDesc.m_ps = res::GetData(m_pixelShader)->m_shader;
 
-	m_pso = gpu::CreateGraphicsPSO(psoDesc);
+	{
 
-	m_myCbuffer.myVec4 = kt::Vec4(0.0f);
+		gpu::TextureUsageFlags const flags = gpu::TextureUsageFlags::UnorderedAccess | gpu::TextureUsageFlags::ShaderResource;
+		gpu::TextureDesc const texDesc = gpu::TextureDesc::DescCube(1024, 1024, flags, gpu::Format::R32G32B32A32_Float);
+		m_cubeMap = gpu::CreateTexture(texDesc, nullptr, "CUBE_TEST");
+	}
 
-	gpu::BufferDesc constantBufferDesc;
-	constantBufferDesc.m_flags = gpu::BufferFlags::Constant | gpu::BufferFlags::Transient;
-	constantBufferDesc.m_sizeInBytes = sizeof(DummyCbuffer);
-	m_constantBuffer = gpu::CreateBuffer(constantBufferDesc);
+	{
+		gpu::TextureUsageFlags const flags = gpu::TextureUsageFlags::UnorderedAccess | gpu::TextureUsageFlags::ShaderResource;
+		gpu::TextureDesc const texDesc = gpu::TextureDesc::DescCube(32, 32, flags, gpu::Format::R16B16G16A16_Float);
+		m_irradMap = gpu::CreateTexture(texDesc, nullptr, "IRRAD_TEST");
+	}
 
-	 //m_modelHandle = res::LoadResourceSync<gfx::Model>("models/DamagedHelmet/DamagedHelmet.gltf");
-	m_modelHandle = res::LoadResourceSync<gfx::Model>("models/sponza/Sponza.gltf");
-	//m_modelHandle = res::LoadResourceSync<gfx::Model>("models/MetalRoughSpheres/MetalRoughSpheres.gltf");
+	{
+		res::ResourceHandle<gfx::ShaderResource> skyBoxVS = res::LoadResourceSync<gfx::ShaderResource>("shaders/SkyBox.vs.cso");
+		res::ResourceHandle<gfx::ShaderResource> skyBoxPS = res::LoadResourceSync<gfx::ShaderResource>("shaders/SkyBox.ps.cso");
+	
+		gpu::GraphicsPSODesc skyBoxPso;
+		skyBoxPso.m_depthStencilDesc.m_depthEnable = 1;
+		skyBoxPso.m_depthStencilDesc.m_depthWrite = 0;
+		skyBoxPso.m_depthStencilDesc.m_depthFn = gpu::ComparisonFn::LessEqual;
+		skyBoxPso.m_rasterDesc.m_cullMode = gpu::CullMode::Front;
+		skyBoxPso.m_depthFormat = gpu::Format::D32_Float;
+		skyBoxPso.m_numRenderTargets = 1;
+		skyBoxPso.m_renderTargetFormats[0] = gpu::BackbufferFormat();
+		skyBoxPso.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position);
+		skyBoxPso.m_vs = res::GetData(skyBoxVS)->m_shader;
+		skyBoxPso.m_ps = res::GetData(skyBoxPS)->m_shader;
+		m_skyBoxPso = gpu::CreateGraphicsPSO(skyBoxPso);
+	}
+
+	{
+		gpu::GraphicsPSODesc psoDesc;
+		psoDesc.m_depthFormat = gpu::Format::D32_Float;
+		psoDesc.m_numRenderTargets = 1;
+		psoDesc.m_renderTargetFormats[0] = gpu::Format::R8G8B8A8_UNorm;
+		psoDesc.m_vertexLayout = gfx::Model::FullVertexLayout();
+		psoDesc.m_vs = res::GetData(m_vertexShader)->m_shader;
+		psoDesc.m_ps = res::GetData(m_pixelShader)->m_shader;
+
+		m_pso = gpu::CreateGraphicsPSO(psoDesc);
+
+		gpu::BufferDesc constantBufferDesc;
+		constantBufferDesc.m_flags = gpu::BufferFlags::Constant | gpu::BufferFlags::Transient;
+		constantBufferDesc.m_sizeInBytes = sizeof(DummyCbuffer);
+		m_constantBuffer = gpu::CreateBuffer(constantBufferDesc);
+
+		//m_modelHandle = res::LoadResourceSync<gfx::Model>("models/DamagedHelmet/DamagedHelmet.gltf");
+		//m_modelHandle = res::LoadResourceSync<gfx::Model>("models/sponza/Sponza.gltf");
+		m_modelHandle = res::LoadResourceSync<gfx::Model>("models/MetalRoughSpheres/MetalRoughSpheres.gltf");
 
 
-	gpu::BufferDesc lightBufferDesc;
-	lightBufferDesc.m_flags = gpu::BufferFlags::Constant | gpu::BufferFlags::Dynamic;
-	lightBufferDesc.m_sizeInBytes = sizeof(shaderlib::TestLightCBuffer);
-	m_lightCbuffer = gpu::CreateBuffer(lightBufferDesc);
+		gpu::BufferDesc lightBufferDesc;
+		lightBufferDesc.m_flags = gpu::BufferFlags::Constant | gpu::BufferFlags::Dynamic;
+		lightBufferDesc.m_sizeInBytes = sizeof(shaderlib::TestLightCBuffer);
+		m_lightCbuffer = gpu::CreateBuffer(lightBufferDesc);
 
+	}
 
-	gpu::TextureUsageFlags const flags = gpu::TextureUsageFlags::UnorderedAccess | gpu::TextureUsageFlags::ShaderResource;
-	gpu::TextureDesc const texDesc = gpu::TextureDesc::DescCube(128, 128, flags, gpu::Format::R8G8B8A8_UNorm);
-	m_testTexture = gpu::CreateTexture(texDesc);
+	{
+		gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
+		gpu::cmd::SetPSO(ctx, m_equiPso);
+		gpu::cmd::ResourceBarrier(ctx, m_cubeMap, gpu::ResourceState::ShaderResource_ReadWrite);
+		gpu::cmd::SetSRV(ctx, m_equiTex.m_gpuTex, 0, 0);
+		gpu::cmd::SetUAV(ctx, m_cubeMap, 0, 0);
+
+		gpu::cmd::Dispatch(ctx, 1024 / 32, 1024 / 32, 6);
+		gpu::cmd::ResourceBarrier(ctx, m_cubeMap, gpu::ResourceState::ShaderResource_Read);
+	}
+
+	{
+		res::ResourceHandle<gfx::ShaderResource> irradCs = res::LoadResourceSync<gfx::ShaderResource>("shaders/BakeIrradianceMap.cs.cso");
+		m_irradPso = gpu::CreateComputePSO(res::GetData(irradCs)->m_shader);
+
+		gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
+		gpu::cmd::SetPSO(ctx, m_irradPso);
+		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::ShaderResource_ReadWrite);
+		gpu::cmd::SetSRV(ctx, m_cubeMap, 0, 0);
+		gpu::cmd::SetUAV(ctx, m_irradMap, 0, 0);
+
+		gpu::cmd::Dispatch(ctx, 32 / 32, 32 / 32, 6);
+		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::ShaderResource_Read);
+	}
+
+	{
+		gfx::PrimitiveBuffers buf;
+		buf.m_genFlags = gfx::PrimitiveBuffers::GenFlags::PosOnly;
+		gfx::GenCube(buf);
+		m_cubeData = gfx::MakePrimitiveGPUBuffers(buf);
+	}
 }
 
 static gpu::TextureHandle GetTextureHandleOrNull(gfx::TextureResHandle _res)
@@ -69,7 +133,7 @@ static gpu::TextureHandle GetTextureHandleOrNull(gfx::TextureResHandle _res)
 	return _res.IsValid() ? res::GetData(_res)->m_gpuTex : gpu::TextureHandle{};
 }
 
-static void DrawModel(gpu::cmd::Context* _cmd, gfx::Model const& _model)
+void DrawModel(gpu::cmd::Context* _cmd, gfx::Model const& _model)
 {
 	gpu::cmd::SetVertexBuffer(_cmd, 0, _model.m_posGpuBuf);
 	gpu::cmd::SetVertexBuffer(_cmd, 1, _model.m_tangentGpuBuf);
@@ -88,6 +152,8 @@ static void DrawModel(gpu::cmd::Context* _cmd, gfx::Model const& _model)
 		gpu::cmd::DrawIndexedInstanced(_cmd, gpu::PrimitiveType::TriangleList, mesh.m_numIndicies, 1, mesh.m_indexBufferStartOffset, 0, 0);
 	}
 }
+
+core::CVar<kt::Vec3> s_scale("app.mvp_scale", "test", kt::Vec3(1.0f), -2.0f, 2.0f);
 
 
 void TestbedApp::Tick(float _dt)
@@ -110,11 +176,16 @@ void TestbedApp::Tick(float _dt)
 
 	m_cam.SetProjection(params);
 
+	kt::Mat4 scaleMtx = kt::Mat4::Identity();
+	scaleMtx[0][0] = s_scale.GetValue()[0];
+	scaleMtx[1][1] = s_scale.GetValue()[1];
+	scaleMtx[2][2] = s_scale.GetValue()[2];
+
 	m_camController.UpdateCamera(_dt, m_cam);
-	m_myCbuffer.myVec4 += kt::Vec4(_dt);
-	m_myCbuffer.mvp = m_cam.GetCachedViewProj();
+	m_myCbuffer.mvp = m_cam.GetCachedViewProj() * scaleMtx;
 
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
+
 
 	gpu::TextureHandle backbuffer = gpu::CurrentBackbuffer();
 	gpu::TextureHandle depth = gpu::BackbufferDepth();
@@ -138,8 +209,29 @@ void TestbedApp::Tick(float _dt)
 	gpu::cmd::ClearRenderTarget(ctx, backbuffer, col);
 	gpu::cmd::ClearDepth(ctx, depth, 1.0f);
 
-
+	gpu::cmd::SetSRV(ctx, m_irradMap, 0, 1);
 	DrawModel(ctx, *res::GetData(m_modelHandle));
+
+	{
+		// skybox
+		gpu::cmd::SetPSO(ctx, m_skyBoxPso);
+		gpu::cmd::SetSRV(ctx, m_cubeMap, 0, 0);
+		gpu::cmd::SetVertexBuffer(ctx, 0, m_cubeData.m_pos);
+		gpu::cmd::SetIndexBuffer(ctx, m_cubeData.m_indicies);
+		kt::Mat4 skyMtx = m_cam.GetView();
+		skyMtx.SetPos(kt::Vec3(0.0f));
+		skyMtx = m_cam.GetProjection() * skyMtx;
+
+		gpu::cmd::SetTransientCBV(ctx, &skyMtx, sizeof(kt::Mat4), 0, 0);
+
+		
+		uint32_t w, h;
+		gpu::GetSwapchainDimensions(w, h);
+		gpu::Rect rect{ float(w), float(h) };
+
+		gpu::cmd::SetViewport(ctx, rect, 1.0f, 1.0f);
+		gpu::cmd::DrawIndexedInstanced(ctx, gpu::PrimitiveType::TriangleList, m_cubeData.m_numIndicies, 1, 0, 0, 0);
+	}
 }
 
 void TestbedApp::Shutdown()

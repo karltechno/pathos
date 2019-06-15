@@ -2,7 +2,6 @@
 
 struct TestData
 {
-    float4 time;
     float4x4 mvp;
 };
 
