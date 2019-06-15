@@ -48,12 +48,12 @@ void gfx::GenCube(PrimitiveBuffers& _buffers)
 		uint16_t const idxStart = uint16_t(_buffers.m_pos.Size());
 		uint16_t* indicies = _buffers.m_indicies.PushBack_Raw(6);
 		*indicies++ = idxStart;
-		*indicies++ = idxStart + 2;
 		*indicies++ = idxStart + 1;
+		*indicies++ = idxStart + 2;
 
 		*indicies++ = idxStart;
-		*indicies++ = idxStart + 3;
 		*indicies++ = idxStart + 2;
+		*indicies++ = idxStart + 3;
 
 		kt::Vec3 const& norm = c_faceNormals[faceIdx];
 

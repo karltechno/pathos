@@ -85,8 +85,8 @@ static void CopyIndexBuffer(cgltf_accessor* _accessor, uint32_t* o_dest, uint32_
 		src += stride;
 		indicies[2] = (uint32_t)*(IntT*)(src) + _vtxOffset;
 		src += stride;
-		*o_dest++ = indicies[0];
 		*o_dest++ = indicies[1];
+		*o_dest++ = indicies[0];
 		*o_dest++ = indicies[2];
 	}
 }
@@ -534,7 +534,7 @@ void SerializeMaterial(kt::ISerializer* _s, Material& _mat)
 	serializeTex(_mat.m_occlusionTex, TextureLoadFlags::GenMips);
 }
 
-constexpr uint32_t c_modelCacheVersion = 1;
+uint32_t constexpr c_modelCacheVersion = 2;
 
 bool SerializeModelCache(char const* _initialPath, kt::ISerializer* _s, Model& _model)
 {
@@ -569,7 +569,6 @@ bool Model::LoadFromGLTF(char const* _path)
 
 	bool hasReadFromCache = false;
 
-	//kt::ISerializer
 	if (kt::FileExists(cachePath.Data()))
 	{
 		FILE* file = fopen(cachePath.Data(), "rb");

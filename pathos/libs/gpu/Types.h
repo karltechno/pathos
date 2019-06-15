@@ -313,7 +313,7 @@ struct RasterizerDesc
 	{
 		m_fillMode = FillMode::Solid;
 		m_cullMode = CullMode::Back;
-		m_frontFaceCCW = 1;
+		m_frontFaceCCW = 0;
 	}
 
 	FillMode m_fillMode : c_fillModeBits;

@@ -43,7 +43,6 @@ struct Model
 
 	bool LoadFromGLTF(char const* _path);
 
-
 	kt::Array<kt::Vec3> m_posStream;
 	kt::Array<TangentSpace> m_tangentStream;
 	kt::Array<kt::Vec2> m_uvStream0;
