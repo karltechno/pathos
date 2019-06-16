@@ -18,6 +18,7 @@
 #include <kt/Vec4.h>
 
 #include "imgui.h"
+#include "gfx/Texture.h"
 
 static core::CVar<float> s_camFov("cam.fov", "Camera field of view", 65.0f, 40.0f, 100.0f);
 static core::CVar<bool> s_vsync("app.vsync", "Vsync enabled", true);
@@ -36,7 +37,8 @@ void TestbedApp::Setup()
 
 	{
 		gpu::TextureUsageFlags const flags = gpu::TextureUsageFlags::UnorderedAccess | gpu::TextureUsageFlags::ShaderResource;
-		gpu::TextureDesc const texDesc = gpu::TextureDesc::DescCube(1024, 1024, flags, gpu::Format::R32G32B32A32_Float);
+		gpu::TextureDesc texDesc = gpu::TextureDesc::DescCube(1024, 1024, flags, gpu::Format::R32G32B32A32_Float);
+		texDesc.m_mipLevels = gfx::MipChainLength(1024, 1024);
 		m_cubeMap = gpu::CreateTexture(texDesc, nullptr, "CUBE_TEST");
 	}
 
@@ -91,18 +93,27 @@ void TestbedApp::Setup()
 		m_lightCbuffer = gpu::CreateBuffer(lightBufferDesc);
 
 	}
+	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
-	gfx::CreateCubemapFromEquirect("textures/qwantani_2k.hdr", m_cubeMap, gpu::GetMainThreadCommandCtx());
+	gfx::CreateCubemapFromEquirect("textures/qwantani_2k.hdr", m_cubeMap, ctx);
+	gfx::GenerateMips(ctx, m_cubeMap);
 	{
-		gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 		gpu::cmd::SetPSO(ctx, gfx::GetSharedResources().m_bakeIrradPso);
 		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::ShaderResource_ReadWrite);
-		gpu::cmd::SetSRV(ctx, m_cubeMap, 0, 0);
-		gpu::cmd::SetUAV(ctx, m_irradMap, 0, 0);
+
+		gpu::DescriptorData srv;
+		srv.Set(m_cubeMap);
+
+		gpu::DescriptorData uav;
+		uav.Set(m_irradMap);
+
+		gpu::cmd::SetComputeSRVTable(ctx, srv, 0);
+		gpu::cmd::SetComputeUAVTable(ctx, uav, 0);
 
 		gpu::cmd::Dispatch(ctx, 32 / 32, 32 / 32, 6);
 		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::ShaderResource_Read);
 	}
+
 
 	{
 		gfx::PrimitiveBuffers buf;
@@ -128,10 +139,12 @@ void DrawModel(gpu::cmd::Context* _cmd, gfx::Model const& _model)
 	{
 		gfx::Material const& mat = _model.m_materials[mesh.m_materialIdx];
 		
-		gpu::cmd::SetSRV(_cmd, GetTextureHandleOrNull(mat.m_albedoTex), 0, 0);
-		gpu::cmd::SetSRV(_cmd, GetTextureHandleOrNull(mat.m_normalTex), 1, 0);
-		gpu::cmd::SetSRV(_cmd, GetTextureHandleOrNull(mat.m_metallicRoughnessTex), 2, 0);
-		gpu::cmd::SetSRV(_cmd, GetTextureHandleOrNull(mat.m_occlusionTex), 3, 0);
+		gpu::DescriptorData descriptors[4];
+		descriptors[0].Set(GetTextureHandleOrNull(mat.m_albedoTex));
+		descriptors[1].Set(GetTextureHandleOrNull(mat.m_normalTex));
+		descriptors[2].Set(GetTextureHandleOrNull(mat.m_metallicRoughnessTex));
+		descriptors[3].Set(GetTextureHandleOrNull(mat.m_occlusionTex));
+		gpu::cmd::SetGraphicsSRVTable(_cmd, descriptors, 0);
 
 		gpu::cmd::DrawIndexedInstanced(_cmd, gpu::PrimitiveType::TriangleList, mesh.m_numIndicies, 1, mesh.m_indexBufferStartOffset, 0, 0);
 	}
@@ -143,6 +156,7 @@ core::CVar<kt::Vec3> s_scale("app.mvp_scale", "test", kt::Vec3(1.0f), -2.0f, 2.0
 void TestbedApp::Tick(float _dt)
 {
 	gpu::SetVsyncEnabled(s_vsync);
+
 
 	m_scene.UpdateCBuffer(&m_testLightCbufferData);
 	m_testLightCbufferData.camPos = m_cam.GetPos();
@@ -169,7 +183,7 @@ void TestbedApp::Tick(float _dt)
 	m_myCbuffer.mvp = m_cam.GetCachedViewProj() * scaleMtx;
 
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
-
+	gfx::GenerateMips(ctx, m_cubeMap);
 
 	gpu::TextureHandle backbuffer = gpu::CurrentBackbuffer();
 	gpu::TextureHandle depth = gpu::BackbufferDepth();
@@ -182,8 +196,11 @@ void TestbedApp::Tick(float _dt)
 	gpu::cmd::SetPSO(ctx, m_pso);
 	gpu::cmd::UpdateTransientBuffer(ctx, m_constantBuffer, &m_myCbuffer, sizeof(m_myCbuffer));
 	
-	gpu::cmd::SetCBV(ctx, m_lightCbuffer, 1, 0);
-	gpu::cmd::SetCBV(ctx, m_constantBuffer, 0, 0);
+	gpu::DescriptorData cbvs[2];
+	cbvs[0].Set(m_constantBuffer);
+	cbvs[1].Set(m_lightCbuffer);
+
+	gpu::cmd::SetGraphicsCBVTable(ctx, cbvs, 0);
 
 	gpu::cmd::SetRenderTarget(ctx, 0, backbuffer);
 	gpu::cmd::SetDepthBuffer(ctx, depth);
@@ -193,21 +210,29 @@ void TestbedApp::Tick(float _dt)
 	gpu::cmd::ClearRenderTarget(ctx, backbuffer, col);
 	gpu::cmd::ClearDepth(ctx, depth, 1.0f);
 
-	gpu::cmd::SetSRV(ctx, m_irradMap, 0, 1);
+	gpu::DescriptorData irradMap;
+	irradMap.Set(m_irradMap);
+
+	gpu::cmd::SetGraphicsSRVTable(ctx, irradMap, 1);
 	DrawModel(ctx, *res::GetData(m_modelHandle));
 
 	{
 		// skybox
 		gpu::cmd::SetPSO(ctx, m_skyBoxPso);
-		gpu::cmd::SetSRV(ctx, m_cubeMap, 0, 0);
+		gpu::DescriptorData skyBox;
+		skyBox.Set(m_cubeMap);
+
+		gpu::cmd::SetGraphicsSRVTable(ctx, skyBox, 0);
 		gpu::cmd::SetVertexBuffer(ctx, 0, m_cubeData.m_pos);
 		gpu::cmd::SetIndexBuffer(ctx, m_cubeData.m_indicies);
 		kt::Mat4 skyMtx = m_cam.GetView();
 		skyMtx.SetPos(kt::Vec3(0.0f));
 		skyMtx = m_cam.GetProjection() * skyMtx;
 
-		gpu::cmd::SetTransientCBV(ctx, &skyMtx, sizeof(kt::Mat4), 0, 0);
+		gpu::DescriptorData skyMtxDescriptor;
+		skyMtxDescriptor.Set(&skyMtx, sizeof(skyMtx));
 
+		gpu::cmd::SetGraphicsCBVTable(ctx, skyMtxDescriptor, 0);
 		
 		uint32_t w, h;
 		gpu::GetSwapchainDimensions(w, h);

@@ -111,6 +111,18 @@ char const* GetFormatName(Format _fmt)
 	return s_formatNames[uint32_t(_fmt)] + 13;
 }
 
+bool IsSRGBFormat(Format _fmt)
+{
+	switch (_fmt)
+	{
+		case Format::R8G8B8A8_UNorm_SRGB:
+			return true;
+
+		default:
+			return false;
+	}
+}
+
 gpu::BlendDesc BlendDesc::Opaque()
 {
 	BlendDesc desc;

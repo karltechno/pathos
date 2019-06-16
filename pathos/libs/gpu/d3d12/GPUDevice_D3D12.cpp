@@ -184,7 +184,7 @@ bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* 
 
 	if (!!(m_bufferDesc.m_flags & BufferFlags::UnorderedAccess))
 	{
-		m_uav = g_device->m_stagingHeap.AllocOne();
+		m_uavs.PushBack(g_device->m_stagingHeap.AllocOne());
 	}
 
 	if (!(m_bufferDesc.m_flags & BufferFlags::Transient))
@@ -266,11 +266,11 @@ void AllocatedResource_D3D12::Destroy()
 		m_srv.ptr = 0;
 	}
 
-	if (m_uav.ptr)
+	for (D3D12_CPU_DESCRIPTOR_HANDLE uav : m_uavs)
 	{
-		g_device->m_stagingHeap.Free(m_uav);
-		m_uav.ptr = 0;
+		g_device->m_stagingHeap.Free(uav);
 	}
+	m_uavs.Clear();
 
 	if (m_cbv.ptr)
 	{
@@ -405,6 +405,7 @@ static ID3D12PipelineState* CreateD3DGraphicsPSO(ID3D12Device* _device, gpu::Gra
 
 	d3dDesc.BlendState.AlphaToCoverageEnable = _desc.m_blendDesc.m_alphaToCoverageEnable;
 	d3dDesc.BlendState.IndependentBlendEnable = FALSE;
+
 	d3dDesc.BlendState.RenderTarget[0].BlendEnable = _desc.m_blendDesc.m_blendEnable;
 	d3dDesc.BlendState.RenderTarget[0].BlendOp = ToD3DBlendOP(_desc.m_blendDesc.m_blendOp);
 	d3dDesc.BlendState.RenderTarget[0].BlendOpAlpha = ToD3DBlendOP(_desc.m_blendDesc.m_blendOpAlpha);
@@ -481,22 +482,23 @@ static ID3D12PipelineState* CreateD3DGraphicsPSO(ID3D12Device* _device, gpu::Gra
 	return pso;
 }
 
-void AllocatedPSO_D3D12::InitAsCompute(gpu::ShaderHandle _handle, gpu::ShaderBytecode const _byteCode)
+void AllocatedPSO_D3D12::InitAsCompute(gpu::ShaderHandle _handle, gpu::ShaderBytecode const _byteCode, char const* _debugName)
 {
 	KT_ASSERT(!m_pso);
 	gpu::AddRef(_handle);
 	m_cs = _handle;
 	m_pso = CreateD3DComputePSO(g_device->m_d3dDev, _byteCode);
 
-	// TODO: Debug name
-	AllocatedObjectBase_D3D12::Init(nullptr);
+	AllocatedObjectBase_D3D12::Init(_debugName);
+	D3D_SET_DEBUG_NAME(m_pso, m_debugName.Data());
 }
 
 void AllocatedPSO_D3D12::InitAsGraphics
 (
 	gpu::GraphicsPSODesc const& _desc, 
 	gpu::ShaderBytecode const& _vs,  
-	gpu::ShaderBytecode const& _ps
+	gpu::ShaderBytecode const& _ps,
+	char const* _debugName
 )
 {
 	KT_ASSERT(!m_pso);
@@ -506,8 +508,8 @@ void AllocatedPSO_D3D12::InitAsGraphics
 	
 	m_pso = CreateD3DGraphicsPSO(g_device->m_d3dDev, _desc, _vs, _ps);
 
-	// TODO: Debug name
-	AllocatedObjectBase_D3D12::Init(nullptr);
+	AllocatedObjectBase_D3D12::Init(_debugName);
+	D3D_SET_DEBUG_NAME(m_pso, m_debugName.Data());
 }
 
 
@@ -621,7 +623,7 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 		pClearVal = &depthClear;
 		depthClear.Format = ToDXGIFormat(_desc.m_format);
 		depthClear.DepthStencil.Stencil = 0;
-		depthClear.DepthStencil.Depth = 1.0f; // TODO: Selectable for reverse Z?
+		depthClear.DepthStencil.Depth = 1.0f; // TODO: Selectable for reverse Z
 	}
 
 	HRESULT const hr = g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &d3dDesc, gpu::TranslateResourceState(creationState), pClearVal, IID_PPV_ARGS(&m_res));
@@ -646,48 +648,99 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 		g_device->m_d3dDev->CreateRenderTargetView(m_res, nullptr, m_rtv);
 	}
 
+	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+
+	// TODO: Might need to convert uav fmt
+	uavDesc.Format = d3dDesc.Format;
+
+	srvDesc.Format = d3dDesc.Format;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+	switch (d3dDesc.Dimension)
+	{
+		case D3D12_RESOURCE_DIMENSION_TEXTURE2D:
+		{
+			srvDesc.ViewDimension = d3dDesc.DepthOrArraySize == 1 ? D3D12_SRV_DIMENSION_TEXTURE2D : D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+			if (d3dDesc.DepthOrArraySize == 1)
+			{
+				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+				uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+
+				srvDesc.Texture2D.MipLevels = d3dDesc.MipLevels;
+				srvDesc.Texture2D.MostDetailedMip = 0;
+				srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+				uavDesc.Texture2D.PlaneSlice = 0;
+				uavDesc.Texture2D.MipSlice = 0;
+			}
+			else
+			{
+				// texture 2d array (or cube)
+				if (_desc.m_type == ResourceType::TextureCube)
+				{
+					KT_ASSERT(d3dDesc.DepthOrArraySize % 6 == 0);
+					if (d3dDesc.DepthOrArraySize > 6)
+					{
+						srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
+						srvDesc.TextureCubeArray.First2DArrayFace = 0;
+						srvDesc.TextureCubeArray.MipLevels = d3dDesc.MipLevels;
+						srvDesc.TextureCubeArray.MostDetailedMip = 0;
+						srvDesc.TextureCubeArray.NumCubes = d3dDesc.DepthOrArraySize / 6;
+						srvDesc.TextureCubeArray.ResourceMinLODClamp = 0.0f;
+					}
+					else
+					{
+						srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+						srvDesc.TextureCube.MipLevels = d3dDesc.MipLevels;
+						srvDesc.TextureCube.MostDetailedMip = 0;
+						srvDesc.TextureCube.ResourceMinLODClamp = 0.0f;
+					}
+				}
+				else
+				{
+					srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+					srvDesc.Texture2DArray.ArraySize = d3dDesc.DepthOrArraySize;
+					srvDesc.Texture2DArray.FirstArraySlice = 0;
+					srvDesc.Texture2DArray.MostDetailedMip = 0;
+					srvDesc.Texture2DArray.PlaneSlice = 0;
+					srvDesc.Texture2DArray.ResourceMinLODClamp = 0.0f;
+				}
+
+				uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+				uavDesc.Texture2DArray.ArraySize = d3dDesc.DepthOrArraySize;
+				uavDesc.Texture2DArray.FirstArraySlice = 0;
+				uavDesc.Texture2DArray.MipSlice = 0;
+				uavDesc.Texture2DArray.PlaneSlice = 0;
+			}
+		} break;
+		
+		case D3D12_RESOURCE_DIMENSION_TEXTURE3D:
+		{
+			// TODO;
+			KT_ASSERT(false);
+			KT_UNREACHABLE;
+		} break;
+
+		default: KT_ASSERT(false); KT_UNREACHABLE;
+	}
+
 	if (!!(_desc.m_usageFlags & gpu::TextureUsageFlags::ShaderResource))
 	{
 		m_srv = g_device->m_stagingHeap.AllocOne();
-
-		if (_desc.m_type == ResourceType::TextureCube)
-		{
-			// todo: sync with update views?
-			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-			srvDesc.Format = d3dDesc.Format;
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
-			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			srvDesc.TextureCube.MipLevels = d3dDesc.MipLevels;
-			srvDesc.TextureCube.MostDetailedMip = 0;
-			srvDesc.TextureCube.ResourceMinLODClamp = 0.0f;
-			g_device->m_d3dDev->CreateShaderResourceView(m_res, &srvDesc, m_srv);
-		}
-		else
-		{
-			g_device->m_d3dDev->CreateShaderResourceView(m_res, nullptr, m_srv);
-		}
-
-
+		g_device->m_d3dDev->CreateShaderResourceView(m_res, &srvDesc, m_srv);
 	}
 
 	if (!!(_desc.m_usageFlags & gpu::TextureUsageFlags::UnorderedAccess))
 	{
-		// TODO: Sub resources
-		m_uav = g_device->m_stagingHeap.AllocOne();
-		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
-		if (_desc.m_type == ResourceType::TextureCube)
+		D3D12_CPU_DESCRIPTOR_HANDLE* uavs = m_uavs.PushBack_Raw(d3dDesc.MipLevels);
+
+		for (uint32_t i = 0; i < d3dDesc.MipLevels; ++i)
 		{
-			uavDesc.Texture2DArray.ArraySize = 6;
-			uavDesc.Texture2DArray.MipSlice = 0;
-			uavDesc.Texture2DArray.FirstArraySlice = 0;
-			uavDesc.Texture2DArray.PlaneSlice = 0;
-			uavDesc.Format = d3dDesc.Format;
-			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
-			g_device->m_d3dDev->CreateUnorderedAccessView(m_res, nullptr, &uavDesc, m_uav);
-		}
-		else
-		{
-			g_device->m_d3dDev->CreateUnorderedAccessView(m_res, nullptr, nullptr, m_uav);
+			uavs[i] = g_device->m_stagingHeap.AllocOne();
+			// mipslice is first in all union members
+			uavDesc.Texture1D.MipSlice = i;
+			g_device->m_d3dDev->CreateUnorderedAccessView(m_res, nullptr, &uavDesc, uavs[i]);
 		}
 	}
 
@@ -1431,7 +1484,7 @@ gpu::ShaderHandle CreateShader(ShaderType _type, gpu::ShaderBytecode const& _byt
 	return gpu::ShaderHandle{ handle };
 }
 
-gpu::PSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc)
+gpu::PSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc, char const* _name)
 {
 	// Make sure VS and PS are valid.
 	AllocatedShader_D3D12* psShader = g_device->m_shaderHandles.Lookup(_desc.m_ps);
@@ -1463,7 +1516,7 @@ gpu::PSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc)
 
 	AllocatedPSO_D3D12* psoData;
 	gpu::PSOHandle const psoHandle = gpu::PSOHandle(g_device->m_psoHandles.Alloc(psoData));
-	psoData->InitAsGraphics(_desc, vsShader->m_byteCode, psShader->m_byteCode);
+	psoData->InitAsGraphics(_desc, vsShader->m_byteCode, psShader->m_byteCode, _name);
 	g_device->m_psoCache.Insert(hash, gpu::PSORef{ psoHandle });
 
 	psShader->m_linkedPsos.PushBack(psoHandle);
@@ -1472,7 +1525,7 @@ gpu::PSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc)
 	return psoHandle;
 }
 
-gpu::PSOHandle CreateComputePSO(gpu::ShaderHandle _shader)
+gpu::PSOHandle CreateComputePSO(gpu::ShaderHandle _shader, char const* _name)
 {
 	AllocatedShader_D3D12* allocatedShader = g_device->m_shaderHandles.Lookup(_shader);
 	KT_ASSERT(allocatedShader);
@@ -1483,7 +1536,7 @@ gpu::PSOHandle CreateComputePSO(gpu::ShaderHandle _shader)
 		AllocatedPSO_D3D12* psoData;
 		gpu::PSOHandle const newPsoHandle = gpu::PSOHandle{ g_device->m_psoHandles.Alloc(psoData) };
 		KT_ASSERT(newPsoHandle.IsValid());
-		psoData->InitAsCompute(_shader, allocatedShader->m_byteCode);
+		psoData->InitAsCompute(_shader, allocatedShader->m_byteCode, _name);
 		// TODO: should shader hold onto a ref?
 		allocatedShader->m_linkedPsos.PushBack(newPsoHandle);
 		return newPsoHandle;
@@ -1636,7 +1689,7 @@ bool Init(void* _nwh)
 	// TODO: Toggle debug layer
 	g_device = new Device_D3D12();
 	// TODO
-	g_device->Init(_nwh, true);
+	g_device->Init(_nwh, false);
 	return true;
 }
 

@@ -61,6 +61,12 @@ struct HandleRef
 		return *this;
 	}
 
+	HandleRef& operator=(HandleRef const& _other)
+	{
+		Acquire(_other.m_handle);
+		return *this;
+	}
+
 	void Acquire(HandleType _handle)
 	{
 		Reset();

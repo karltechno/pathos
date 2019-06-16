@@ -96,8 +96,9 @@ struct AllocatedResource_D3D12 : AllocatedObjectBase_D3D12
 
 	// Descriptors
 	D3D12_CPU_DESCRIPTOR_HANDLE m_srv = {};
+
 	D3D12_CPU_DESCRIPTOR_HANDLE m_cbv = {};
-	D3D12_CPU_DESCRIPTOR_HANDLE m_uav = {};
+	kt::Array<D3D12_CPU_DESCRIPTOR_HANDLE> m_uavs;
 
 	D3D12_CPU_DESCRIPTOR_HANDLE m_rtv = {};
 	D3D12_CPU_DESCRIPTOR_HANDLE m_dsv = {};
@@ -118,8 +119,8 @@ struct AllocatedShader_D3D12;
 
 struct AllocatedPSO_D3D12 : AllocatedObjectBase_D3D12
 {
-	void InitAsCompute(gpu::ShaderHandle _handle, gpu::ShaderBytecode const _byteCode);
-	void InitAsGraphics(gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps);
+	void InitAsCompute(gpu::ShaderHandle _handle, gpu::ShaderBytecode const _byteCode, char const* _debugName);
+	void InitAsGraphics(gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps, char const* _debugName);
 	void Destroy();
 
 	bool IsCompute() const { return m_cs.IsValid(); }

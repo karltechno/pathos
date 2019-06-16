@@ -73,11 +73,6 @@ CommandContext_D3D12::CommandContext_D3D12(ContextType _type, Device_D3D12* _dev
 	// TODO: Is it expensive to keep creating command lists (its obviously worth pooling allocators).
 	D3D_CHECK(m_device->m_d3dDev->CreateCommandList(1, m_d3dType, m_cmdAllocator, nullptr, IID_PPV_ARGS(&m_cmdList)));
 
-	for (uint32_t i = 0; i < gpu::c_numShaderSpaces; ++i)
-	{
-		SetDescriptorsDirty(i, DirtyDescriptorFlags::All);
-	}
-
 	uint32_t swapchainHeight, swapchainWidth;
 	gpu::GetSwapchainDimensions(swapchainWidth, swapchainHeight);
 	m_state.m_viewport.m_rect = gpu::Rect(float(swapchainWidth), float(swapchainHeight));
@@ -165,38 +160,152 @@ void SetIndexBuffer(Context* _ctx, gpu::BufferHandle _handle)
 	}
 }
 
-void SetSRV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t _space)
+D3D12_GPU_DESCRIPTOR_HANDLE MakeCBVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors)
 {
-	if (_ctx->m_state.m_srvs[_space][_idx].Handle() != _handle)
+	D3D12_GPU_DESCRIPTOR_HANDLE tableDestGpu;
+	D3D12_CPU_DESCRIPTOR_HANDLE tableDestCpu;
+	uint32_t const tableSize = _descriptors.Size();
+	_ctx->m_device->m_descriptorcbvsrvuavRingBuffer.Alloc(tableSize, tableDestCpu, tableDestGpu);
+
+	uint32_t const descriptorIncrement = _ctx->m_device->m_cbvsrvuavHeap.m_descriptorIncrementSize;
+
+	for (DescriptorData const& descriptor : _descriptors)
 	{
-#if KT_DEBUG
-		if (_handle.IsValid())
+		if (descriptor.m_type == DescriptorData::Type::View)
 		{
-			AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
-			KT_ASSERT(res);
-			KT_ASSERT(res->m_srv.ptr);
+			D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
+			if (AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(descriptor.res.m_handle))
+			{
+				KT_ASSERT(res->m_cbv.ptr);
+				cpuHandle = res->m_cbv;
+			}
+			else
+			{
+				cpuHandle = _ctx->m_device->m_nullCbv;
+			}
+			_ctx->m_device->m_d3dDev->CopyDescriptorsSimple(1, tableDestCpu, cpuHandle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 		}
-#endif
-		_ctx->m_state.m_srvs[_space][_idx].Acquire(_handle);
-		_ctx->SetDescriptorsDirty(_space, DirtyDescriptorFlags::SRV);
+		else
+		{
+			KT_ASSERT(descriptor.m_type == DescriptorData::Type::ScratchConstant);
+
+			ScratchAlloc_D3D12 constantScratch = _ctx->m_device->GetFrameResources()->m_uploadAllocator.Alloc(descriptor.constants.m_size, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+			memcpy(constantScratch.m_cpuData, descriptor.constants.m_ptr, descriptor.constants.m_size);
+
+			// Write directly into the descriptor ring allocation
+			// TODO: Should either change the global root sig so we have a couple gpu virtual addresses for hot constant buffers or allow customisable root sigs.
+			// According to nvidia docs this can have some good perf advantages.
+			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc{};
+			cbvDesc.BufferLocation = constantScratch.m_addr;
+			cbvDesc.SizeInBytes = UINT(kt::AlignUp(descriptor.constants.m_size, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
+			_ctx->m_device->m_d3dDev->CreateConstantBufferView(&cbvDesc, tableDestCpu);
+		}
+
+		// TODO: Could use the non simple version with one call?
+		tableDestCpu.ptr += descriptorIncrement;
 	}
+
+	return tableDestGpu;
 }
 
-void SetUAV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t _space)
+static D3D12_GPU_DESCRIPTOR_HANDLE MakeUAVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors)
 {
-	if (_ctx->m_state.m_uavs[_space][_idx].Handle() != _handle)
+	D3D12_GPU_DESCRIPTOR_HANDLE tableDestGpu;
+	D3D12_CPU_DESCRIPTOR_HANDLE tableDestCpu;
+	uint32_t const tableSize = _descriptors.Size();
+	_ctx->m_device->m_descriptorcbvsrvuavRingBuffer.Alloc(tableSize, tableDestCpu, tableDestGpu);
+
+	uint32_t const descriptorIncrement = _ctx->m_device->m_cbvsrvuavHeap.m_descriptorIncrementSize;
+
+	for (DescriptorData const& descriptor : _descriptors)
 	{
-#if KT_DEBUG
-		if (_handle.IsValid())
+		D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
+		KT_ASSERT(descriptor.m_type == DescriptorData::Type::View);
+		if (AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(descriptor.res.m_handle))
 		{
-			AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
-			KT_ASSERT(res);
-			KT_ASSERT(res->m_uav.ptr);
+			KT_ASSERT(descriptor.res.m_uavMipIdx < res->m_uavs.Size());
+			KT_ASSERT(res->m_srv.ptr);
+			cpuHandle = res->m_uavs[descriptor.res.m_uavMipIdx];
 		}
-#endif
-		_ctx->m_state.m_uavs[_space][_idx].Acquire(_handle);
-		_ctx->SetDescriptorsDirty(_space, DirtyDescriptorFlags::UAV);
+		else
+		{
+			cpuHandle = _ctx->m_device->m_nullUav;
+		}
+		// TODO: Could use the non simple version with one call?
+		_ctx->m_device->m_d3dDev->CopyDescriptorsSimple(1, tableDestCpu, cpuHandle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		tableDestCpu.ptr += descriptorIncrement;
 	}
+
+	return tableDestGpu;
+}
+
+
+static D3D12_GPU_DESCRIPTOR_HANDLE MakeSRVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors)
+{
+	D3D12_GPU_DESCRIPTOR_HANDLE tableDestGpu;
+	D3D12_CPU_DESCRIPTOR_HANDLE tableDestCpu;
+	uint32_t const tableSize = _descriptors.Size();
+	_ctx->m_device->m_descriptorcbvsrvuavRingBuffer.Alloc(tableSize, tableDestCpu, tableDestGpu);
+
+	uint32_t const descriptorIncrement = _ctx->m_device->m_cbvsrvuavHeap.m_descriptorIncrementSize;
+
+	for (DescriptorData const& descriptor : _descriptors)
+	{
+		D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
+		KT_ASSERT(descriptor.m_type == DescriptorData::Type::View);
+		if (AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(descriptor.res.m_handle))
+		{
+			KT_ASSERT(res->m_srv.ptr);
+			cpuHandle = res->m_srv;
+		}
+		else
+		{
+			cpuHandle = _ctx->m_device->m_nullSrv;
+		}
+		// TODO: Could use the non simple version with one call?
+		_ctx->m_device->m_d3dDev->CopyDescriptorsSimple(1, tableDestCpu, cpuHandle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		tableDestCpu.ptr += descriptorIncrement;
+	}
+	
+	return tableDestGpu;
+}
+
+
+void SetComputeCBVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space)
+{
+	// TODO: Magic numbers
+	_ctx->m_cmdList->SetComputeRootDescriptorTable(3 * _space, MakeCBVTable(_ctx, _descriptors));
+}
+
+void SetComputeSRVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space)
+{
+	// TODO: Magic numbers
+	_ctx->m_cmdList->SetComputeRootDescriptorTable(1 + 3 * _space, MakeSRVTable(_ctx, _descriptors));
+}
+
+void SetComputeUAVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space)
+{
+	// TODO: Magic numbers
+	_ctx->m_cmdList->SetComputeRootDescriptorTable(2 + 3 * _space, MakeUAVTable(_ctx, _descriptors));
+}
+
+
+void SetGraphicsCBVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space)
+{
+	// TODO: Magic numbers
+	_ctx->m_cmdList->SetGraphicsRootDescriptorTable(3 * _space, MakeCBVTable(_ctx, _descriptors));
+}
+
+void SetGraphicsUAVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space)
+{
+	// TODO: Magic numbers
+	_ctx->m_cmdList->SetGraphicsRootDescriptorTable(2 + 3 * _space, MakeUAVTable(_ctx, _descriptors));
+}
+
+void SetGraphicsSRVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space)
+{
+	// TODO: Magic numbers
+	_ctx->m_cmdList->SetGraphicsRootDescriptorTable(1 + 3 * _space, MakeSRVTable(_ctx, _descriptors));
 }
 
 void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startIndex, uint32_t _baseVertex, uint32_t _startInstance)
@@ -226,7 +335,6 @@ void UpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, void const*
 void UpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem, uint32_t _size, uint32_t _destOffset)
 {
 	// Should this be done on the copy queue and synchronized?
-
 	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Copy);
 
 	KT_ASSERT(_ctx->m_device->m_resourceHandles.IsValid(_handle));
@@ -236,7 +344,6 @@ void UpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _
 	memcpy(scratch.m_cpuData, _mem, _size);
 	_ctx->m_cmdList->CopyBufferRegion(res->m_res, _destOffset, scratch.m_res, scratch.m_offset, _size);
 }
-
 
 
 kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _size)
@@ -254,7 +361,9 @@ kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _
 	KT_ASSERT(res->m_mappedCpuData);
 	res->m_lastFrameTouched = _ctx->m_device->m_frameCounter;
 	res->UpdateViews();
-	_ctx->MarkDirtyIfBound(_handle);
+	//_ctx->MarkDirtyIfBound(_handle);
+	// TODO: Need to keep track of descriptor tables.
+
 	return kt::MakeSlice((uint8_t*)res->m_mappedCpuData, res->m_bufferDesc.m_sizeInBytes);
 }
 
@@ -347,6 +456,18 @@ void ResourceBarrier(Context* _ctx, gpu::ResourceHandle _handle, gpu::ResourceSt
 	barrier.m_newState = _newState;
 }
 
+void UAVBarrier(Context* _ctx, gpu::ResourceHandle _handle)
+{
+#if KT_DEBUG
+	AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
+	KT_ASSERT(res);
+#endif
+
+	Barrier_D3D12& barrier = _ctx->m_state.m_batchedBarriers.PushBack();
+	barrier.m_res = _handle;
+	barrier.m_isUav = true;
+}
+
 D3D12_GPU_DESCRIPTOR_HANDLE AllocAndCopyFromDescriptorRing(CommandContext_D3D12* _ctx, kt::Slice<D3D12_CPU_DESCRIPTOR_HANDLE> const& _srcHandles)
 {
 	UINT const tableSize = _srcHandles.Size();
@@ -389,54 +510,6 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 		ApplyGraphicsStateChanges();
 		m_dirtyFlags = DirtyStateFlags::None;
 	}
-
-	DirtyDescriptorFlags* dirtyFlags = !!(_dispatchType & CommandListFlags_D3D12::Graphics) ? m_dirtyDescriptorsGraphics : m_dirtyDescriptorsCompute;
-
-	for (uint32_t space = 0; space < gpu::c_numShaderSpaces; ++space)
-	{
-		if (!!dirtyFlags[space])
-		{
-			ApplyDescriptorStateChanges(space, dirtyFlags[space], _dispatchType);
-			dirtyFlags[space] = DirtyDescriptorFlags::None;
-		}
-	}
-}
-
-
-void CommandContext_D3D12::MarkDirtyIfBound(gpu::ResourceHandle _handle)
-{
-	for (gpu::BufferRef const& buff : m_state.m_vertexStreams)
-	{
-		if (buff.Handle() == _handle)
-		{
-			m_dirtyFlags |= DirtyStateFlags::VertexBuffer;
-			break;
-		}
-	}
-
-	if (m_state.m_indexBuffer.Handle() == _handle)
-	{
-		m_dirtyFlags |= DirtyStateFlags::IndexBuffer;
-	}
-
-	auto checkTableFn = [this](uint32_t _space, kt::Slice<gpu::ResourceRef> const& _table, gpu::ResourceHandle _handle, DirtyDescriptorFlags _flags)
-	{
-		for (gpu::ResourceRef const& ref : _table)
-		{
-			if (ref.Handle() == _handle)
-			{
-				SetDescriptorsDirty(_space, _flags);
-				break;
-			}
-		}
-	};
-	
-	for (uint32_t space = 0; space < gpu::c_numShaderSpaces; ++space)
-	{
-		checkTableFn(space, kt::MakeSlice(m_state.m_cbvs[space]), _handle, DirtyDescriptorFlags::CBV);
-		checkTableFn(space, kt::MakeSlice(m_state.m_srvs[space]), _handle, DirtyDescriptorFlags::SRV);
-		checkTableFn(space, kt::MakeSlice(m_state.m_uavs[space]), _handle, DirtyDescriptorFlags::UAV);
-	}
 }
 
 void FlushBarriers(Context* _ctx)
@@ -450,17 +523,28 @@ void FlushBarriers(Context* _ctx)
 	for (uint32_t i = 0; i < _ctx->m_state.m_batchedBarriers.Size(); ++i)
 	{
 		Barrier_D3D12 const& barrier = _ctx->m_state.m_batchedBarriers[i];
+		
 		AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(barrier.m_res);
 		KT_ASSERT(res);
-		D3D12_RESOURCE_STATES const newState = gpu::TranslateResourceState(barrier.m_newState);
-		D3D12_RESOURCE_BARRIER& d3dBarrier = d3dbarriers[i];
-		d3dBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-		d3dBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE; // TODO: Split barriers (probably easiest with rendergraph-esque abstraction).
-		d3dBarrier.Transition.StateBefore = gpu::TranslateResourceState(res->m_resState);
-		d3dBarrier.Transition.StateAfter = newState;
-		d3dBarrier.Transition.pResource = res->m_res;
-		d3dBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-		res->m_resState = barrier.m_newState;
+
+		if (barrier.m_isUav)
+		{
+			d3dbarriers[i].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+			d3dbarriers[i].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+			d3dbarriers[i].UAV.pResource = res->m_res;
+		}
+		else
+		{
+			D3D12_RESOURCE_STATES const newState = gpu::TranslateResourceState(barrier.m_newState);
+			D3D12_RESOURCE_BARRIER& d3dBarrier = d3dbarriers[i];
+			d3dBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			d3dBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE; // TODO: Split barriers (probably easiest with rendergraph-esque abstraction).
+			d3dBarrier.Transition.StateBefore = gpu::TranslateResourceState(res->m_resState);
+			d3dBarrier.Transition.StateAfter = newState;
+			d3dBarrier.Transition.pResource = res->m_res;
+			d3dBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+			res->m_resState = barrier.m_newState;
+		}
 	}
 	_ctx->m_cmdList->ResourceBarrier(_ctx->m_state.m_batchedBarriers.Size(), d3dbarriers);
 	_ctx->m_state.m_batchedBarriers.Clear();
@@ -475,12 +559,6 @@ void CopyResource(Context* _ctx, gpu::ResourceHandle _src, gpu::ResourceHandle _
 	_ctx->m_cmdList->CopyResource(resDst->m_res, resSrc->m_res);
 }
 
-void CommandContext_D3D12::SetDescriptorsDirty(uint32_t _space, DirtyDescriptorFlags _flags)
-{
-	KT_ASSERT(_space < gpu::c_numShaderSpaces);
-	m_dirtyDescriptorsCompute[_space] |= _flags;
-	m_dirtyDescriptorsGraphics[_space] |= _flags;
-}
 
 void CommandContext_D3D12::ApplyGraphicsStateChanges()
 {
@@ -574,125 +652,6 @@ void CommandContext_D3D12::ApplyGraphicsStateChanges()
 			rtvs[i] = tex->m_rtv;
 		}
 		m_cmdList->OMSetRenderTargets(numRenderTargets, rtvs, FALSE, dsv.ptr ? &dsv : nullptr);
-	}
-}
-
-template <D3D12_CPU_DESCRIPTOR_HANDLE(*GetCpuDescriptorFnT)(AllocatedResource_D3D12* _res), uint32_t TableSizeT>
-static D3D12_GPU_DESCRIPTOR_HANDLE CreateDescriptorTableImpl
-(
-	CommandContext_D3D12* _ctx, 
-	gpu::ResourceRef (&_resources)[TableSizeT], 
-	D3D12_GPU_DESCRIPTOR_HANDLE _nullTablePtr,
-	D3D12_CPU_DESCRIPTOR_HANDLE _nullDescriptor
-)
-{
-	bool anyNotNull = false;
-	D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptors[TableSizeT];
-	for (uint32_t i = 0; i < TableSizeT; ++i)
-	{
-		gpu::ResourceRef const& resRef = _resources[i];
-		if (!resRef.IsValid())
-		{
-			cpuDescriptors[i] = _nullDescriptor;
-		}
-		else
-		{
-			anyNotNull = true;
-			AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(resRef);
-			KT_ASSERT(res);
-			CHECK_TRANSIENT_TOUCHED_THIS_FRAME(_ctx, res);
-			D3D12_CPU_DESCRIPTOR_HANDLE const descriptor = GetCpuDescriptorFnT(res);
-			KT_ASSERT(descriptor.ptr);
-			cpuDescriptors[i] = descriptor;
-		}
-	}
-
-	if (anyNotNull)
-	{
-		return AllocAndCopyFromDescriptorRing(_ctx, kt::MakeSlice(cpuDescriptors));
-	}
-	else
-	{
-		return _nullTablePtr;
-	}
-}
-
-static D3D12_CPU_DESCRIPTOR_HANDLE GetCbvFromRes(AllocatedResource_D3D12* _res)
-{
-	return _res->m_cbv;
-}
-
-static D3D12_CPU_DESCRIPTOR_HANDLE GetUavFromRes(AllocatedResource_D3D12* _res)
-{
-	return _res->m_uav;
-}
-
-static D3D12_CPU_DESCRIPTOR_HANDLE GetSrvFromRes(AllocatedResource_D3D12* _res)
-{
-	return _res->m_srv;
-}
-
-void CommandContext_D3D12::ApplyDescriptorStateChanges(uint32_t _spaceIdx, DirtyDescriptorFlags _dirtyFlags, CommandListFlags_D3D12 _dispatchType)
-{
-	if (!!(_dirtyFlags & DirtyDescriptorFlags::CBV))
-	{
-		D3D12_GPU_DESCRIPTOR_HANDLE const gpuDest = CreateDescriptorTableImpl<GetCbvFromRes>(this, m_state.m_cbvs[_spaceIdx], m_device->m_nullCbvTable, m_device->m_nullCbv);
-		// TODO: Hardcoded root offset.
-		if (!!(_dispatchType & CommandListFlags_D3D12::Graphics))
-		{
-			m_cmdList->SetGraphicsRootDescriptorTable(0 + 3 * _spaceIdx, gpuDest);
-		}
-		else
-		{
-			m_cmdList->SetComputeRootDescriptorTable(0 + 3 * _spaceIdx, gpuDest);
-		}
-	}
-
-	if (!!(_dirtyFlags & DirtyDescriptorFlags::SRV))
-	{
-		D3D12_GPU_DESCRIPTOR_HANDLE const gpuDest = CreateDescriptorTableImpl<GetSrvFromRes>(this, m_state.m_srvs[_spaceIdx], m_device->m_nullSrvTable, m_device->m_nullSrv);
-		// TODO: Hardcoded root offset.
-		if (!!(_dispatchType & CommandListFlags_D3D12::Graphics))
-		{
-			m_cmdList->SetGraphicsRootDescriptorTable(1 + 3 * _spaceIdx, gpuDest);
-		}
-		else
-		{
-			m_cmdList->SetComputeRootDescriptorTable(1 + 3 * _spaceIdx, gpuDest);
-		}
-	}
-
-	if (!!(_dirtyFlags & DirtyDescriptorFlags::UAV))
-	{
-		D3D12_GPU_DESCRIPTOR_HANDLE const gpuDest = CreateDescriptorTableImpl<GetUavFromRes>(this, m_state.m_uavs[_spaceIdx], m_device->m_nullUavTable, m_device->m_nullUav);
-		// TODO: Hardcoded root offset.
-		if (!!(_dispatchType & CommandListFlags_D3D12::Graphics))
-		{
-			m_cmdList->SetGraphicsRootDescriptorTable(2 + 3 * _spaceIdx, gpuDest);
-		}
-		else
-		{
-			m_cmdList->SetComputeRootDescriptorTable(2 + 3 * _spaceIdx, gpuDest);
-		}
-	}
-}
-
-void SetTransientCBV(Context* _ctx, void const* _mem, uint32_t _memSize, uint32_t _idx, uint32_t _space)
-{
-	gpu::BufferDesc desc;
-	desc.m_flags = gpu::BufferFlags::Constant | gpu::BufferFlags::Transient;
-	desc.m_sizeInBytes = _memSize;
-	gpu::BufferRef buffer = gpu::CreateBuffer(desc, _mem, "Transient CBuffer");
-	SetCBV(_ctx, buffer, _idx, _space);
-}
-
-void SetCBV(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space)
-{
-	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Compute);
-	if (_ctx->m_state.m_cbvs[_space][_idx].Handle() != _handle)
-	{
-		_ctx->m_state.m_cbvs[_space][_idx].Acquire(_handle);
-		_ctx->SetDescriptorsDirty(_space, DirtyDescriptorFlags::CBV);
 	}
 }
 

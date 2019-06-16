@@ -49,21 +49,11 @@ enum class DirtyStateFlags : uint32_t
 };
 KT_ENUM_CLASS_FLAG_OPERATORS(DirtyStateFlags);
 
-enum class DirtyDescriptorFlags : uint8_t
-{
-	None	= 0x0,
-	CBV		= 0x1,
-	SRV		= 0x2,
-	UAV		= 0x4,
-
-	All = 0xFF
-};
-KT_ENUM_CLASS_FLAG_OPERATORS(DirtyDescriptorFlags);
-
 struct Barrier_D3D12
 {
 	gpu::ResourceRef m_res;
 	gpu::ResourceState m_newState;
+	bool m_isUav = false;
 };
 
 struct CommandContext_D3D12
@@ -72,9 +62,6 @@ struct CommandContext_D3D12
 	~CommandContext_D3D12();
 
 	void ApplyStateChanges(CommandListFlags_D3D12 _dispatchType);
-	void MarkDirtyIfBound(gpu::ResourceHandle _handle);
-
-	void SetDescriptorsDirty(uint32_t _space, DirtyDescriptorFlags _flags);
 
 	Device_D3D12* m_device;
 
@@ -84,8 +71,6 @@ struct CommandContext_D3D12
 	ID3D12CommandAllocator* m_cmdAllocator;
 
 	DirtyStateFlags m_dirtyFlags = DirtyStateFlags::All;
-	DirtyDescriptorFlags m_dirtyDescriptorsGraphics[gpu::c_numShaderSpaces];
-	DirtyDescriptorFlags m_dirtyDescriptorsCompute[gpu::c_numShaderSpaces];
 
 	ContextType m_ctxType;
 	CommandListFlags_D3D12 m_cmdListFlags;
@@ -101,10 +86,7 @@ struct CommandContext_D3D12
 
 		gpu::TextureRef m_depthBuffer;
 		gpu::TextureRef m_renderTargets[gpu::c_maxRenderTargets];
-	
-		gpu::ResourceRef m_cbvs[gpu::c_numShaderSpaces][gpu::c_cbvTableSize];
-		gpu::ResourceRef m_srvs[gpu::c_numShaderSpaces][gpu::c_srvTableSize];
-		gpu::ResourceRef m_uavs[gpu::c_numShaderSpaces][gpu::c_srvTableSize];
+
 
 		gpu::Rect m_scissorRect;
 
@@ -120,7 +102,6 @@ struct CommandContext_D3D12
 
 private:
 	void ApplyGraphicsStateChanges();
-	void ApplyDescriptorStateChanges(uint32_t _spaceIdx, DirtyDescriptorFlags _dirtyFlags, CommandListFlags_D3D12 _dispatchType);
 };
 
 }

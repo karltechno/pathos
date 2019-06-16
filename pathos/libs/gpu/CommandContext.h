@@ -37,12 +37,16 @@ void SetIndexBuffer(Context* _ctx, gpu::BufferHandle _handle);
 void SetRenderTarget(Context* _ctx, uint32_t _idx, gpu::TextureHandle _handle);
 void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle);
 
-void SetTransientCBV(Context* _ctx, void const* _mem, uint32_t _memSize, uint32_t _idx, uint32_t _space);
-void SetCBV(Context* _ctx, gpu::BufferHandle _handle, uint32_t _idx, uint32_t _space);
-void SetSRV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t _space);
-void SetUAV(Context* _ctx, gpu::ResourceHandle _handle, uint32_t _idx, uint32_t _space);
+void SetComputeCBVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
+void SetComputeUAVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
+void SetComputeSRVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
+
+void SetGraphicsCBVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
+void SetGraphicsUAVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
+void SetGraphicsSRVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
 
 void ResourceBarrier(Context* _ctx, gpu::ResourceHandle _handle, gpu::ResourceState _newState);
+void UAVBarrier(Context* _ctx, gpu::ResourceHandle _handle);
 void FlushBarriers(Context* _ctx); 
 
 void CopyResource(Context* _ctx, gpu::ResourceHandle _src, gpu::ResourceHandle _dest);

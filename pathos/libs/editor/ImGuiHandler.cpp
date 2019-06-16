@@ -267,7 +267,9 @@ void ImGuiHandler::InternalRender()
 												  drawData->DisplayPos.y,
 												  0.0f, 1.0f);
 	
-	gpu::cmd::SetTransientCBV(ctx, &mtx, sizeof(mtx), 0, 0);
+	gpu::DescriptorData cbv;
+	cbv.Set(&mtx, sizeof(mtx));
+	gpu::cmd::SetGraphicsCBVTable(ctx, cbv, 0);
 
 	gpu::Rect viewport;
 	viewport.m_bottomRight = kt::Vec2(drawData->DisplaySize.x, drawData->DisplaySize.y);
@@ -281,6 +283,8 @@ void ImGuiHandler::InternalRender()
 	uint32_t idxOffs = 0;
 	kt::Vec2 const clipOffs = kt::Vec2(drawData->DisplayPos.x, drawData->DisplayPos.y);
 
+	gpu::TextureHandle texHandle;
+
 	for (int i = 0; i < drawData->CmdListsCount; ++i)
 	{
 		ImDrawList const* list = drawData->CmdLists[i];
@@ -289,9 +293,17 @@ void ImGuiHandler::InternalRender()
 		{
 			ImDrawCmd const* cmd = list->CmdBuffer.Data + cmdIdx;
 			// TODO: User callback
-			gpu::TextureHandle texHandle;
-			texHandle.m_packed = uint32_t(uintptr_t(cmd->TextureId));
-			gpu::cmd::SetSRV(ctx, texHandle, 0, 0);
+			gpu::TextureHandle newTexHandle;
+			newTexHandle.m_packed = uint32_t(uintptr_t(cmd->TextureId));
+
+			if (newTexHandle != texHandle)
+			{
+				gpu::DescriptorData srv;
+				srv.Set(newTexHandle);
+				gpu::cmd::SetGraphicsSRVTable(ctx, srv, 0);
+				texHandle = newTexHandle;
+			}
+
 			gpu::Rect rect;
 			rect.m_topLeft = kt::Vec2(cmd->ClipRect.x, cmd->ClipRect.y) - clipOffs;
 			rect.m_bottomRight = kt::Vec2(cmd->ClipRect.z, cmd->ClipRect.w) - clipOffs;

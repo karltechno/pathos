@@ -149,6 +149,7 @@ enum class Format : uint32_t
 uint32_t GetFormatSize(gpu::Format _fmt);
 char const* GetFormatName(gpu::Format _fmt);
 
+bool IsSRGBFormat(gpu::Format _fmt);
 bool IsDepthFormat(gpu::Format _fmt);
 
 enum class BufferFlags : uint32_t
@@ -460,6 +461,56 @@ struct Rect
 
 	kt::Vec2 m_topLeft;
 	kt::Vec2 m_bottomRight;
+};
+
+
+struct DescriptorData
+{
+	DescriptorData() : res(), m_type(Type::View) {}
+
+	void Set(gpu::ResourceHandle _handle, uint32_t _uavMipIdx = 0)
+	{
+		m_type = Type::View;
+		res.m_handle = _handle;
+		res.m_uavMipIdx = _uavMipIdx;
+	}
+
+	void Set(void const* _ptr, uint32_t _size)
+	{
+		m_type = Type::ScratchConstant;
+		constants.m_ptr = _ptr;
+		constants.m_size = _size;
+	}
+
+	void SetNull()
+	{
+		m_type = Type::View;
+		res.m_handle = gpu::ResourceHandle{};
+	}
+
+	union
+	{
+		struct Resource
+		{
+			Resource() : m_handle() {}
+
+			gpu::ResourceHandle m_handle;
+			uint32_t m_uavMipIdx;
+		} res;
+
+		struct
+		{
+			void const* m_ptr;
+			uint32_t m_size;
+		} constants;
+	};
+
+	// TODO: Pedantic, but this could be packed into union padding.
+	enum class Type
+	{
+		View,
+		ScratchConstant
+	} m_type;
 };
 
 }
