@@ -133,6 +133,7 @@ bool CameraController::DefaultInputHandler(input::Event const& _event)
 		{
 			m_frameYaw += float(_event.m_mouseMove.deltaX) * s_mouseSpeed;
 			m_framePitch += float(_event.m_mouseMove.deltaY) * s_mouseSpeed;
+			return true;
 		} break;
 
 		default:
