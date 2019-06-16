@@ -42,7 +42,6 @@ struct TestbedApp : app::GraphicsApp
 	gfx::Camera m_cam;
 	app::CameraController m_camController;
 
-	gpu::PSORef m_csPso;
 	gpu::PSORef m_pso;
 	gpu::PSORef m_irradPso;
 

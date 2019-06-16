@@ -30,11 +30,6 @@ void TestbedApp::Setup()
 	m_pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ObjectShader.ps.cso");
 	m_vertexShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ObjectShader.vs.cso");
 
-	res::ResourceHandle<gfx::ShaderResource> csShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ClearTest.cs.cso");
-
-	m_csPso = gpu::CreateComputePSO(res::GetData(csShader)->m_shader);
-
-
 	{
 		gpu::TextureUsageFlags const flags = gpu::TextureUsageFlags::UnorderedAccess | gpu::TextureUsageFlags::ShaderResource;
 		gpu::TextureDesc texDesc = gpu::TextureDesc::DescCube(1024, 1024, flags, gpu::Format::R32G32B32A32_Float);
