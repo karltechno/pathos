@@ -50,6 +50,7 @@ struct Model
 	kt::Array<uint32_t> m_indicies;
 
 	kt::Array<SubMesh> m_meshes;
+	kt::Array<kt::AABB> m_meshBoundingBoxes;
 
 	gpu::BufferRef m_posGpuBuf;
 	gpu::BufferRef m_indexGpuBuf;
@@ -57,6 +58,8 @@ struct Model
 	gpu::BufferRef m_uv0GpuBuf;
 
 	kt::Array<Material> m_materials;
+
+	kt::AABB m_boundingBox;
 };
 
 

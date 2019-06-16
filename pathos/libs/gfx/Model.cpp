@@ -220,6 +220,8 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 			}
 
 			Model::SubMesh& subMesh = _model->m_meshes.PushBack();
+			kt::AABB& boundingBox = _model->m_meshBoundingBoxes.PushBack();
+
 			if (gltfPrim.material)
 			{
 				cgltf_size const materialIdx = gltfPrim.material - _data->materials;
@@ -287,6 +289,10 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 						_model->m_posStream.Resize(uint32_t(posStart + attrib.data->count));
 						KT_ASSERT(attrib.data->type == cgltf_type_vec3);
 						CopyVertexStreamGeneric(attrib.data, (uint8_t*)(_model->m_posStream.Data() + posStart), sizeof(kt::Vec3));
+						
+						KT_ASSERT(attrib.data->has_max && attrib.data->has_min);
+						memcpy(&boundingBox.m_min, attrib.data->min, sizeof(float) * 3);
+						memcpy(&boundingBox.m_max, attrib.data->max, sizeof(float) * 3);
 					} break;
 
 					case cgltf_attribute_type_texcoord:
@@ -359,6 +365,12 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 				GenMikktTangents(_model, oldIndexSize, _model->m_indicies.Size());
 			}
 		}
+	}
+
+	_model->m_boundingBox = kt::AABB::FloatMax();
+	for (kt::AABB const& aabb : _model->m_meshBoundingBoxes)
+	{
+		_model->m_boundingBox = kt::Union(_model->m_boundingBox, aabb);
 	}
 
 	return true;
@@ -534,7 +546,7 @@ void SerializeMaterial(kt::ISerializer* _s, Material& _mat)
 	serializeTex(_mat.m_occlusionTex, TextureLoadFlags::GenMips);
 }
 
-uint32_t constexpr c_modelCacheVersion = 2;
+uint32_t constexpr c_modelCacheVersion = 3;
 
 bool SerializeModelCache(char const* _initialPath, kt::ISerializer* _s, Model& _model)
 {
@@ -555,6 +567,8 @@ bool SerializeModelCache(char const* _initialPath, kt::ISerializer* _s, Model& _
 	kt::Serialize(_s, _model.m_colourStream);
 	kt::Serialize(_s, _model.m_indicies);
 	kt::Serialize(_s, _model.m_meshes);
+	kt::Serialize(_s, _model.m_boundingBox);
+	kt::Serialize(_s, _model.m_meshBoundingBoxes);
 	kt::Serialize(_s, _model.m_materials, SerializeMaterial);
 	
 	return true;
