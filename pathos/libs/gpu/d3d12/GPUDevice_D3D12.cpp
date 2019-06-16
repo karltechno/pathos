@@ -166,11 +166,11 @@ bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* 
 	}
 	else if (!!(m_bufferDesc.m_flags & BufferFlags::ShaderResource))
 	{
-		bestInitialState = gpu::ResourceState::ShaderResource_Read;
+		bestInitialState = gpu::ResourceState::ShaderResource;
 	}
 	else if (!!(m_bufferDesc.m_flags & BufferFlags::UnorderedAccess))
 	{
-		bestInitialState = gpu::ResourceState::ShaderResource_ReadWrite;
+		bestInitialState = gpu::ResourceState::UnorderedAccess;
 	}
 
 	gpu::ResourceState const creationState = _initialData ? gpu::ResourceState::CopyDest : bestInitialState;
@@ -534,11 +534,11 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 	}
 	else if (!!(_desc.m_usageFlags & TextureUsageFlags::ShaderResource))
 	{
-		bestInitialState = gpu::ResourceState::ShaderResource_Read;
+		bestInitialState = gpu::ResourceState::ShaderResource;
 	}
 	else if (!!(_desc.m_usageFlags & TextureUsageFlags::UnorderedAccess))
 	{
-		bestInitialState = gpu::ResourceState::ShaderResource_ReadWrite;
+		bestInitialState = gpu::ResourceState::UnorderedAccess;
 	}
 
 	gpu::ResourceState const creationState = _initialData ? gpu::ResourceState::CopyDest : bestInitialState;

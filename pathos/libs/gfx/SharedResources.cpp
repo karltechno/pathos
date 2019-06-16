@@ -90,7 +90,7 @@ void GenerateMips(gpu::cmd::Context* _ctx, gpu::ResourceHandle _tex)
 
 	gpu::cmd::SetPSO(_ctx, genMipsPso);
 
-	gpu::cmd::ResourceBarrier(_ctx, _tex, gpu::ResourceState::ShaderResource_ReadWrite);
+	gpu::cmd::ResourceBarrier(_ctx, _tex, gpu::ResourceState::UnorderedAccess);
 
 	gpu::DescriptorData srvDescriptor;
 	srvDescriptor.Set(_tex);
@@ -129,7 +129,7 @@ void GenerateMips(gpu::cmd::Context* _ctx, gpu::ResourceHandle _tex)
 		gpu::cmd::UAVBarrier(_ctx, _tex);
 	}
 
-	gpu::cmd::ResourceBarrier(_ctx, _tex, gpu::ResourceState::ShaderResource_Read);
+	gpu::cmd::ResourceBarrier(_ctx, _tex, gpu::ResourceState::ShaderResource);
 }
 
 }

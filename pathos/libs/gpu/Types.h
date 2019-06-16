@@ -89,8 +89,8 @@ enum class ResourceState : uint8_t
 	DepthStencilTarget,
 	DepthStencilTarget_ReadOnly,
 	
-	ShaderResource_Read,
-	ShaderResource_ReadWrite,
+	ShaderResource,
+	UnorderedAccess,
 	
 	CopyDest,
 	CopySrc,

@@ -27,8 +27,8 @@ void CreateCubemapFromEquirect(gpu::ResourceHandle _inEquirect, gpu::ResourceHan
 	KT_ASSERT(resType == gpu::ResourceType::TextureCube);
 
 	gpu::cmd::SetPSO(_cmd, gfx::GetSharedResources().m_equiRectToCubePso);
-	gpu::cmd::ResourceBarrier(_cmd, _outCubemap, gpu::ResourceState::ShaderResource_ReadWrite);
-	gpu::cmd::ResourceBarrier(_cmd, _inEquirect, gpu::ResourceState::ShaderResource_Read);
+	gpu::cmd::ResourceBarrier(_cmd, _outCubemap, gpu::ResourceState::UnorderedAccess);
+	gpu::cmd::ResourceBarrier(_cmd, _inEquirect, gpu::ResourceState::ShaderResource);
 
 	gpu::DescriptorData srv, uav;
 	srv.Set(_inEquirect, 0);

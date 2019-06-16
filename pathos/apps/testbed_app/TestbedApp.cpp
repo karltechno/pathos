@@ -94,7 +94,7 @@ void TestbedApp::Setup()
 	gfx::GenerateMips(ctx, m_cubeMap);
 	{
 		gpu::cmd::SetPSO(ctx, gfx::GetSharedResources().m_bakeIrradPso);
-		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::ShaderResource_ReadWrite);
+		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::UnorderedAccess);
 
 		gpu::DescriptorData srv;
 		srv.Set(m_cubeMap);
@@ -106,7 +106,7 @@ void TestbedApp::Setup()
 		gpu::cmd::SetComputeUAVTable(ctx, uav, 0);
 
 		gpu::cmd::Dispatch(ctx, 32 / 32, 32 / 32, 6);
-		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::ShaderResource_Read);
+		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::ShaderResource);
 	}
 
 
