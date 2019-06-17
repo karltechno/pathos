@@ -70,7 +70,7 @@ struct TextureHandle : ResourceHandle
 
 struct ShaderBytecode
 {
-	void* m_data = nullptr;
+	void const* m_data = nullptr;
 	size_t m_size = 0;
 };
 

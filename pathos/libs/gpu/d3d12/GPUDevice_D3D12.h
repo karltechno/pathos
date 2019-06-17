@@ -253,6 +253,14 @@ struct Device_D3D12
 
 	PSOCache m_psoCache;
 
+	struct MipPSOs
+	{
+		// Second is srgb
+		gpu::PSORef m_standard[2];
+		gpu::PSORef m_cube[2];
+		gpu::PSORef m_array[2];
+	} m_mipPsos;
+
 	uint64_t m_frameFences[c_maxBufferedFrames] = {};
 
 	uint32_t m_cpuFrameIdx = 0;

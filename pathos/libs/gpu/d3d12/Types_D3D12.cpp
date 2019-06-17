@@ -11,6 +11,9 @@ static DXGI_FORMAT const s_toDxgi[] =
 };
 static_assert(KT_ARRAY_COUNT(s_toDxgi) == uint32_t(gpu::Format::Num_Format), "Format array size mismatch");
 
+#undef GPU_FMT_ONE
+#define GPU_FMT_ONE(_pathos)
+
 #undef GPU_BLENDMODE_ONE
 #define GPU_BLENDMODE_ONE(_pathos, _d3d) _d3d,
 static D3D12_BLEND const s_toD3dBlend[] =
@@ -94,8 +97,8 @@ D3D12_RESOURCE_STATES TranslateResourceState(ResourceState _state)
 		case ResourceState::RenderTarget: return D3D12_RESOURCE_STATE_RENDER_TARGET;
 		case ResourceState::DepthStencilTarget: return D3D12_RESOURCE_STATE_DEPTH_WRITE;
 		case ResourceState::DepthStencilTarget_ReadOnly: return D3D12_RESOURCE_STATE_DEPTH_READ;
-		case ResourceState::ShaderResource_Read: return D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-		case ResourceState::ShaderResource_ReadWrite: return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+		case ResourceState::ShaderResource: return D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+		case ResourceState::UnorderedAccess: return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 		case ResourceState::CopyDest: return D3D12_RESOURCE_STATE_COPY_DEST;
 		case ResourceState::CopySrc: return D3D12_RESOURCE_STATE_COPY_SOURCE;
 		case ResourceState::Present: return D3D12_RESOURCE_STATE_PRESENT;

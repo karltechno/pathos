@@ -15,4 +15,9 @@ char const* ToD3DSemanticStr(gpu::VertexSemantic _sem);
 
 D3D12_RESOURCE_STATES TranslateResourceState(gpu::ResourceState _state);
 
+KT_FORCEINLINE uint32_t D3DSubresourceIndex(uint32_t _mipidx, uint32_t _arrayidx, uint32_t _numMips)
+{
+	return _mipidx + _arrayidx * _numMips;
+}
+
 }

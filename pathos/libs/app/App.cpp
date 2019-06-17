@@ -47,7 +47,6 @@ app::WindowHandle PATHOS_INIT(int _argc, char** _argv)
 	editor::Init(wh.nwh);
 	core::InitCVars();
 	res::Init();
-	gfx::InitSharedResources();
 	return wh;
 }
 
@@ -98,6 +97,7 @@ void GraphicsApp::Go(WindowHandle _wh, int _argc, char** _argv)
 
 	// Setup derived.
 	gpu::BeginFrame();
+	gfx::InitSharedResources();
 	Setup();
 	gpu::EndFrame();
 

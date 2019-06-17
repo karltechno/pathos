@@ -20,6 +20,13 @@
 
 #include <string.h>
 
+#include "GenMipsArrayLinear.h"
+#include "GenMipsArraySRGB.h"
+#include "GenMipsCubeLinear.h"
+#include "GenMipsCubeSRGB.h"
+#include "GenMipsLinear.h"
+#include "GenMipsSRGB.h"
+
 static D3D12_HEAP_PROPERTIES const c_defaultHeapProperties{ D3D12_HEAP_TYPE_DEFAULT , D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 1, 1 };
 static D3D12_HEAP_PROPERTIES const c_uploadHeapProperties{ D3D12_HEAP_TYPE_UPLOAD , D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 1, 1 };
 
@@ -365,7 +372,7 @@ struct AllocatedShader_D3D12 : AllocatedObjectBase_D3D12
 
 	void FreeBytecode()
 	{
-		kt::GetDefaultAllocator()->FreeSized(m_byteCode.m_data, m_byteCode.m_size);
+		kt::GetDefaultAllocator()->FreeSized((void*)m_byteCode.m_data, m_byteCode.m_size);
 		m_byteCode = ShaderBytecode{};
 	}
 
@@ -374,7 +381,7 @@ struct AllocatedShader_D3D12 : AllocatedObjectBase_D3D12
 		KT_ASSERT(!m_byteCode.m_data);
 		m_byteCode.m_data = kt::GetDefaultAllocator()->Alloc(_byteCode.m_size);
 		m_byteCode.m_size = _byteCode.m_size;
-		memcpy(m_byteCode.m_data, _byteCode.m_data, _byteCode.m_size);
+		memcpy((void*)m_byteCode.m_data, _byteCode.m_data, _byteCode.m_size);
 	}
 
 	ShaderBytecode m_byteCode;
@@ -1230,6 +1237,30 @@ void Device_D3D12::InitDescriptorHeaps()
 	m_descriptorcbvsrvuavRingBuffer.Init(&m_cbvsrvuavHeap, totalNullDescriptors, c_totalCbvSrvUavDescriptors - totalNullDescriptors);
 }
 
+static void InitMipPsos(Device_D3D12* _dev)
+{
+	gpu::ShaderBytecode const standardLinear{ g_GenMipsLinear, sizeof(g_GenMipsLinear) };
+	gpu::ShaderBytecode const standardSrgb{ g_GenMipsSRGB, sizeof(g_GenMipsSRGB) };
+	gpu::ShaderBytecode const cubeLinear{ g_GenMipsCubeLinear, sizeof(g_GenMipsCubeLinear) };
+	gpu::ShaderBytecode const cubeSrgb{ g_GenMipsCubeSRGB, sizeof(g_GenMipsCubeSRGB) };
+	gpu::ShaderBytecode const arrayLinear{ g_GenMipsArrayLinear, sizeof(g_GenMipsArrayLinear) };
+	gpu::ShaderBytecode const arraySrgb{ g_GenMipsArraySRGB, sizeof(g_GenMipsArraySRGB) };
+
+#define MAKE_PSO(_name, _bytecode, _psoOut) \
+	KT_MACRO_BLOCK_BEGIN \
+	gpu::ShaderRef shader = gpu::CreateShader(gpu::ShaderType::Compute, _bytecode, _name); \
+	_psoOut = gpu::CreateComputePSO(shader, _name); \
+	KT_MACRO_BLOCK_END
+
+	MAKE_PSO("GenMips_Linear", standardLinear, _dev->m_mipPsos.m_standard[0]);
+	MAKE_PSO("GenMips_SRGB", standardSrgb, _dev->m_mipPsos.m_standard[1]);
+	MAKE_PSO("GenMips_Array_Linear", arrayLinear, _dev->m_mipPsos.m_array[0]);
+	MAKE_PSO("GenMips_Array_SRGB", arraySrgb, _dev->m_mipPsos.m_array[1]);
+	MAKE_PSO("GenMips_Cube_Linear", cubeLinear, _dev->m_mipPsos.m_cube[0]);
+	MAKE_PSO("GenMips_Cube_SRGB", cubeSrgb, _dev->m_mipPsos.m_cube[1]);
+#undef MAKE_PSO
+}
+
 void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 {
 	m_resourceHandles.Init(kt::GetDefaultAllocator(), 1024 * 8);
@@ -1382,6 +1413,8 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 	m_backbufferDepth.AcquireNoRef(gpu::CreateTexture(depthDesc, nullptr, "Backbuffer Depth"));
 
 	m_cpuFrameIdx = m_swapChain->GetCurrentBackBufferIndex();
+
+	InitMipPsos(g_device);
 }
 
 Device_D3D12::Device_D3D12()
@@ -1391,6 +1424,7 @@ Device_D3D12::Device_D3D12()
 
 Device_D3D12::~Device_D3D12()
 {
+	m_mipPsos = MipPSOs{};
 	// Sync gpu.
 	m_commandQueueManager.FlushAllBlockingCPU();
 
@@ -1763,6 +1797,148 @@ void Device_D3D12::FrameResources::ClearOnBeginFrame()
 	m_deferredDeletions.Clear();
 
 	m_uploadAllocator.ClearOnBeginFrame();
+}
+
+// Why is this in platform specific code?
+// Becuase I don't have any other need for subresource barriers, and don't want to add them just now for extra complexity.
+// It seems that having the whole resource in D3D12_RESOURCE_STATE_UNORDERED_ACCESS works on some cards (and this is what MiniEngine does).
+// However this isn't technically correct, and throws GPU-Based validation errors.
+void GenerateMips(gpu::cmd::Context* _ctx, gpu::ResourceHandle _handle)
+{
+	AllocatedResource_D3D12* res = g_device->m_resourceHandles.Lookup(_handle);
+	KT_ASSERT(res);
+
+	gpu::ResourceType type = res->m_type;
+	KT_ASSERT(gpu::IsTexture(type));
+	gpu::TextureDesc const& desc = res->m_textureDesc;
+
+	bool const srgb = gpu::IsSRGBFormat(desc.m_format);
+
+	gpu::PSORef genMipsPso;
+	uint32_t arraySlices = desc.m_arraySlices;
+
+	if (type == gpu::ResourceType::TextureCube)
+	{
+		KT_ASSERT(desc.m_arraySlices == 1 && "Cube array mip gen not supported.");
+		genMipsPso = g_device->m_mipPsos.m_cube[srgb];
+		arraySlices = 6;
+	}
+	else if (desc.m_arraySlices > 1)
+	{
+		genMipsPso = g_device->m_mipPsos.m_array[srgb];
+	}
+	else
+	{
+		genMipsPso = g_device->m_mipPsos.m_standard[srgb];
+	}
+
+
+	struct MipCbuf
+	{
+		uint32_t srcMip;
+		uint32_t numOutputMips;
+		kt::Vec2 rcpTexelSize;
+	} cbuf;
+
+	uint32_t const totalMips = desc.m_mipLevels;
+
+	uint32_t srcMip = 0;
+
+	uint32_t destMipStart = 1;
+
+	gpu::cmd::SetPSO(_ctx, genMipsPso);
+
+	kt::Array<D3D12_RESOURCE_BARRIER> barrierArray;
+	barrierArray.Reserve(arraySlices * totalMips);
+
+	auto transitionSubresourceArrayFn = [arraySlices, res, totalMips, &barrierArray](D3D12_RESOURCE_STATES _before, D3D12_RESOURCE_STATES _after, uint32_t _mip)
+	{
+		D3D12_RESOURCE_BARRIER* barriers = barrierArray.PushBack_Raw(arraySlices);
+		for (uint32_t i = 0; i < arraySlices; ++i)
+		{
+			barriers[i].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			barriers[i].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+			barriers[i].Transition.pResource = res->m_res;
+			barriers[i].Transition.StateBefore = _before;
+			barriers[i].Transition.StateAfter = _after;
+			barriers[i].Transition.Subresource = D3DSubresourceIndex(_mip, i, totalMips);
+		}
+	};
+
+	// Need to handle subresource barriers, currently not exposed outside of here since I have no other good uses for them at the moment.
+	if (res->m_resState == gpu::ResourceState::UnorderedAccess)
+	{
+		transitionSubresourceArrayFn(TranslateResourceState(res->m_resState), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 0);
+	}
+	else if(res->m_resState == ResourceState::ShaderResource)
+	{
+		for (uint32_t i = 1; i < totalMips; ++i)
+		{
+			transitionSubresourceArrayFn(TranslateResourceState(res->m_resState), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, i);
+		}
+	}
+	else
+	{
+		transitionSubresourceArrayFn(TranslateResourceState(res->m_resState), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 0);
+
+		for (uint32_t i = 1; i < totalMips; ++i)
+		{
+			transitionSubresourceArrayFn(TranslateResourceState(res->m_resState), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, i);
+		}
+	}
+
+	_ctx->m_cmdList->ResourceBarrier(barrierArray.Size(), barrierArray.Data());
+	barrierArray.Clear();
+
+	gpu::DescriptorData srvDescriptor;
+	srvDescriptor.Set(_handle);
+	gpu::cmd::SetComputeSRVTable(_ctx, srvDescriptor, 0);
+
+	while (destMipStart < totalMips)
+	{
+		uint32_t const c_maxMipsPerPass = 4;
+
+		uint32_t const xDim = kt::Max<uint32_t>(1u, desc.m_width >> destMipStart); 
+		uint32_t const yDim = kt::Max<uint32_t>(1u, desc.m_height >> destMipStart);
+		cbuf.rcpTexelSize.x = 1.0f / float(xDim);
+		cbuf.rcpTexelSize.y = 1.0f / float(yDim);
+		cbuf.srcMip = srcMip;
+		cbuf.numOutputMips = kt::Min(c_maxMipsPerPass, totalMips - destMipStart);
+
+		gpu::DescriptorData cbufDescriptor;
+		gpu::DescriptorData uavDescriptor[c_maxMipsPerPass];
+
+		cbufDescriptor.Set(&cbuf, sizeof(cbuf));
+
+		for (uint32_t i = 0; i < cbuf.numOutputMips; ++i)
+		{
+			uavDescriptor[i].Set(_handle, destMipStart + i);
+		}
+
+		gpu::cmd::SetComputeUAVTable(_ctx, uavDescriptor, 0);
+		gpu::cmd::SetComputeCBVTable(_ctx, cbufDescriptor, 0);
+
+		uint32_t constexpr c_genMipDim = 8;
+		gpu::cmd::Dispatch(_ctx, uint32_t(kt::AlignUp(xDim, c_genMipDim)) / c_genMipDim, uint32_t(kt::AlignUp(xDim, c_genMipDim)) / c_genMipDim, arraySlices);
+
+		for (uint32_t i = destMipStart; i < destMipStart + cbuf.numOutputMips; ++i)
+		{
+			transitionSubresourceArrayFn(D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, i);
+		}
+
+		destMipStart += cbuf.numOutputMips;
+		cbuf.srcMip += cbuf.numOutputMips;
+
+		D3D12_RESOURCE_BARRIER& uavBarrier = barrierArray.PushBack();
+		uavBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+		uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+		uavBarrier.UAV.pResource = res->m_res;
+		_ctx->m_cmdList->ResourceBarrier(barrierArray.Size(), barrierArray.Data());
+		barrierArray.Clear();
+	}
+
+	// At this point everything has been transitioned back to shader resources, so no invariants are broken.
+	res->m_resState = ResourceState::ShaderResource;
 }
 
 void EnumResourceHandles(kt::StaticFunction<void(gpu::ResourceHandle), 32> const& _ftor)

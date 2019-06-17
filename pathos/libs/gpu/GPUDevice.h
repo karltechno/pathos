@@ -27,6 +27,8 @@ gpu::PSOHandle CreateComputePSO(gpu::ShaderHandle _shader, char const* _debeugNa
 gpu::ShaderHandle CreateShader(gpu::ShaderType _type, gpu::ShaderBytecode const& _byteCode, char const* _debugName = nullptr);
 void ReloadShader(gpu::ShaderHandle _handle, gpu::ShaderBytecode const& _newBytecode);
 
+void GenerateMips(gpu::cmd::Context* _ctx, gpu::ResourceHandle _handle);
+
 gpu::TextureHandle CurrentBackbuffer();
 gpu::TextureHandle BackbufferDepth();
 gpu::Format	BackbufferFormat();
