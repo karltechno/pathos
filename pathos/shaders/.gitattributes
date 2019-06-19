@@ -1,0 +1,3 @@
+*.ps linguist-language=hlsl
+*.vs linguist-language=hlsl
+*.cs linguist-language=hlsl
