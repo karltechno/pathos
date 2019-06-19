@@ -14,6 +14,7 @@
 #include "ImGuiHandler.h"
 
 #include "imgui.h"
+#include "ImGuizmo.h"
 
 
 namespace editor
@@ -228,6 +229,7 @@ void ImGuiHandler::BeginFrame(float _dt)
 	io.MousePos = ImVec2(float(mouse[0]), float(mouse[1]));
 
 	ImGui::NewFrame();
+	ImGuizmo::BeginFrame();
 }
 
 void ImGuiHandler::EndFrame()

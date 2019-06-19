@@ -26,6 +26,7 @@ static core::CVar<bool> s_vsync("app.vsync", "Vsync enabled", true);
 void TestbedApp::Setup()
 {
 	m_sceneWindow.SetScene(&m_scene);
+	m_sceneWindow.SetMainViewCamera(&m_cam);
 
 	m_pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ObjectShader.ps.cso");
 	m_vertexShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ObjectShader.vs.cso");
