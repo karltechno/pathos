@@ -91,7 +91,7 @@ void TestbedApp::Setup()
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
 	gfx::CreateCubemapFromEquirect("textures/qwantani_2k.hdr", m_cubeMap, ctx);
-	gfx::GenerateMips(ctx, m_cubeMap);
+	gpu::GenerateMips(ctx, m_cubeMap);
 	{
 		gpu::cmd::SetPSO(ctx, gfx::GetSharedResources().m_bakeIrradPso);
 		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::UnorderedAccess);
@@ -178,7 +178,6 @@ void TestbedApp::Tick(float _dt)
 	m_myCbuffer.mvp = m_cam.GetCachedViewProj() * scaleMtx;
 
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
-	gfx::GenerateMips(ctx, m_cubeMap);
 
 	gpu::TextureHandle backbuffer = gpu::CurrentBackbuffer();
 	gpu::TextureHandle depth = gpu::BackbufferDepth();
