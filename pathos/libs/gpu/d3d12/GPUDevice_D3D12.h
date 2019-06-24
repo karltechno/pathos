@@ -96,6 +96,8 @@ struct AllocatedResource_D3D12 : AllocatedObjectBase_D3D12
 
 	// Descriptors
 	D3D12_CPU_DESCRIPTOR_HANDLE m_srv = {};
+	// TODO: Could make view bindings explicit in code.
+	D3D12_CPU_DESCRIPTOR_HANDLE m_srvCubeAsArray = {};
 
 	D3D12_CPU_DESCRIPTOR_HANDLE m_cbv = {};
 	kt::Array<D3D12_CPU_DESCRIPTOR_HANDLE> m_uavs;

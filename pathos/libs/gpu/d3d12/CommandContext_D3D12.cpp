@@ -255,8 +255,16 @@ static D3D12_GPU_DESCRIPTOR_HANDLE MakeSRVTable(Context* _ctx, kt::Slice<Descrip
 		KT_ASSERT(descriptor.m_type == DescriptorData::Type::View);
 		if (AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(descriptor.res.m_handle))
 		{
-			KT_ASSERT(res->m_srv.ptr);
-			cpuHandle = res->m_srv;
+			if (res->m_type == ResourceType::TextureCube && descriptor.res.m_srvCubeAsArray)
+			{
+				KT_ASSERT(res->m_srv.ptr);
+				cpuHandle = res->m_srvCubeAsArray;
+			}
+			else
+			{
+				KT_ASSERT(res->m_srv.ptr);
+				cpuHandle = res->m_srv;
+			}
 		}
 		else
 		{
@@ -314,7 +322,7 @@ void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _ind
 
 	FlushBarriers(_ctx);
 	_ctx->ApplyStateChanges(CommandListFlags_D3D12::Graphics);
-	_ctx->m_cmdList->IASetPrimitiveTopology(ToD3DPrimType(_prim));
+	_ctx->m_cmdList->IASetPrimitiveTopology(ToD3DPrimType(_prim)); // TODO: Dirty state
 	_ctx->m_cmdList->DrawIndexedInstanced(_indexCount, _instanceCount, _startIndex, _baseVertex, _startInstance);
 }
 
@@ -451,21 +459,44 @@ void ResourceBarrier(Context* _ctx, gpu::ResourceHandle _handle, gpu::ResourceSt
 		return;
 	}
 
-	Barrier_D3D12& barrier = _ctx->m_state.m_batchedBarriers.PushBack();
-	barrier.m_res = _handle;
-	barrier.m_newState = _newState;
+	D3D12_RESOURCE_STATES const newState = gpu::D3DTranslateResourceState(_newState);
+
+	// Check if there are any pending barriers - maybe store in resource?
+	for (D3D12_RESOURCE_BARRIER& b : _ctx->m_state.m_batchedBarriers)
+	{
+		if (b.Type == D3D12_RESOURCE_BARRIER_TYPE_TRANSITION 
+			&& b.Transition.pResource == res->m_res)
+		{
+			// swap the new state if is isn't ours. 
+			// TODO: This is pretty blunt, and might break - consider revisiting this.
+			b.Transition.StateAfter = newState;
+			// force to all subresources
+			b.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+			return;
+		}
+	}
+
+	D3D12_RESOURCE_BARRIER& d3dBarrier = _ctx->m_state.m_batchedBarriers.PushBack();
+	d3dBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	d3dBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE; // TODO: Split barriers (probably easiest with rendergraph-esque abstraction).
+	d3dBarrier.Transition.StateBefore = gpu::D3DTranslateResourceState(res->m_resState);
+	d3dBarrier.Transition.StateAfter = newState;
+	d3dBarrier.Transition.pResource = res->m_res;
+	d3dBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+	// TODO: doesn't play nice with threading, or redundant barriers
+	res->m_resState = _newState;
 }
 
 void UAVBarrier(Context* _ctx, gpu::ResourceHandle _handle)
 {
-#if KT_DEBUG
 	AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
 	KT_ASSERT(res);
-#endif
 
-	Barrier_D3D12& barrier = _ctx->m_state.m_batchedBarriers.PushBack();
-	barrier.m_res = _handle;
-	barrier.m_isUav = true;
+	D3D12_RESOURCE_BARRIER& barrier = _ctx->m_state.m_batchedBarriers.PushBack();
+	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+	barrier.UAV.pResource = res->m_res;
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE AllocAndCopyFromDescriptorRing(CommandContext_D3D12* _ctx, kt::Slice<D3D12_CPU_DESCRIPTOR_HANDLE> const& _srcHandles)
@@ -519,34 +550,7 @@ void FlushBarriers(Context* _ctx)
 		return;
 	}
 
-	D3D12_RESOURCE_BARRIER* d3dbarriers = (D3D12_RESOURCE_BARRIER*)KT_ALLOCA(_ctx->m_state.m_batchedBarriers.Size() * sizeof(D3D12_RESOURCE_BARRIER));
-	for (uint32_t i = 0; i < _ctx->m_state.m_batchedBarriers.Size(); ++i)
-	{
-		Barrier_D3D12 const& barrier = _ctx->m_state.m_batchedBarriers[i];
-		
-		AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(barrier.m_res);
-		KT_ASSERT(res);
-
-		if (barrier.m_isUav)
-		{
-			d3dbarriers[i].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-			d3dbarriers[i].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-			d3dbarriers[i].UAV.pResource = res->m_res;
-		}
-		else
-		{
-			D3D12_RESOURCE_STATES const newState = gpu::TranslateResourceState(barrier.m_newState);
-			D3D12_RESOURCE_BARRIER& d3dBarrier = d3dbarriers[i];
-			d3dBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-			d3dBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE; // TODO: Split barriers (probably easiest with rendergraph-esque abstraction).
-			d3dBarrier.Transition.StateBefore = gpu::TranslateResourceState(res->m_resState);
-			d3dBarrier.Transition.StateAfter = newState;
-			d3dBarrier.Transition.pResource = res->m_res;
-			d3dBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-			res->m_resState = barrier.m_newState;
-		}
-	}
-	_ctx->m_cmdList->ResourceBarrier(_ctx->m_state.m_batchedBarriers.Size(), d3dbarriers);
+	_ctx->m_cmdList->ResourceBarrier(_ctx->m_state.m_batchedBarriers.Size(), _ctx->m_state.m_batchedBarriers.Data());
 	_ctx->m_state.m_batchedBarriers.Clear();
 }
 
@@ -558,7 +562,91 @@ void CopyResource(Context* _ctx, gpu::ResourceHandle _src, gpu::ResourceHandle _
 	KT_ASSERT(resDst);
 	_ctx->m_cmdList->CopyResource(resDst->m_res, resSrc->m_res);
 }
-
+//
+//void CopyMips(Context* _ctx, gpu::ResourceHandle _texSrc, gpu::ResourceHandle _texDest, kt::Slice<const uint32_t> const& _mipsToCopy)
+//{
+//	AllocatedResource_D3D12* resSrc = _ctx->m_device->m_resourceHandles.Lookup(_texSrc);
+//	AllocatedResource_D3D12* resDst = _ctx->m_device->m_resourceHandles.Lookup(_texDest);
+//	KT_ASSERT(resSrc);
+//	KT_ASSERT(resDst);
+//
+//	KT_ASSERT(gpu::IsTexture(resSrc->m_type));
+//	KT_ASSERT(resSrc->m_type == resDst->m_type);
+//
+//	uint32_t const arraySize = resSrc->m_type == gpu::ResourceType::TextureCube ? 6 * resSrc->m_textureDesc.m_arraySlices : resSrc->m_textureDesc.m_arraySlices;
+//	
+//	KT_ASSERT(resSrc->m_textureDesc.m_arraySlices == resSrc->m_textureDesc.m_arraySlices);
+//	KT_ASSERT(resSrc->m_textureDesc.m_mipLevels == resSrc->m_textureDesc.m_mipLevels);
+//	KT_ASSERT(resSrc->m_textureDesc.m_format == resDst->m_textureDesc.m_format);
+//
+//	auto transitionMipsFn = [arraySize, _ctx, &_mipsToCopy](AllocatedResource_D3D12* _res, D3D12_RESOURCE_STATES _newState)
+//	{
+//		D3D12_RESOURCE_BARRIER* resBarriers = _ctx->m_state.m_batchedBarriers.PushBack_Raw(_mipsToCopy.Size() * arraySize);
+//		D3D12_RESOURCE_STATES const stateBefore = gpu::D3DTranslateResourceState(_res->m_resState);
+//		for (uint32_t mip : _mipsToCopy)
+//		{
+//			for (uint32_t arrIdx = 0; arrIdx < arraySize; ++arrIdx)
+//			{
+//				D3D12_RESOURCE_BARRIER& bar = *resBarriers++;
+//				bar.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+//				bar.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+//				bar.Transition.pResource = _res->m_res;
+//				bar.Transition.StateBefore = stateBefore;
+//				bar.Transition.StateAfter = _newState;
+//				bar.Transition.Subresource = gpu::D3DSubresourceIndex(mip, arrIdx, _res->m_textureDesc.m_mipLevels);
+//			}
+//		}
+//	};
+//
+//	if (resSrc->m_resState != gpu::ResourceState::CopySrc)
+//	{
+//		transitionMipsFn(resSrc, D3D12_RESOURCE_STATE_COPY_SOURCE);
+//	}
+//
+//	if (resDst->m_resState != gpu::ResourceState::CopyDest)
+//	{
+//		transitionMipsFn(resDst, D3D12_RESOURCE_STATE_COPY_DEST);
+//	}
+//
+//	D3D12_TEXTURE_COPY_LOCATION* srcLocs = (D3D12_TEXTURE_COPY_LOCATION*)KT_ALLOCA(sizeof(D3D12_TEXTURE_COPY_LOCATION) * _mipsToCopy.Size() * arraySize);
+//	D3D12_TEXTURE_COPY_LOCATION* destLocs = (D3D12_TEXTURE_COPY_LOCATION*)KT_ALLOCA(sizeof(D3D12_TEXTURE_COPY_LOCATION) * _mipsToCopy.Size() * arraySize);
+//
+//	{
+//		uint32_t idx = 0;
+//		for (uint32_t mip : _mipsToCopy)
+//		{
+//			for (uint32_t arrIdx = 0; arrIdx < arraySize; ++arrIdx)
+//			{
+//				D3D12_TEXTURE_COPY_LOCATION& srcLoc = srcLocs[idx];
+//				D3D12_TEXTURE_COPY_LOCATION& destLoc = destLocs[idx++];
+//				srcLoc.pResource = resSrc->m_res;
+//				destLoc.pResource = resDst->m_res;
+//				destLoc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+//				srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+//				srcLoc.SubresourceIndex = gpu::D3DSubresourceIndex(mip, arrIdx, resSrc->m_textureDesc.m_mipLevels);
+//				destLoc.SubresourceIndex = gpu::D3DSubresourceIndex(mip, arrIdx, resDst->m_textureDesc.m_mipLevels);
+//			}
+//		}
+//	}
+//
+//	gpu::cmd::FlushBarriers(_ctx);
+//
+//	for (uint32_t i = 0; i < _mipsToCopy.Size() * arraySize; ++i)
+//	{
+//		_ctx->m_cmdList->CopyTextureRegion(destLocs + i, 0, 0, 0, srcLocs + i, nullptr);
+//	}
+//
+//	// translate states back
+//	if (resSrc->m_resState != gpu::ResourceState::CopySrc)
+//	{
+//		transitionMipsFn(resSrc, gpu::D3DTranslateResourceState(resSrc->m_resState));
+//	}
+//
+//	if (resDst->m_resState != gpu::ResourceState::CopyDest)
+//	{
+//		transitionMipsFn(resDst, gpu::D3DTranslateResourceState(resDst->m_resState));
+//	}
+//}
 
 void CommandContext_D3D12::ApplyGraphicsStateChanges()
 {

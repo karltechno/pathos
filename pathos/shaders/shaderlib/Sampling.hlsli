@@ -30,6 +30,7 @@ float3 SampleHemisphere_Uniform(float u1, float u2)
 {
     float phi = u2 * k2Pi;
     float cosTheta = 1.0 - u1;
+    // Identity: sin^2 + cos^2 = 1
     float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
 
     float sinPhi, cosPhi;
@@ -41,11 +42,31 @@ float3 SampleHemisphere_Cosine(float u1, float u2)
 {
     float phi = u2 * k2Pi;
     float cosTheta = sqrt(1.0 - u1);
+    // Identity: sin^2 + cos^2 = 1
     float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
     
     float sinPhi, cosPhi;
     sincos(phi, sinPhi, cosPhi);
     return float3(cosPhi * sinTheta, sinPhi * sinTheta, cosTheta);
+}
+
+// Derivation: https://www.tobias-franke.eu/log/2014/03/30/notes_on_importance_sampling.html
+float3 SampleGGX(float u1, float u2, float roughness2)
+{
+    float cosTheta = sqrt( (1. - u2) / (1. + (roughness2 - 1) * u2) );
+    float phi = k2Pi * u1;
+
+    // Identity: sin^2 + cos^2 = 1
+    float sinTheta = sqrt(1. - cosTheta*cosTheta);
+    float sinPhi, cosPhi;
+    sincos(phi, sinPhi, cosPhi);
+    return float3(sinTheta * cosPhi, sinTheta * sinPhi, cosTheta);
+}
+
+float GGX_NDF(float l_dot_h, float roughness2)
+{
+    float denom = (l_dot_h * l_dot_h) * (roughness2 - 1.0) + 1.0;
+	return roughness2 / (kPi * denom * denom);
 }
 
 // http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
@@ -57,6 +78,28 @@ float RadicalInverse_VdC(uint bits)
 float2 Hammersley(uint i, float rcpNumSamples)
 {
 	return float2(i * rcpNumSamples, RadicalInverse_VdC(i));
+}
+
+// http://lolengine.net/blog/2013/09/21/picking-orthogonal-vector-combing-coconuts
+float3 PerpVec(float3 v)
+{
+    // TODO: Branchless
+    return abs(v.x) > abs(v.y) ? float3(-v.y, v.x, 0.) : float3(0., -v.z, v.y);
+}
+
+// Assumes input is normalized.
+float3x3 ConstructBasisAround(float3 N)
+{
+    float3 p = PerpVec(N);
+    float3 p2 = cross(p, N);
+    return float3x3(p, p2, N);
+}
+
+// Assumes input is normalized.
+void ConstructBasisAround(in float3 N, out float3 T, out float3 B)
+{
+    T = PerpVec(N);
+    B = cross(T, N);
 }
 
 #endif // SAMPLING_H

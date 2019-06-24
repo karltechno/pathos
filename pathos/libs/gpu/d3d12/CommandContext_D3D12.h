@@ -87,7 +87,6 @@ struct CommandContext_D3D12
 		gpu::TextureRef m_depthBuffer;
 		gpu::TextureRef m_renderTargets[gpu::c_maxRenderTargets];
 
-
 		gpu::Rect m_scissorRect;
 
 		struct
@@ -97,7 +96,7 @@ struct CommandContext_D3D12
 			float m_depthMax;
 		} m_viewport;
 
-		kt::InplaceArray<Barrier_D3D12, 8u> m_batchedBarriers;
+		kt::InplaceArray<D3D12_RESOURCE_BARRIER, 16u> m_batchedBarriers;
 	} m_state;
 
 private:

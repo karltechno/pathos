@@ -88,7 +88,7 @@ char const* ToD3DSemanticStr(VertexSemantic _sem)
 	return s_toD3dSemStr[uint32_t(_sem)];
 }
 
-D3D12_RESOURCE_STATES TranslateResourceState(ResourceState _state)
+D3D12_RESOURCE_STATES D3DTranslateResourceState(ResourceState _state)
 {
 	switch (_state)
 	{

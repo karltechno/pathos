@@ -2,6 +2,7 @@
 #define LIGHTING_COMMON_H
 #include "LightingStructs.h"
 #include "Constants.hlsli"
+#include "GlobalSamplers.hlsli"
 
 // References
 // https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
@@ -48,7 +49,7 @@ SurfaceData CreateSurfaceData
     surf.roughness = max(roughness*roughness, 0.001);
     surf.metalness = metallic;
     surf.baseCol = lerp(baseCol, float3(0., 0., 0.), surf.metalness);
-    surf.f0 = lerp(float3(0.04, 0.04, 0.04), surf.baseCol, surf.metalness);
+    surf.f0 = lerp(float3(0.04, 0.04, 0.04), baseCol, surf.metalness);
     return surf;
 }
 
@@ -95,26 +96,32 @@ float3 DiffuseTerm_Lambert(in SurfaceData surface)
 
 float3 ComputeLighting_Common(in float3 lightColor, in SurfaceData surface, in float3 L, in float3 V)
 {
-    float3 H = normalize(V + L);
-    float n_dot_h = saturate(dot(surface.norm, H));
-    float n_dot_v = saturate(abs(dot(surface.norm, V) + 1e-5));
-    float v_dot_h = saturate(dot(H, V));
     float n_dot_l = saturate(dot(surface.norm, L));
 
-    float3 specularTerm;
-    float3 fresnel;
-
+    if(n_dot_l > 0.)
     {
-        float rough2 = surface.roughness * surface.roughness;
-        
-        fresnel = F_Schlick(surface.f0, v_dot_h);
-        float G = G_Smith(n_dot_l, n_dot_v, rough2);
-        float D = D_GGX(n_dot_h, rough2);
-        specularTerm = (G*D)*fresnel;
+        float3 H = normalize(V + L);
+        float n_dot_h = saturate(dot(surface.norm, H));
+        float n_dot_v = saturate(abs(dot(surface.norm, V) + 1e-5));
+        float v_dot_h = saturate(dot(H, V));
+
+        float3 specularTerm;
+        float3 fresnel;
+
+        {
+            float rough2 = surface.roughness * surface.roughness;
+            
+            fresnel = F_Schlick(surface.f0, v_dot_h);
+            float G = G_Smith(n_dot_l, n_dot_v, rough2);
+            float D = D_GGX(n_dot_h, rough2);
+            specularTerm = (G*D)*fresnel;
+        }
+
+        float3 diffuseTerm = DiffuseTerm_Lambert(surface) * (1. - fresnel);
+        return n_dot_l * lightColor * (diffuseTerm + specularTerm); 
     }
 
-    float3 diffuseTerm = DiffuseTerm_Lambert(surface) * (float3(1., 1., 1.) - fresnel);
-    return n_dot_l * lightColor * (diffuseTerm + specularTerm); 
+    return 0.;
 }
 
 float PointLightAtten(float lightDist, float lightDistSq, float lightRadiusRcp)
@@ -132,5 +139,31 @@ float3 ComputeLighting_Point(in LightData light, in SurfaceData surface, in floa
 
     return light.intensity * PointLightAtten(L_len, L_lenSq, light.rcpRadius) * ComputeLighting_Common(light.color, surface, L, V); 
 }
+
+float3 ComputeLighting_IBL
+(
+    in SurfaceData surface, 
+    in float3 V, 
+    in float3 _irrad, 
+    in TextureCube<float4> _ggxIblMap, 
+    uint _specularLevels, 
+    in Texture2D<float4> _ggxBrdfLut
+)
+{
+    // TODO: Maybe store in surface data?
+    float n_dot_v = dot(V, surface.norm);
+    
+    float3 F = F_Schlick(surface.f0, n_dot_v);
+
+    float3 diffuse = (1.0 - F) * surface.baseCol * _irrad;
+    float3 refl = reflect(-V, surface.norm);
+    float3 ggxIntegrated = _ggxIblMap.SampleLevel(g_samplerLinearWrap, refl, surface.roughness * _specularLevels).xyz;
+    float2 brdf = _ggxBrdfLut.Sample(g_samplerLinearClamp, float2(n_dot_v, surface.roughness)).xy;
+
+    float3 spec = (surface.f0 * brdf.x + brdf.y) * ggxIntegrated;
+    return spec + diffuse;
+}
+
+
 
 #endif // LIGHTING_COMMON_H

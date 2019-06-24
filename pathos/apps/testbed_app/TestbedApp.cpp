@@ -45,6 +45,13 @@ void TestbedApp::Setup()
 	}
 
 	{
+		gpu::TextureUsageFlags const flags = gpu::TextureUsageFlags::UnorderedAccess | gpu::TextureUsageFlags::ShaderResource;
+		gpu::TextureDesc texDesc = gpu::TextureDesc::DescCube(1024, 1024, flags, gpu::Format::R16B16G16A16_Float);
+		texDesc.m_mipLevels = gfx::MipChainLength(128, 128);
+		m_ggxMap = gpu::CreateTexture(texDesc, nullptr, "GGX_MAP");
+	}
+
+	{
 		res::ResourceHandle<gfx::ShaderResource> skyBoxVS = res::LoadResourceSync<gfx::ShaderResource>("shaders/SkyBox.vs.cso");
 		res::ResourceHandle<gfx::ShaderResource> skyBoxPS = res::LoadResourceSync<gfx::ShaderResource>("shaders/SkyBox.ps.cso");
 	
@@ -89,10 +96,15 @@ void TestbedApp::Setup()
 		m_lightCbuffer = gpu::CreateBuffer(lightBufferDesc);
 
 	}
+
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
-	gfx::CreateCubemapFromEquirect("textures/qwantani_2k.hdr", m_cubeMap, ctx);
+	//gfx::CreateCubemapFromEquirect(ctx, "textures/qwantani_2k.hdr", m_cubeMap);
+	gfx::CreateCubemapFromEquirect(ctx, "textures/environment.hdr", m_cubeMap);
 	gpu::GenerateMips(ctx, m_cubeMap);
+
+	gfx::BakeEnvMapGGX(ctx, m_cubeMap, m_ggxMap);
+
 	{
 		gpu::cmd::SetPSO(ctx, gfx::GetSharedResources().m_bakeIrradPso);
 		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::UnorderedAccess);
@@ -153,7 +165,6 @@ void TestbedApp::Tick(float _dt)
 {
 	gpu::SetVsyncEnabled(s_vsync);
 
-
 	m_scene.UpdateCBuffer(&m_testLightCbufferData);
 	m_testLightCbufferData.camPos = m_cam.GetPos();
 
@@ -205,10 +216,12 @@ void TestbedApp::Tick(float _dt)
 	gpu::cmd::ClearRenderTarget(ctx, backbuffer, col);
 	gpu::cmd::ClearDepth(ctx, depth, 1.0f);
 
-	gpu::DescriptorData irradMap;
-	irradMap.Set(m_irradMap);
+	gpu::DescriptorData envMaps[3];
+	envMaps[0].Set(m_irradMap);
+	envMaps[1].Set(m_ggxMap);
+	envMaps[2].Set(gfx::GetSharedResources().m_ggxLut);
 
-	gpu::cmd::SetGraphicsSRVTable(ctx, irradMap, 1);
+	gpu::cmd::SetGraphicsSRVTable(ctx, envMaps, 1);
 	DrawModel(ctx, *res::GetData(m_modelHandle));
 
 	{

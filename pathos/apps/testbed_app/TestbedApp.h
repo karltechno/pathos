@@ -48,6 +48,7 @@ struct TestbedApp : app::GraphicsApp
 	gpu::BufferRef m_constantBuffer;
 	gpu::TextureRef m_cubeMap;
 	gpu::TextureRef m_irradMap;
+	gpu::TextureRef m_ggxMap;
 
 	res::ResourceHandle<gfx::ShaderResource> m_pixelShader;
 	res::ResourceHandle<gfx::ShaderResource> m_vertexShader;

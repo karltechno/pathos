@@ -181,6 +181,17 @@ enum class TextureUsageFlags
 
 KT_ENUM_CLASS_FLAG_OPERATORS(TextureUsageFlags);
 
+union ClearValue
+{
+	float m_colour[4];
+
+	struct  
+	{
+		float m_depth;
+		uint32_t m_stencil;
+	} ds;
+};
+
 // Texture description.
 struct TextureDesc
 {
@@ -199,6 +210,8 @@ struct TextureDesc
 
 	uint32_t m_mipLevels = 1;
 	uint32_t m_arraySlices = 1;
+
+	ClearValue m_clear;
 };
 
 // Buffer description
@@ -473,6 +486,15 @@ struct DescriptorData
 		m_type = Type::View;
 		res.m_handle = _handle;
 		res.m_uavMipIdx = _uavMipIdx;
+		res.m_srvCubeAsArray = 0;
+	}
+
+	void SetSRVCubeAsArray(gpu::ResourceHandle _handle)
+	{
+		m_type = Type::View;
+		res.m_handle = _handle;
+		res.m_uavMipIdx = 0;
+		res.m_srvCubeAsArray = 1;
 	}
 
 	void Set(void const* _ptr, uint32_t _size)
@@ -495,7 +517,8 @@ struct DescriptorData
 			Resource() : m_handle() {}
 
 			gpu::ResourceHandle m_handle;
-			uint32_t m_uavMipIdx;
+			uint32_t m_uavMipIdx : 31;
+			uint32_t m_srvCubeAsArray : 1;
 		} res;
 
 		struct

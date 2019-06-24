@@ -14,6 +14,8 @@ Texture2D<float4> g_metalRoughness : register(t2, space0);
 Texture2D<float4> g_ao : register(t3, space0);
 
 TextureCube<float4> g_irrad : register(t0, space1);
+TextureCube<float4> g_ggxEnv : register(t1, space1);
+Texture2D<float4> g_ggxLut : register(t2, space1);
 
 ConstantBuffer<TestData> g_data : register(b0, space0);
 ConstantBuffer<TestLightCBuffer> g_lights : register(b1, space0);
@@ -49,8 +51,11 @@ float4 main(in VSOut_ObjectFull _input) : SV_Target
 
     color += ComputeLighting_Common(g_lights.sunColor, surf, -g_lights.sunDir, view);
     
-    //color += float3(0.2, 0.2, 0.2) * surf.baseCol;
-    color += g_irrad.Sample(g_samplerLinearWrap, surf.norm).xyz * surf.baseCol;
+    float3 irrad = g_irrad.Sample(g_samplerLinearWrap, surf.norm).xyz;
+
+    uint w,h,levels;
+    g_ggxEnv.GetDimensions(0, w, h, levels);
+    color += ComputeLighting_IBL(surf, view, irrad, g_ggxEnv, levels, g_ggxLut);
     
 
     // float3 ao = g_ao.Sample(g_samplerLinearWrap, _input.uv).xyz;

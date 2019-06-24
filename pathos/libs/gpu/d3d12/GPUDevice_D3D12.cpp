@@ -213,7 +213,7 @@ bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* 
 		desc.SampleDesc.Quality = 0;
 		desc.Width = m_bufferDesc.m_sizeInBytes;
 
-		if (!SUCCEEDED(g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &desc, gpu::TranslateResourceState(creationState), nullptr, IID_PPV_ARGS(&m_res))))
+		if (!SUCCEEDED(g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &desc, gpu::D3DTranslateResourceState(creationState), nullptr, IID_PPV_ARGS(&m_res))))
 		{
 			KT_LOG_ERROR("CreateCommittedResource failed to create buffer size %u.", m_bufferDesc.m_sizeInBytes);
 			return false;
@@ -250,7 +250,7 @@ bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* 
 		else
 		{
 			KT_ASSERT(m_res);
-			CopyInitialResourceData(m_res, _initialData, initialDataSize, gpu::TranslateResourceState(creationState), gpu::TranslateResourceState(bestInitialState));
+			CopyInitialResourceData(m_res, _initialData, initialDataSize, gpu::D3DTranslateResourceState(creationState), gpu::D3DTranslateResourceState(bestInitialState));
 			m_resState = bestInitialState;
 		}
 	}
@@ -270,6 +270,12 @@ void AllocatedResource_D3D12::Destroy()
 	if (m_srv.ptr)
 	{
 		g_device->m_stagingHeap.Free(m_srv);
+		m_srv.ptr = 0;
+	}
+
+	if (m_srvCubeAsArray.ptr)
+	{
+		g_device->m_stagingHeap.Free(m_srvCubeAsArray);
 		m_srv.ptr = 0;
 	}
 
@@ -633,7 +639,16 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 		depthClear.DepthStencil.Depth = 1.0f; // TODO: Selectable for reverse Z
 	}
 
-	HRESULT const hr = g_device->m_d3dDev->CreateCommittedResource(&c_defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &d3dDesc, gpu::TranslateResourceState(creationState), pClearVal, IID_PPV_ARGS(&m_res));
+	HRESULT const hr = g_device->m_d3dDev->CreateCommittedResource
+	(
+		&c_defaultHeapProperties, 
+		D3D12_HEAP_FLAG_NONE, 
+		&d3dDesc,
+		gpu::D3DTranslateResourceState(creationState), 
+		pClearVal, 
+		IID_PPV_ARGS(&m_res)
+	);
+
 	if (!SUCCEEDED(hr))
 	{
 		KT_LOG_ERROR("CreateCommittedResource failed (HRESULT: %u)", hr);
@@ -736,6 +751,19 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 	{
 		m_srv = g_device->m_stagingHeap.AllocOne();
 		g_device->m_d3dDev->CreateShaderResourceView(m_res, &srvDesc, m_srv);
+
+		if (_desc.m_type == ResourceType::TextureCube)
+		{
+			m_srvCubeAsArray = g_device->m_stagingHeap.AllocOne();
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+			srvDesc.Texture2DArray.ArraySize = 6 * _desc.m_arraySlices;
+			srvDesc.Texture2DArray.FirstArraySlice = 0;
+			srvDesc.Texture2DArray.MipLevels = _desc.m_mipLevels;
+			srvDesc.Texture2DArray.MostDetailedMip = 0;
+			srvDesc.Texture2DArray.PlaneSlice = 0;
+			srvDesc.Texture2DArray.ResourceMinLODClamp = 0.0f;
+			g_device->m_d3dDev->CreateShaderResourceView(m_res, &srvDesc, m_srvCubeAsArray);
+		}
 	}
 
 	if (!!(_desc.m_usageFlags & gpu::TextureUsageFlags::UnorderedAccess))
@@ -759,8 +787,8 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 
 	if (_initialData)
 	{
-		D3D12_RESOURCE_STATES const destState = gpu::TranslateResourceState(bestInitialState);
-		CopyInitialTextureData(*this, _initialData, gpu::TranslateResourceState(creationState), destState);
+		D3D12_RESOURCE_STATES const destState = gpu::D3DTranslateResourceState(bestInitialState);
+		CopyInitialTextureData(*this, _initialData, gpu::D3DTranslateResourceState(creationState), destState);
 		m_resState = bestInitialState;
 	}
 
@@ -779,7 +807,7 @@ void AllocatedResource_D3D12::InitFromBackbuffer(ID3D12Resource* _res, uint32_t 
 
 	// https://docs.microsoft.com/en-us/windows/desktop/direct3d12/using-resource-barriers-to-synchronize-resource-states-in-direct3d-12#initial-states-for-resources
 	// "Swap chain back buffers automatically start out in the D3D12_RESOURCE_STATE_COMMON state."
-	// Note: RenderTarget resource state is the same as common in d3d12.
+	// Note: present resource state is the same as common in d3d12.
 	m_resState = gpu::ResourceState::Common;
 
 	m_rtv = g_device->m_rtvHeap.AllocOne();
@@ -1723,7 +1751,7 @@ bool Init(void* _nwh)
 	// TODO: Toggle debug layer
 	g_device = new Device_D3D12();
 	// TODO
-	g_device->Init(_nwh, false);
+	g_device->Init(_nwh, true);
 	return true;
 }
 
@@ -1868,22 +1896,22 @@ void GenerateMips(gpu::cmd::Context* _ctx, gpu::ResourceHandle _handle)
 	// Need to handle subresource barriers, currently not exposed outside of here since I have no other good uses for them at the moment.
 	if (res->m_resState == gpu::ResourceState::UnorderedAccess)
 	{
-		transitionSubresourceArrayFn(TranslateResourceState(res->m_resState), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 0);
+		transitionSubresourceArrayFn(D3DTranslateResourceState(res->m_resState), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 0);
 	}
 	else if(res->m_resState == ResourceState::ShaderResource)
 	{
 		for (uint32_t i = 1; i < totalMips; ++i)
 		{
-			transitionSubresourceArrayFn(TranslateResourceState(res->m_resState), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, i);
+			transitionSubresourceArrayFn(D3DTranslateResourceState(res->m_resState), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, i);
 		}
 	}
 	else
 	{
-		transitionSubresourceArrayFn(TranslateResourceState(res->m_resState), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 0);
+		transitionSubresourceArrayFn(D3DTranslateResourceState(res->m_resState), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 0);
 
 		for (uint32_t i = 1; i < totalMips; ++i)
 		{
-			transitionSubresourceArrayFn(TranslateResourceState(res->m_resState), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, i);
+			transitionSubresourceArrayFn(D3DTranslateResourceState(res->m_resState), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, i);
 		}
 	}
 
