@@ -1814,6 +1814,11 @@ gpu::Format BackbufferFormat()
 	return g_device->m_resourceHandles.Lookup(g_device->m_backBuffers[0])->m_textureDesc.m_format;
 }
 
+gpu::Format BackbufferDepthFormat()
+{
+	return g_device->m_resourceHandles.Lookup(g_device->m_backbufferDepth)->m_textureDesc.m_format;
+}
+
 void Device_D3D12::FrameResources::ClearOnBeginFrame()
 {
 	for (ID3D12DeviceChild* obj: m_deferredDeletions)

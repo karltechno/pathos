@@ -32,6 +32,7 @@ void GenerateMips(gpu::cmd::Context* _ctx, gpu::ResourceHandle _handle);
 gpu::TextureHandle CurrentBackbuffer();
 gpu::TextureHandle BackbufferDepth();
 gpu::Format	BackbufferFormat();
+gpu::Format	BackbufferDepthFormat();
 
 void SetVsyncEnabled(bool _vsync);
 

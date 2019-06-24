@@ -51,23 +51,7 @@ void TestbedApp::Setup()
 		m_ggxMap = gpu::CreateTexture(texDesc, nullptr, "GGX_MAP");
 	}
 
-	{
-		res::ResourceHandle<gfx::ShaderResource> skyBoxVS = res::LoadResourceSync<gfx::ShaderResource>("shaders/SkyBox.vs.cso");
-		res::ResourceHandle<gfx::ShaderResource> skyBoxPS = res::LoadResourceSync<gfx::ShaderResource>("shaders/SkyBox.ps.cso");
-	
-		gpu::GraphicsPSODesc skyBoxPso;
-		skyBoxPso.m_depthStencilDesc.m_depthEnable = 1;
-		skyBoxPso.m_depthStencilDesc.m_depthWrite = 0;
-		skyBoxPso.m_depthStencilDesc.m_depthFn = gpu::ComparisonFn::LessEqual;
-		skyBoxPso.m_rasterDesc.m_cullMode = gpu::CullMode::Front;
-		skyBoxPso.m_depthFormat = gpu::Format::D32_Float;
-		skyBoxPso.m_numRenderTargets = 1;
-		skyBoxPso.m_renderTargetFormats[0] = gpu::BackbufferFormat();
-		skyBoxPso.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position);
-		skyBoxPso.m_vs = res::GetData(skyBoxVS)->m_shader;
-		skyBoxPso.m_ps = res::GetData(skyBoxPS)->m_shader;
-		m_skyBoxPso = gpu::CreateGraphicsPSO(skyBoxPso);
-	}
+	m_skyboxRenderer.Init(m_cubeMap);
 
 	{
 		gpu::GraphicsPSODesc psoDesc;
@@ -99,8 +83,8 @@ void TestbedApp::Setup()
 
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
-	//gfx::CreateCubemapFromEquirect(ctx, "textures/qwantani_2k.hdr", m_cubeMap);
-	gfx::CreateCubemapFromEquirect(ctx, "textures/environment.hdr", m_cubeMap);
+	gfx::CreateCubemapFromEquirect(ctx, "textures/qwantani_2k.hdr", m_cubeMap);
+	//gfx::CreateCubemapFromEquirect(ctx, "textures/environment.hdr", m_cubeMap);
 	gpu::GenerateMips(ctx, m_cubeMap);
 
 	gfx::BakeEnvMapGGX(ctx, m_cubeMap, m_ggxMap);
@@ -124,10 +108,7 @@ void TestbedApp::Setup()
 
 
 	{
-		gfx::PrimitiveBuffers buf;
-		buf.m_genFlags = gfx::PrimitiveBuffers::GenFlags::PosOnly;
-		gfx::GenCube(buf);
-		m_cubeData = gfx::MakePrimitiveGPUBuffers(buf);
+
 	}
 }
 
@@ -224,31 +205,7 @@ void TestbedApp::Tick(float _dt)
 	gpu::cmd::SetGraphicsSRVTable(ctx, envMaps, 1);
 	DrawModel(ctx, *res::GetData(m_modelHandle));
 
-	{
-		// skybox
-		gpu::cmd::SetPSO(ctx, m_skyBoxPso);
-		gpu::DescriptorData skyBox;
-		skyBox.Set(m_cubeMap);
-
-		gpu::cmd::SetGraphicsSRVTable(ctx, skyBox, 0);
-		gpu::cmd::SetVertexBuffer(ctx, 0, m_cubeData.m_pos);
-		gpu::cmd::SetIndexBuffer(ctx, m_cubeData.m_indicies);
-		kt::Mat4 skyMtx = m_cam.GetView();
-		skyMtx.SetPos(kt::Vec3(0.0f));
-		skyMtx = m_cam.GetProjection() * skyMtx;
-
-		gpu::DescriptorData skyMtxDescriptor;
-		skyMtxDescriptor.Set(&skyMtx, sizeof(skyMtx));
-
-		gpu::cmd::SetGraphicsCBVTable(ctx, skyMtxDescriptor, 0);
-		
-		uint32_t w, h;
-		gpu::GetSwapchainDimensions(w, h);
-		gpu::Rect rect{ float(w), float(h) };
-
-		gpu::cmd::SetViewport(ctx, rect, 1.0f, 1.0f);
-		gpu::cmd::DrawIndexedInstanced(ctx, gpu::PrimitiveType::TriangleList, m_cubeData.m_numIndicies, 1, 0, 0, 0);
-	}
+	m_skyboxRenderer.Render(ctx, m_cam);
 }
 
 void TestbedApp::Shutdown()

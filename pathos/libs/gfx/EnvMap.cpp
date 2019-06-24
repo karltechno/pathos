@@ -1,6 +1,13 @@
 #include "EnvMap.h"
 #include "Texture.h"
 #include "SharedResources.h"
+#include "Resources.h"
+#include "Primitive.h"
+#include "Camera.h"
+
+#include <gpu/CommandContext.h>
+#include <gpu/GPUDevice.h>
+#include <res/ResourceSystem.h>
 
 namespace gfx
 {
@@ -117,6 +124,59 @@ void BakeEnvMapGGX(gpu::cmd::Context* _cmd, gpu::ResourceHandle _inCubeMap, gpu:
 	}
 
 	gpu::cmd::ResourceBarrier(_cmd, _outGGXMap, gpu::ResourceState::ShaderResource);
+}
+
+void SkyBoxRenderer::Init(gpu::ResourceHandle _cubeMap)
+{
+	m_cubemap = _cubeMap;
+
+	res::ResourceHandle<gfx::ShaderResource> skyBoxVS = res::LoadResourceSync<gfx::ShaderResource>("shaders/SkyBox.vs.cso");
+	res::ResourceHandle<gfx::ShaderResource> skyBoxPS = res::LoadResourceSync<gfx::ShaderResource>("shaders/SkyBox.ps.cso");
+
+	gpu::GraphicsPSODesc skyBoxPso;
+	skyBoxPso.m_depthStencilDesc.m_depthEnable = 1;
+	skyBoxPso.m_depthStencilDesc.m_depthWrite = 0;
+	skyBoxPso.m_depthStencilDesc.m_depthFn = gpu::ComparisonFn::LessEqual;
+	skyBoxPso.m_rasterDesc.m_cullMode = gpu::CullMode::Front;
+	skyBoxPso.m_depthFormat = gpu::BackbufferDepthFormat();
+	skyBoxPso.m_numRenderTargets = 1;
+	skyBoxPso.m_renderTargetFormats[0] = gpu::BackbufferFormat();
+	skyBoxPso.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position);
+	skyBoxPso.m_vs = res::GetData(skyBoxVS)->m_shader;
+	skyBoxPso.m_ps = res::GetData(skyBoxPS)->m_shader;
+	m_skyBoxPso = gpu::CreateGraphicsPSO(skyBoxPso);
+
+	gfx::PrimitiveBuffers buf;
+	buf.m_genFlags = gfx::PrimitiveBuffers::GenFlags::PosOnly;
+	gfx::GenCube(buf);
+	m_primGpuBuf = gfx::MakePrimitiveGPUBuffers(buf);
+}
+
+void SkyBoxRenderer::Render(gpu::cmd::Context* _ctx, gfx::Camera const& _cam)
+{
+	gpu::cmd::SetPSO(_ctx, m_skyBoxPso);
+	gpu::DescriptorData srv;
+	srv.Set(m_cubemap);
+
+	gpu::cmd::SetGraphicsSRVTable(_ctx, srv, 0);
+	gpu::cmd::SetVertexBuffer(_ctx, 0, m_primGpuBuf.m_pos);
+	gpu::cmd::SetIndexBuffer(_ctx, m_primGpuBuf.m_indicies);
+	kt::Mat4 skyMtx = _cam.GetView();
+
+	skyMtx.SetPos(kt::Vec3(0.0f));
+	skyMtx = _cam.GetProjection() * skyMtx;
+
+	gpu::DescriptorData skyMtxDescriptor;
+	skyMtxDescriptor.Set(&skyMtx, sizeof(skyMtx));
+
+	gpu::cmd::SetGraphicsCBVTable(_ctx, skyMtxDescriptor, 0);
+
+	uint32_t w, h;
+	gpu::GetSwapchainDimensions(w, h);
+	gpu::Rect rect{ float(w), float(h) };
+
+	gpu::cmd::SetViewport(_ctx, rect, 1.0f, 1.0f);
+	gpu::cmd::DrawIndexedInstanced(_ctx, gpu::PrimitiveType::TriangleList, m_primGpuBuf.m_numIndicies, 1, 0, 0, 0);
 }
 
 }

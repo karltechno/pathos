@@ -114,7 +114,7 @@ enum class ResourceType : uint8_t
 
 inline bool IsTexture(ResourceType _type)
 {
-	return _type == ResourceType::Texture1D || _type == ResourceType::Texture2D || _type == ResourceType::Texture3D || _type == ResourceType::TextureCube;
+	return _type != ResourceType::Buffer;
 }
 
 // Texture/Buffer format.

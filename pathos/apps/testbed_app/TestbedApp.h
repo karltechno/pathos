@@ -5,6 +5,7 @@
 #include <gpu/Types.h>
 #include <gpu/HandleRef.h>
 
+#include <gfx/EnvMap.h>
 #include <gfx/Camera.h>
 #include <gfx/Resources.h>
 #include <gfx/Model.h>
@@ -50,13 +51,10 @@ struct TestbedApp : app::GraphicsApp
 	gpu::TextureRef m_irradMap;
 	gpu::TextureRef m_ggxMap;
 
+	gfx::SkyBoxRenderer m_skyboxRenderer;
+
 	res::ResourceHandle<gfx::ShaderResource> m_pixelShader;
 	res::ResourceHandle<gfx::ShaderResource> m_vertexShader;
 	res::ResourceHandle<gfx::Model> m_modelHandle;
-
-	gpu::PSORef m_skyBoxPso;
-
-	gfx::PrimitiveGPUBuffers m_cubeData;
-
 };
 
