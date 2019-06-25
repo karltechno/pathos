@@ -87,19 +87,12 @@ float3 PerpVec(float3 v)
     return abs(v.x) > abs(v.y) ? float3(-v.y, v.x, 0.) : float3(0., -v.z, v.y);
 }
 
-// Assumes input is normalized.
-float3x3 ConstructBasisAround(float3 N)
-{
-    float3 p = PerpVec(N);
-    float3 p2 = cross(p, N);
-    return float3x3(p, p2, N);
-}
 
 // Assumes input is normalized.
 void ConstructBasisAround(in float3 N, out float3 T, out float3 B)
 {
-    T = PerpVec(N);
-    B = cross(T, N);
+    T = normalize(PerpVec(N));
+    B = normalize(cross(T, N));
 }
 
 #endif // SAMPLING_H

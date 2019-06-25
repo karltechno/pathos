@@ -2,6 +2,7 @@
 #include "shaderlib/Constants.hlsli"
 #include "shaderlib/GlobalSamplers.hlsli"
 
+
 TextureCube g_inCube : register(t0, space0);
 RWTexture2DArray<float4> g_outGGXMap : register(u0, space0);
 
@@ -15,6 +16,10 @@ struct CBuf
 
 ConstantBuffer<CBuf> g_cbuf : register(b0, space0);
 
+// TODO: Naive - could optimize.
+// Eg see: https://www.ppsloan.org/publications/ggx_filtering.pdf 
+
+
 float3 TangentToWorld(float3 p, float3 T, float3 B, float3 N)
 {
     return p.x * T + p.y * B + p.z * N;
@@ -23,6 +28,12 @@ float3 TangentToWorld(float3 p, float3 T, float3 B, float3 N)
 [numthreads(32, 32, 1)]
 void main(uint3 DTid : SV_DispatchThreadID)
 {
+    uint outputWidth, outputHeight, outputDepth;
+	g_outGGXMap.GetDimensions(outputWidth, outputHeight, outputDepth);
+	if(DTid.x >= outputWidth || DTid.y >= outputHeight) {
+		return;
+	}
+
     const uint NUM_SAMPLES = 1024;
     const float RCP_SAMPLES = rcp(float(NUM_SAMPLES));
 
@@ -50,8 +61,8 @@ void main(uint3 DTid : SV_DispatchThreadID)
             float pdf = GGX_NDF(saturate(dot(N, H)), g_cbuf.rough2) * 0.25;
             // https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch20.html
             float sampleSolidAngle = rcp(pdf*NUM_SAMPLES);
-            float mip = max(0., 1. + log2(sampleSolidAngle / texelSolidAngle)); // sqrt(log2(ssa/tsa))
-            colAccum += g_inCube.SampleLevel(g_samplerLinearWrap, N, mip).xyz;
+            float mip = max(0., 1. + log2(sampleSolidAngle / texelSolidAngle) * 0.5); // sqrt(log2(ssa/tsa))
+            colAccum += g_inCube.SampleLevel(g_samplerLinearWrap, L, mip).xyz * n_dot_l;
             weight += n_dot_l;
         }
     }

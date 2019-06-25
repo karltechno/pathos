@@ -47,7 +47,7 @@ void TestbedApp::Setup()
 	{
 		gpu::TextureUsageFlags const flags = gpu::TextureUsageFlags::UnorderedAccess | gpu::TextureUsageFlags::ShaderResource;
 		gpu::TextureDesc texDesc = gpu::TextureDesc::DescCube(1024, 1024, flags, gpu::Format::R16B16G16A16_Float);
-		texDesc.m_mipLevels = gfx::MipChainLength(128, 128);
+		texDesc.m_mipLevels = gfx::MipChainLength(1024, 1024);
 		m_ggxMap = gpu::CreateTexture(texDesc, nullptr, "GGX_MAP");
 	}
 
@@ -104,11 +104,6 @@ void TestbedApp::Setup()
 
 		gpu::cmd::Dispatch(ctx, 32 / 32, 32 / 32, 6);
 		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::ShaderResource);
-	}
-
-
-	{
-
 	}
 }
 
