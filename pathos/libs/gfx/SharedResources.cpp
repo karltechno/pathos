@@ -31,8 +31,9 @@ void InitSharedResources()
 		gpu::TextureDesc const texDesc = gpu::TextureDesc::Desc2D(4, 4, gpu::TextureUsageFlags::ShaderResource, gpu::Format::R8G8B8A8_UNorm);
 		uint32_t texels[4*4];
 		memset(texels, 0xFFFFFFFF, sizeof(texels));
+		for (uint32_t& t : texels) { t = 0xFFFFFFFF; }
 		s_sharedResources.m_texWhite = gpu::CreateTexture(texDesc, texels, "White_Tex");
-		memset(texels, 0x000000FF, sizeof(texels));
+		for (uint32_t& t : texels) { t = 0xFF000000; }
 		s_sharedResources.m_texBlack = gpu::CreateTexture(texDesc, texels, "Black_Tex");
 	}
 
