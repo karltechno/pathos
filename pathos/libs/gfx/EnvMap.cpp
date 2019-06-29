@@ -141,7 +141,7 @@ void SkyBoxRenderer::Init(gpu::ResourceHandle _cubeMap)
 	skyBoxPso.m_depthFormat = gpu::BackbufferDepthFormat();
 	skyBoxPso.m_numRenderTargets = 1;
 	skyBoxPso.m_renderTargetFormats[0] = gpu::BackbufferFormat();
-	skyBoxPso.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position);
+	skyBoxPso.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position, false);
 	skyBoxPso.m_vs = res::GetData(skyBoxVS)->m_shader;
 	skyBoxPso.m_ps = res::GetData(skyBoxPS)->m_shader;
 	m_skyBoxPso = gpu::CreateGraphicsPSO(skyBoxPso);

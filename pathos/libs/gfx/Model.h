@@ -40,6 +40,7 @@ struct Model
 	static void RegisterResourceLoader();
 
 	static gpu::VertexLayout FullVertexLayout();
+	static gpu::VertexLayout FullVertexLayoutInstanced();
 
 	bool LoadFromGLTF(char const* _path);
 

@@ -251,10 +251,21 @@ enum class VertexSemantic : uint8_t
 
 struct VertexDeclEntry
 {
+	VertexDeclEntry() = default;
+
+	VertexDeclEntry(Format _fmt, VertexSemantic _semantic, bool _isInstanceData, uint8_t _semanticIdx = 0, uint8_t _streamIdx = 0)
+		: m_format(_fmt)
+		, m_semantic(_semantic)
+		, m_semanticIndex(_semanticIdx)
+		, m_streamIdx(_streamIdx)
+		, m_isInstanceData(_isInstanceData)
+	{}
+
 	Format m_format;
-	VertexSemantic m_semantic;
 	uint8_t m_semanticIndex;
 	uint8_t m_streamIdx;
+	VertexSemantic m_semantic : 7;
+	uint8_t m_isInstanceData : 1;
 };
 
 uint32_t constexpr c_maxVertexElements = 16;
@@ -275,9 +286,9 @@ struct VertexLayout
 		return *this;
 	}
 
-	VertexLayout& Add(Format _fmt, VertexSemantic _semantic, uint8_t _semanticIdx = 0, uint8_t _streamIdx = 0)
+	VertexLayout& Add(Format _fmt, VertexSemantic _semantic, bool _isInstanceData, uint8_t _semanticIdx = 0, uint8_t _streamIdx = 0)
 	{
-		Add(VertexDeclEntry{ _fmt, _semantic, _semanticIdx, _streamIdx });
+		Add(VertexDeclEntry{ _fmt, _semantic, _isInstanceData, _semanticIdx, _streamIdx });
 		return *this;
 	}
 

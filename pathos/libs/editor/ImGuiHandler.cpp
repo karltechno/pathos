@@ -65,9 +65,9 @@ void ImGuiHandler::Init(void* _nwh)
 	psoDesc.m_rasterDesc.m_frontFaceCCW = 0;
 
 	psoDesc.m_vertexLayout
-		.Add(gpu::Format::R32G32_Float, gpu::VertexSemantic::Position)
-		.Add(gpu::Format::R32G32_Float, gpu::VertexSemantic::TexCoord)
-		.Add(gpu::Format::R8G8B8A8_UNorm, gpu::VertexSemantic::Color);
+		.Add(gpu::Format::R32G32_Float, gpu::VertexSemantic::Position, false)
+		.Add(gpu::Format::R32G32_Float, gpu::VertexSemantic::TexCoord, false)
+		.Add(gpu::Format::R8G8B8A8_UNorm, gpu::VertexSemantic::Color, false);
 
 	psoDesc.m_renderTargetFormats[0] = gpu::BackbufferFormat();
 	psoDesc.m_numRenderTargets = 1;

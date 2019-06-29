@@ -25,10 +25,11 @@ public:
 	// Free allocated models, if you care :)
 	static void Shutdown();
 
-
 	Scene();
 
 	void UpdateFrameData(gpu::cmd::Context* _ctx, gfx::Camera const& _mainView, float _dt);
+
+	void RenderInstances(gpu::cmd::Context* _ctx);
 
 	kt::Array<shaderlib::LightData> m_lights;
 	gpu::BufferRef m_lightGpuBuf;
@@ -42,15 +43,30 @@ public:
 		gfx::Model* m_model;
 	};
 
-	struct Instance
+	struct KT_ALIGNAS(16) InstanceData
 	{
-		kt::Mat3 m_rot;
-		kt::Vec3 m_pos;
+		InstanceData() 
+			: m_transform()
+		{}
+
+		union
+		{
+			float m_data[4 * 3];
+
+			struct
+			{
+				// rotation and uniform scale
+				kt::Mat3 m_mtx;
+				kt::Vec3 m_pos;
+			} m_transform;
+		};
 		uint32_t m_modelIdx;
+		uint32_t __pad0__[3];
 	};
 
-	kt::Array<Instance> m_instances;
-	
+	kt::Array<InstanceData> m_instances;
+	gpu::BufferRef m_instanceGpuBuf;
+
 	// Convenient global list of models.
 	static kt::Array<kt::String64> s_modelNames;
 	static kt::Array<gfx::Model*> s_models;

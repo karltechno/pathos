@@ -1,6 +1,8 @@
 #pragma once
 #include <editor/Editor.h>
 
+#include "ImGuizmo.h"
+
 namespace gfx
 {
 class Scene;
@@ -24,9 +26,13 @@ struct GFXSceneWindow
 	gfx::Camera* m_cam = nullptr;
 
 	uint32_t m_selectedLightIdx = 0xFFFFFFFF;
-	bool m_guizmoEnabled = false;
+	uint32_t m_selectedInstanceIdx = 0xFFFFFFFF;
 
 	editor::ImGuiWindowHandle m_windowHandle;
+
+	ImGuizmo::OPERATION m_gizmoOp = ImGuizmo::TRANSLATE;
+	ImGuizmo::MODE m_gizmoMode = ImGuizmo::WORLD;
+
 };
 
 }

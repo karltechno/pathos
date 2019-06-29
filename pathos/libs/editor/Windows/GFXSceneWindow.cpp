@@ -2,6 +2,7 @@
 
 #include <gfx/Scene.h>
 #include <gfx/Camera.h>
+#include <gfx/Model.h>
 
 #include "GFXSceneWindow.h"
 
@@ -15,7 +16,7 @@ namespace editor
 
 GFXSceneWindow::GFXSceneWindow()
 {
-	m_windowHandle = editor::RegisterWindow("gfx", "Scene", [this](float _dt) {Draw(_dt); }, []() { ImGui::SetNextWindowSize(ImVec2(600.0f, 550.0f), ImGuiCond_Once); });
+	m_windowHandle = editor::RegisterWindow("gfx", "Scene", [this](float _dt) { Draw(_dt); }, []() { ImGui::SetNextWindowSize(ImVec2(600.0f, 550.0f), ImGuiCond_Once); });
 }
 
 GFXSceneWindow::~GFXSceneWindow()
@@ -25,47 +26,59 @@ GFXSceneWindow::~GFXSceneWindow()
 
 static void DrawModelsTab(GFXSceneWindow* _window)
 {
-	KT_UNUSED(_window);
-	ImGui::Columns(2);
-	ImGui::Text("Models");
-	ImGui::NextColumn();
-	ImGui::Text("Instances");
-	ImGui::NextColumn();
-	ImGui::Separator();
-
 	for (uint32_t i = 0; i < gfx::Scene::s_models.Size(); ++i)
 	{
 		ImGui::PushID(i);
 		char const* name = gfx::Scene::s_modelNames[i].Data();
 		if (ImGui::CollapsingHeader(name))
 		{
+			gfx::Model const& model = *gfx::Scene::s_models[i];
+			ImGui::Text("Sub Meshes: %u", model.m_meshes.Size());
+			ImGui::Text("Bounding Box Min: x: %.2f, y: %.2f, z: %.2f", model.m_boundingBox.m_min[0], model.m_boundingBox.m_min[1], model.m_boundingBox.m_min[2]);
+			ImGui::Text("Bounding Box Max: x: %.2f, y: %.2f, z: %.2f", model.m_boundingBox.m_max[0], model.m_boundingBox.m_max[1], model.m_boundingBox.m_max[2]);
+			ImGui::Text("Num Materials: %u", model.m_materials.Size());
+
 			if (ImGui::Button("Add instance"))
 			{
-				gfx::Scene::Instance& instance = _window->m_scene->m_instances.PushBack();
+				gfx::Scene::InstanceData& instance = _window->m_scene->m_instances.PushBack();
 				instance.m_modelIdx = i;
-				instance.m_pos = kt::Vec3(0.0f);
-				instance.m_rot = kt::Mat3::Identity();
+				instance.m_transform.m_pos = kt::Vec3(0.0f);
+				instance.m_transform.m_mtx = kt::Mat3::Identity();
+				_window->m_selectedInstanceIdx = _window->m_scene->m_instances.Size() - 1;
 			}
 		}
 		ImGui::PopID();
 	}
+}
 
-	ImGui::NextColumn();
-
-	for (gfx::Scene::Instance& instance : _window->m_scene->m_instances)
+static void DrawInstancesTab(GFXSceneWindow* _window)
+{
+	kt::Array<gfx::Scene::InstanceData>& instanceArray = _window->m_scene->m_instances;
+	for (uint32_t i = 0; i < instanceArray.Size(); ++i)
 	{
-		//gfx::Model* m = gfx::Scene::s_models[instance.m_modelIdx];
-		char const* name = gfx::Scene::s_modelNames[instance.m_modelIdx].Data();
-
-		ImGui::PushID(&instance);
-		if (ImGui::CollapsingHeader(name))
+		//gfx::Model const& model = *gfx::Scene::s_models[instanceArray[i].m_modelIdx];
+		char const* modelName = gfx::Scene::s_modelNames[instanceArray[i].m_modelIdx].Data();
+		bool const selected = ImGui::Selectable(modelName, i == _window->m_selectedInstanceIdx);
+		if (selected || _window->m_selectedInstanceIdx == i)
 		{
-			ImGui::DragFloat3("Pos", &instance.m_pos[0]);
-		}
-		ImGui::PopID();
-	}
+			_window->m_selectedInstanceIdx = i;
 
-	ImGui::Columns();
+			gfx::Scene::InstanceData& instance = instanceArray[i];
+			kt::Mat4 mtx;
+
+			mtx.m_cols[0] = kt::Vec4(instance.m_transform.m_mtx[0], 0.0f);
+			mtx.m_cols[1] = kt::Vec4(instance.m_transform.m_mtx[1], 0.0f);
+			mtx.m_cols[2] = kt::Vec4(instance.m_transform.m_mtx[2], 0.0f);
+			mtx.m_cols[3] = kt::Vec4(instance.m_transform.m_pos, 1.0f);
+
+			ImGuizmo::Manipulate(_window->m_cam->GetView().Data(), _window->m_cam->GetProjection().Data(), _window->m_gizmoOp, _window->m_gizmoMode, mtx.Data(), false);
+
+			instance.m_transform.m_mtx[0] = kt::Vec3(mtx.m_cols[0]);
+			instance.m_transform.m_mtx[1] = kt::Vec3(mtx.m_cols[1]);
+			instance.m_transform.m_mtx[2] = kt::Vec3(mtx.m_cols[2]);
+			instance.m_transform.m_pos = kt::Vec3(mtx.m_cols[3]);
+		}
+	}
 }
 
 static void DrawLightsTab(GFXSceneWindow* _window)
@@ -105,7 +118,7 @@ static void DrawLightsTab(GFXSceneWindow* _window)
 		ImGui::DragFloat3("Pos", &light.posWS[0]);
 		float rad = 1.0f / light.rcpRadius;
 		ImGui::SliderFloat("Radius", &rad, 1.0f, 1000.0f);
-		ImGui::SliderFloat("Intensity", &light.intensity, 1.0f, 100000.0f);
+		ImGui::SliderFloat("Intensity", &light.intensity, 1.0f, 10000.0f, "%.3f", 2.0f);
 		light.rcpRadius = 1.0f / rad;
 
 		if (ImGui::Button("Remove"))
@@ -142,9 +155,14 @@ void GFXSceneWindow::Draw(float _dt)
 	ImGui::SliderFloat3("Sun Dir", &m_scene->m_frameConstants.sunDir[0], -1.0f, 1.0f);
 	m_scene->m_frameConstants.sunDir = kt::Normalize(m_scene->m_frameConstants.sunDir);
 
-	ImGui::Checkbox("Enable Gizmo", &m_guizmoEnabled);
-	
-	ImGuizmo::Enable(m_guizmoEnabled);
+	char const* const modes[] = { "Local", "World" };
+	char const* const ops[] = { "Translate", "Rotate", "Scale" };
+
+	ImGui::ListBox("Gizmo Mode", (int*)&m_gizmoMode, modes, KT_ARRAY_COUNT(modes));
+	ImGui::ListBox("Gizmo Op", (int*)&m_gizmoOp, ops, KT_ARRAY_COUNT(ops));
+
+	ImGuizmo::Enable(true);
+
 	ImGuiIO& io = ImGui::GetIO();
 	ImGuizmo::SetRect(0.0f, 0.0f, io.DisplaySize.x, io.DisplaySize.y);
 
@@ -156,16 +174,20 @@ void GFXSceneWindow::Draw(float _dt)
 			ImGui::EndTabItem();
 		}
 
+		if (ImGui::BeginTabItem("Instances"))
+		{
+			DrawInstancesTab(this);
+			ImGui::EndTabItem();
+		}
+
 		if (ImGui::BeginTabItem("Lights"))
 		{
 			DrawLightsTab(this);
 			ImGui::EndTabItem();
 		}
 
-
 		ImGui::EndTabBar();
 	}
-
 }
 
 void GFXSceneWindow::SetScene(gfx::Scene* _scene)

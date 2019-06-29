@@ -22,7 +22,7 @@
 
 #define PATHOS_CHECK_LEAK (0)
 
-#define PATHOS_FAST_SHUTDOWN (1 && !PATHOS_CHECK_LEAK)
+#define PATHOS_FAST_SHUTDOWN (0 && !PATHOS_CHECK_LEAK)
 
 #if PATHOS_CHECK_LEAK
 static kt::LeakCheckAllocator s_leakCheckAllocator;

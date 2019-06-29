@@ -63,10 +63,26 @@ void Model::RegisterResourceLoader()
 gpu::VertexLayout Model::FullVertexLayout()
 {
 	gpu::VertexLayout layout;
-	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position, 0, 0);
-	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Normal, 0, 1);
-	layout.Add(gpu::Format::R32G32B32A32_Float, gpu::VertexSemantic::Tangent, 0, 1);
-	layout.Add(gpu::Format::R32G32_Float, gpu::VertexSemantic::TexCoord, 0, 2);
+	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position, false, 0, 0);
+	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Normal, false, 0, 1);
+	layout.Add(gpu::Format::R32G32B32A32_Float, gpu::VertexSemantic::Tangent, false, 0, 1);
+	layout.Add(gpu::Format::R32G32_Float, gpu::VertexSemantic::TexCoord, false, 0, 2);
+	return layout;
+}
+
+gpu::VertexLayout Model::FullVertexLayoutInstanced()
+{
+	gpu::VertexLayout layout;
+	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position, false, 0, 0);
+	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Normal, false, 0, 1);
+	layout.Add(gpu::Format::R32G32B32A32_Float, gpu::VertexSemantic::Tangent, false, 0, 1);
+	layout.Add(gpu::Format::R32G32_Float, gpu::VertexSemantic::TexCoord, false, 0, 2);
+
+	// instance data
+	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 1, 3);
+	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 2, 3);
+	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 3, 3);
+	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 4, 3);
 	return layout;
 }
 

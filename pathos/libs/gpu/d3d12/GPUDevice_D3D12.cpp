@@ -489,10 +489,10 @@ static ID3D12PipelineState* CreateD3DGraphicsPSO(ID3D12Device* _device, gpu::Gra
 		inputElements[i].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT; // TODO: Allow non append
 		inputElements[i].Format = ToDXGIFormat(entry.m_format);
 		inputElements[i].InputSlot = entry.m_streamIdx;
-		inputElements[i].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+		inputElements[i].InputSlotClass = entry.m_isInstanceData ? D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA : D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
 		inputElements[i].SemanticIndex = entry.m_semanticIndex;
 		inputElements[i].SemanticName = ToD3DSemanticStr(entry.m_semantic);
-		inputElements[i].InstanceDataStepRate = 0;
+		inputElements[i].InstanceDataStepRate = entry.m_isInstanceData ? 1 : 0;
 	}
 
 	ID3D12PipelineState* pso;
@@ -1281,8 +1281,8 @@ static void InitMipPsos(Device_D3D12* _dev)
 
 #define MAKE_PSO(_name, _bytecode, _psoOut) \
 	KT_MACRO_BLOCK_BEGIN \
-	gpu::ShaderRef shader = gpu::CreateShader(gpu::ShaderType::Compute, _bytecode, _name); \
-	_psoOut = gpu::CreateComputePSO(shader, _name); \
+		gpu::ShaderRef shader = gpu::CreateShader(gpu::ShaderType::Compute, _bytecode, _name); \
+		_psoOut = gpu::CreateComputePSO(shader, _name); \
 	KT_MACRO_BLOCK_END
 
 	MAKE_PSO("GenMips_Linear", standardLinear, _dev->m_mipPsos.m_standard[0]);
@@ -1315,7 +1315,7 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		D3D_CHECK(d3dDebug->QueryInterface(IID_PPV_ARGS(&debug1)));
 		if (debug1)
 		{
-			debug1->SetEnableGPUBasedValidation(true);
+			debug1->SetEnableGPUBasedValidation(false);
 			debug1->SetEnableSynchronizedCommandQueueValidation(true);
 		}
 
