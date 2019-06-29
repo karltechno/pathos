@@ -17,17 +17,6 @@ struct LightData
 	float3 _pad0_;
 };
 
-#define MAX_LIGHTS 64
-
-struct TestLightCBuffer
-{
-    LightData lights[MAX_LIGHTS];
-    float3 sunColor;
-    uint numLights;
-    float3 sunDir;
-    float _pad0_;
-    float3 camPos;
-};
 
 SHADERLIB_NAMESPACE_END
 

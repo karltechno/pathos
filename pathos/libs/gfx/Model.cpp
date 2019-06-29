@@ -10,6 +10,8 @@
 #include "cgltf.h"
 #include "mikktspace.h"
 
+#include "Scene.h"
+
 
 namespace gfx
 {
@@ -18,26 +20,30 @@ struct ModelLoader : res::IResourceHandler
 {
 	bool CreateFromFile(char const* _filePath, void*& o_res) override
 	{
-		Model* model = new Model;
+		kt::FilePath path(_filePath);
+		Model* model = gfx::Scene::CreateModel(path.GetFileNameNoExt().Data());
 		if (model->LoadFromGLTF(_filePath))
 		{
 			o_res = model;
 			return true;
 		}
 
-		delete model;
+		// pop model and model name
+		gfx::Scene::s_modelNames.PopBack();
+		gfx::Scene::s_models.PopBack();
 		return false;
 	}
 
 	bool CreateEmpty(void*& o_res) override
 	{
-		o_res = new Model;
+		o_res = gfx::Scene::CreateModel("UN-NAMED");
 		return true;
 	}
 
 	void Destroy(void* _ptr) override
 	{
-		delete (Model*)_ptr;
+		KT_UNUSED(_ptr);
+		// No-op
 	}
 };
 

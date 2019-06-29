@@ -15,12 +15,57 @@ namespace editor
 
 GFXSceneWindow::GFXSceneWindow()
 {
-	m_windowHandle = editor::RegisterWindow("gfx", "Scene", [this](float _dt) {Draw(_dt); }, []() { ImGui::SetNextWindowSize(ImVec2(500.0f, 450.0f), ImGuiCond_Once); });
+	m_windowHandle = editor::RegisterWindow("gfx", "Scene", [this](float _dt) {Draw(_dt); }, []() { ImGui::SetNextWindowSize(ImVec2(600.0f, 550.0f), ImGuiCond_Once); });
 }
 
 GFXSceneWindow::~GFXSceneWindow()
 {
 	editor::UnregisterWindow(m_windowHandle);
+}
+
+static void DrawModelsTab(GFXSceneWindow* _window)
+{
+	KT_UNUSED(_window);
+	ImGui::Columns(2);
+	ImGui::Text("Models");
+	ImGui::NextColumn();
+	ImGui::Text("Instances");
+	ImGui::NextColumn();
+	ImGui::Separator();
+
+	for (uint32_t i = 0; i < gfx::Scene::s_models.Size(); ++i)
+	{
+		ImGui::PushID(i);
+		char const* name = gfx::Scene::s_modelNames[i].Data();
+		if (ImGui::CollapsingHeader(name))
+		{
+			if (ImGui::Button("Add instance"))
+			{
+				gfx::Scene::Instance& instance = _window->m_scene->m_instances.PushBack();
+				instance.m_modelIdx = i;
+				instance.m_pos = kt::Vec3(0.0f);
+				instance.m_rot = kt::Mat3::Identity();
+			}
+		}
+		ImGui::PopID();
+	}
+
+	ImGui::NextColumn();
+
+	for (gfx::Scene::Instance& instance : _window->m_scene->m_instances)
+	{
+		//gfx::Model* m = gfx::Scene::s_models[instance.m_modelIdx];
+		char const* name = gfx::Scene::s_modelNames[instance.m_modelIdx].Data();
+
+		ImGui::PushID(&instance);
+		if (ImGui::CollapsingHeader(name))
+		{
+			ImGui::DragFloat3("Pos", &instance.m_pos[0]);
+		}
+		ImGui::PopID();
+	}
+
+	ImGui::Columns();
 }
 
 static void DrawLightsTab(GFXSceneWindow* _window)
@@ -93,9 +138,9 @@ void GFXSceneWindow::Draw(float _dt)
 		return;
 	}
 
-	ImGui::ColorEdit3("Sun Color", &m_scene->m_sunColor[0]);
-	ImGui::SliderFloat3("Sun Dir", &m_scene->m_sunDir[0], -1.0f, 1.0f);
-	m_scene->m_sunDir = kt::Normalize(m_scene->m_sunDir);
+	ImGui::ColorEdit3("Sun Color", &m_scene->m_frameConstants.sunColor[0]);
+	ImGui::SliderFloat3("Sun Dir", &m_scene->m_frameConstants.sunDir[0], -1.0f, 1.0f);
+	m_scene->m_frameConstants.sunDir = kt::Normalize(m_scene->m_frameConstants.sunDir);
 
 	ImGui::Checkbox("Enable Gizmo", &m_guizmoEnabled);
 	
@@ -105,11 +150,18 @@ void GFXSceneWindow::Draw(float _dt)
 
 	if (ImGui::BeginTabBar("SceneTabs"))
 	{
+		if (ImGui::BeginTabItem("Models"))
+		{
+			DrawModelsTab(this);
+			ImGui::EndTabItem();
+		}
+
 		if (ImGui::BeginTabItem("Lights"))
 		{
 			DrawLightsTab(this);
 			ImGui::EndTabItem();
 		}
+
 
 		ImGui::EndTabBar();
 	}

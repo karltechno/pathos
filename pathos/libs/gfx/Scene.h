@@ -1,18 +1,59 @@
 #pragma once
-#include <shaderlib/LightingStructs.h>
 #include <kt/Array.h>
+#include <kt/Strings.h>
+#include <kt/Slice.h>
+
+#include <shaderlib/CommonShared.h>
+#include <shaderlib/LightingStructs.h>
+
+#include <gpu/CommandContext.h>
+#include <gpu/HandleRef.h>
 
 
 namespace gfx
 {
 
+struct Model;
+struct Camera;
+
 class Scene
 {
 public:
-	void UpdateCBuffer(shaderlib::TestLightCBuffer* _cbuffer);
+	static gfx::Model* CreateModel(char const* _name);
+	static void SetModelName(gfx::Model* _m, char const* _name);
+
+	// Free allocated models, if you care :)
+	static void Shutdown();
+
+
+	Scene();
+
+	void UpdateFrameData(gpu::cmd::Context* _ctx, gfx::Camera const& _mainView, float _dt);
+
 	kt::Array<shaderlib::LightData> m_lights;
-	kt::Vec3 m_sunColor = { 0.99f, 0.95f, 0.85f };
-	kt::Vec3 m_sunDir = { -0.7f, -0.7f, 0.175f };
+	gpu::BufferRef m_lightGpuBuf;
+
+	shaderlib::FrameConstants m_frameConstants;
+	gpu::BufferRef m_frameConstantsGpuBuf;
+
+	struct LoadedModel
+	{
+		kt::String64 m_name;
+		gfx::Model* m_model;
+	};
+
+	struct Instance
+	{
+		kt::Mat3 m_rot;
+		kt::Vec3 m_pos;
+		uint32_t m_modelIdx;
+	};
+
+	kt::Array<Instance> m_instances;
+	
+	// Convenient global list of models.
+	static kt::Array<kt::String64> s_modelNames;
+	static kt::Array<gfx::Model*> s_models;
 };
 
 }

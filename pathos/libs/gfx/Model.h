@@ -60,6 +60,9 @@ struct Model
 	kt::Array<Material> m_materials;
 
 	kt::AABB m_boundingBox;
+
+	// Index into global scene struct.
+	uint32_t m_globalSceneIndex;
 };
 
 

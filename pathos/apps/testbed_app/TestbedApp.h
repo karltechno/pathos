@@ -34,9 +34,6 @@ struct TestbedApp : app::GraphicsApp
 
 	DummyCbuffer m_myCbuffer;
 
-	shaderlib::TestLightCBuffer m_testLightCbufferData;
-	gpu::BufferRef m_lightCbuffer;
-
 	editor::GFXSceneWindow m_sceneWindow;
 	gfx::Scene m_scene;
 

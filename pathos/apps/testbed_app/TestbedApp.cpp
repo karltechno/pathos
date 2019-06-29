@@ -73,18 +73,15 @@ void TestbedApp::Setup()
 		//m_modelHandle = res::LoadResourceSync<gfx::Model>("models/sponza/Sponza.gltf");
 		m_modelHandle = res::LoadResourceSync<gfx::Model>("models/MetalRoughSpheres/MetalRoughSpheres.gltf");
 
-
-		gpu::BufferDesc lightBufferDesc;
-		lightBufferDesc.m_flags = gpu::BufferFlags::Constant | gpu::BufferFlags::Dynamic;
-		lightBufferDesc.m_sizeInBytes = sizeof(shaderlib::TestLightCBuffer);
-		m_lightCbuffer = gpu::CreateBuffer(lightBufferDesc);
-
 	}
 
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
-	gfx::CreateCubemapFromEquirect(ctx, "textures/qwantani_2k.hdr", m_cubeMap);
+	//gfx::CreateCubemapFromEquirect(ctx, "textures/qwantani_2k.hdr", m_cubeMap);
+	//gfx::CreateCubemapFromEquirect(ctx, "textures/Alexs_Apt_2k.hdr", m_cubeMap);
 	//gfx::CreateCubemapFromEquirect(ctx, "textures/environment.hdr", m_cubeMap);
+	gfx::CreateCubemapFromEquirect(ctx, "textures/cayley_interior_2k.hdr", m_cubeMap);
+	
 	gpu::GenerateMips(ctx, m_cubeMap);
 
 	gfx::BakeEnvMapGGX(ctx, m_cubeMap, m_ggxMap);
@@ -134,15 +131,11 @@ void DrawModel(gpu::cmd::Context* _cmd, gfx::Model const& _model)
 	}
 }
 
-core::CVar<kt::Vec3> s_scale("app.mvp_scale", "test", kt::Vec3(1.0f), -2.0f, 2.0f);
-
 
 void TestbedApp::Tick(float _dt)
 {
 	gpu::SetVsyncEnabled(s_vsync);
 
-	m_scene.UpdateCBuffer(&m_testLightCbufferData);
-	m_testLightCbufferData.camPos = m_cam.GetPos();
 
 	uint32_t swapchainW, swapchainH;
 	gpu::GetSwapchainDimensions(swapchainW, swapchainH);
@@ -157,32 +150,26 @@ void TestbedApp::Tick(float _dt)
 
 	m_cam.SetProjection(params);
 
-	kt::Mat4 scaleMtx = kt::Mat4::Identity();
-	scaleMtx[0][0] = s_scale.GetValue()[0];
-	scaleMtx[1][1] = s_scale.GetValue()[1];
-	scaleMtx[2][2] = s_scale.GetValue()[2];
-
 	m_camController.UpdateCamera(_dt, m_cam);
-	m_myCbuffer.mvp = m_cam.GetCachedViewProj() * scaleMtx;
+	m_myCbuffer.mvp = kt::Mat4::Identity();
+
+	m_scene.UpdateFrameData(gpu::GetMainThreadCommandCtx(), m_cam, _dt);
 
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
 	gpu::TextureHandle backbuffer = gpu::CurrentBackbuffer();
 	gpu::TextureHandle depth = gpu::BackbufferDepth();
 
-	gpu::cmd::ResourceBarrier(ctx, m_lightCbuffer, gpu::ResourceState::CopyDest);
-	gpu::cmd::FlushBarriers(ctx);
-	gpu::cmd::UpdateDynamicBuffer(ctx, m_lightCbuffer, &m_testLightCbufferData, sizeof(m_testLightCbufferData));
-	gpu::cmd::ResourceBarrier(ctx, m_lightCbuffer, gpu::ResourceState::ConstantBuffer);
 
 	gpu::cmd::SetPSO(ctx, m_pso);
 	gpu::cmd::UpdateTransientBuffer(ctx, m_constantBuffer, &m_myCbuffer, sizeof(m_myCbuffer));
 	
 	gpu::DescriptorData cbvs[2];
 	cbvs[0].Set(m_constantBuffer);
-	cbvs[1].Set(m_lightCbuffer);
+	cbvs[1].Set(m_scene.m_frameConstantsGpuBuf);
 
-	gpu::cmd::SetGraphicsCBVTable(ctx, cbvs, 0);
+	gpu::cmd::SetGraphicsCBVTable(ctx, cbvs[0], 0);
+	gpu::cmd::SetGraphicsCBVTable(ctx, cbvs[1], 1);
 
 	gpu::cmd::SetRenderTarget(ctx, 0, backbuffer);
 	gpu::cmd::SetDepthBuffer(ctx, depth);
@@ -192,13 +179,19 @@ void TestbedApp::Tick(float _dt)
 	gpu::cmd::ClearRenderTarget(ctx, backbuffer, col);
 	gpu::cmd::ClearDepth(ctx, depth, 1.0f);
 
-	gpu::DescriptorData envMaps[3];
+	gpu::DescriptorData envMaps[4];
 	envMaps[0].Set(m_irradMap);
 	envMaps[1].Set(m_ggxMap);
 	envMaps[2].Set(gfx::GetSharedResources().m_ggxLut);
+	envMaps[3].Set(m_scene.m_lightGpuBuf);;
 
 	gpu::cmd::SetGraphicsSRVTable(ctx, envMaps, 1);
-	DrawModel(ctx, *res::GetData(m_modelHandle));
+	//DrawModel(ctx, *res::GetData(m_modelHandle));
+
+	for (gfx::Model* m : gfx::Scene::s_models)
+	{
+		DrawModel(ctx, *m);
+	}
 
 	m_skyboxRenderer.Render(ctx, m_cam);
 }

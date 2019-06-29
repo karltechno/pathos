@@ -2,6 +2,7 @@
 #include "shaderlib/GlobalSamplers.hlsli"
 #include "shaderlib/LightingCommon.hlsli"
 #include "shaderlib/LightingStructs.h"
+#include "shaderlib/CommonShared.h"
 
 struct TestData
 {
@@ -17,10 +18,12 @@ TextureCube<float4> g_irrad : register(t0, space1);
 TextureCube<float4> g_ggxEnv : register(t1, space1);
 Texture2D<float4> g_ggxLut : register(t2, space1);
 
-ConstantBuffer<TestData> g_data : register(b0, space0);
-ConstantBuffer<TestLightCBuffer> g_lights : register(b1, space0);
+StructuredBuffer<LightData> g_lights : register(t3, space1);
 
-static const float3 SKY_DIR = normalize(float3(0.1, 0.5, 0.2));
+ConstantBuffer<BatchConstants> g_batch : register(b0, space0);
+ConstantBuffer<FrameConstants> g_frame : register(b0, space1);
+
+
 
 float4 main(in VSOut_ObjectFull _input) : SV_Target
 {
@@ -30,7 +33,7 @@ float4 main(in VSOut_ObjectFull _input) : SV_Target
 
     float3 color = float3(0.0, 0.0, 0.0);
 
-    float3 view = normalize(g_lights.camPos - _input.posWS); 
+    float3 view = normalize(g_frame.camPos - _input.posWS); 
 
     float3 metalRough = g_metalRoughness.Sample(g_samplerAnisoWrap, _input.uv).xyz;
     float3 normalTex = normalize(g_normal.Sample(g_samplerAnisoWrap, _input.uv).xyz * 2.0 - 1.0);
@@ -43,13 +46,13 @@ float4 main(in VSOut_ObjectFull _input) : SV_Target
 
     SurfaceData surf = CreateSurfaceData(normalTex, _input.posWS, metallic, roughness, baseCol);
 
-    for(uint i = 0; i < g_lights.numLights; ++i)
+    for(uint i = 0; i < g_frame.numLights; ++i)
     {
-        LightData light = g_lights.lights[i];
+        LightData light = g_lights[i];
         color += ComputeLighting_Point(light, surf, view);
     }
 
-    color += ComputeLighting_Common(g_lights.sunColor, surf, -g_lights.sunDir, view);
+    color += ComputeLighting_Common(g_frame.sunColor, surf, -g_frame.sunDir, view);
     
     float3 irrad = g_irrad.Sample(g_samplerLinearWrap, surf.norm).xyz;
 

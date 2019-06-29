@@ -1,17 +1,17 @@
+#include "shaderlib/CommonShared.h"
 #include "shaderlib/ShaderOutput.hlsli"
 
-struct TestData
-{
-    float4x4 mvp;
-};
 
-ConstantBuffer<TestData> g_data : register(b0, space0);
+ConstantBuffer<BatchConstants> g_batch : register(b0, space0);
+ConstantBuffer<FrameConstants> g_frame : register(b0, space1);
+
 
 VSOut_ObjectFull main(in VSIn_ObjectFull _input)
 {
+    float4 wsPos = mul(float4(_input.pos, 1.0), g_batch.modelMtx);
     VSOut_ObjectFull ret;
-    ret.pos = mul(float4(_input.pos, 1.0), g_data.mvp);
-    ret.posWS = _input.pos; // need model mtx
+    ret.pos = mul(wsPos, g_frame.mainViewProj);
+    ret.posWS = wsPos.xyz; // need model mtx
     ret.uv = _input.uv;
     ret.normal = _input.normal;
     ret.tangentSign = _input.tangentSign;
