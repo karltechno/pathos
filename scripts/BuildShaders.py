@@ -37,7 +37,7 @@ def calc_shader_digest(shader_path, shader_src_dir, include_hashes):
 
         includes = include_regex.findall(contents)
         for include in includes:
-            include_path = os.path.abspath(os.path.join(os.path.dirname(shader_path), include))
+            include_path = os.path.abspath(os.path.join(os.path.dirname(shader_path), include.lower()))
             if not os.path.exists(include_path):
                 log('Can\'t find include {} in file {}'.format(include, shader_path))
                 continue         
