@@ -194,6 +194,11 @@ bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* 
 		m_uavs.PushBack(g_device->m_stagingHeap.AllocOne());
 	}
 
+	if (!!(m_bufferDesc.m_flags & BufferFlags::ShaderResource))
+	{
+		m_srv = g_device->m_stagingHeap.AllocOne();
+	}
+
 	if (!(m_bufferDesc.m_flags & BufferFlags::Transient))
 	{
 		m_ownsResource = true;
