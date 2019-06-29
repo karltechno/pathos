@@ -1642,7 +1642,7 @@ namespace ImGuizmo
       }
    }
 
-   static void HandleScale(float *matrix, float *deltaMatrix, int& type, float *snap)
+   static void HandleScale(float *matrix, float *deltaMatrix, int& type, float *snap, bool allowNonUniformScale)
    {
       ImGuiIO& io = ImGui::GetIO();
 
@@ -1691,7 +1691,14 @@ namespace ImGuizmo
             vec_t baseVector = gContext.mTranslationPlanOrigin - gContext.mModel.v.position;
             float ratio = Dot(axisValue, baseVector + delta) / Dot(axisValue, baseVector);
 
-            gContext.mScale[axisIndex] = max(ratio, 0.001f);
+            if (allowNonUniformScale)
+            {
+                gContext.mScale[axisIndex] = max(ratio, 0.001f);
+            }
+            else
+            {
+                gContext.mScale.Set(max(ratio, 0.001f));
+            }
          }
          else
          {
@@ -1861,7 +1868,7 @@ namespace ImGuizmo
       mat.v.position.Set(translation[0], translation[1], translation[2], 1.f);
    }
 
-   void Manipulate(const float *view, const float *projection, OPERATION operation, MODE mode, float *matrix, float *deltaMatrix, float *snap, float *localBounds, float *boundsSnap)
+   void Manipulate(const float *view, const float *projection, OPERATION operation, MODE mode, float *matrix, bool allowNonUniformScale, float *deltaMatrix, float *snap, float *localBounds, float *boundsSnap)
    {
       ComputeContext(view, projection, matrix, mode);
 
@@ -1890,7 +1897,7 @@ namespace ImGuizmo
                   HandleTranslation(matrix, deltaMatrix, type, snap);
                   break;
               case SCALE:
-                  HandleScale(matrix, deltaMatrix, type, snap);
+                  HandleScale(matrix, deltaMatrix, type, snap, allowNonUniformScale);
                   break;
               case BOUNDS:
                   break;
