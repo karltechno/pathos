@@ -334,7 +334,7 @@ void AllocatedResource_D3D12::UpdateViews()
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		srvDesc.Buffer.FirstElement = 0;
-		srvDesc.Buffer.NumElements = m_bufferDesc.m_strideInBytes / m_bufferDesc.m_sizeInBytes;
+		srvDesc.Buffer.NumElements = m_bufferDesc.m_sizeInBytes / m_bufferDesc.m_strideInBytes;
 		srvDesc.Buffer.StructureByteStride = m_bufferDesc.m_strideInBytes;
 		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 		g_device->m_d3dDev->CreateShaderResourceView(m_res, &srvDesc, m_srv);
