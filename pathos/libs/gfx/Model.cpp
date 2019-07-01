@@ -100,18 +100,18 @@ static void CopyIndexBuffer(cgltf_accessor* _accessor, uint32_t* o_dest, uint32_
 
 	for (uint32_t i = 0; i < _accessor->count; i += 3)
 	{
-		uint32_t indicies[3];
-		indicies[0] = (uint32_t)*(IntT*)(src) + _vtxOffset;
+		uint32_t indices[3];
+		indices[0] = (uint32_t)*(IntT*)(src) + _vtxOffset;
 		src += stride;
-		indicies[1] = (uint32_t)*(IntT*)(src) + _vtxOffset;
+		indices[1] = (uint32_t)*(IntT*)(src) + _vtxOffset;
 		src += stride;
-		indicies[2] = (uint32_t)*(IntT*)(src) + _vtxOffset;
+		indices[2] = (uint32_t)*(IntT*)(src) + _vtxOffset;
 		src += stride;
 
-		// Note: Swizzling indicies here to swap winding order from CCW -> CW.
-		*o_dest++ = indicies[1];
-		*o_dest++ = indicies[0];
-		*o_dest++ = indicies[2];
+		// Note: Swizzling indices here to swap winding order from CCW -> CW.
+		*o_dest++ = indices[1];
+		*o_dest++ = indices[0];
+		*o_dest++ = indices[2];
 	}
 }
 static void CopyVertexStreamGeneric(cgltf_accessor* _accessor, uint8_t* _dest, size_t _destSize, size_t _destStride = 0)
@@ -165,8 +165,8 @@ static void GenMikktTangents(Model* _model, uint32_t _idxBegin, uint32_t _idxEnd
 		uint32_t GetMeshVertIdx(int _face, int _vert) const
 		{
 			uint32_t const faceIdx = (uint32_t)_face + m_faceBegin;
-			KT_ASSERT(uint32_t(faceIdx * 3) < m_model->m_indicies.Size());
-			return m_model->m_indicies[uint32_t(faceIdx * 3 + _vert)];
+			KT_ASSERT(uint32_t(faceIdx * 3) < m_model->m_indices.Size());
+			return m_model->m_indices[uint32_t(faceIdx * 3 + _vert)];
 		}
 
 		Model* m_model;
@@ -258,33 +258,33 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 				subMesh.m_materialIdx = 0;
 			}
 
-			subMesh.m_indexBufferStartOffset = _model->m_indicies.Size();
+			subMesh.m_indexBufferStartOffset = _model->m_indices.Size();
 			
 
 			// Copy index buffer.
-			cgltf_accessor* indicies = gltfPrim.indices;
-			subMesh.m_numIndicies = uint32_t(indicies->count);
-			KT_ASSERT(!indicies->is_sparse); // surely not for index buffers?
-			uint32_t oldIndexSize = _model->m_indicies.Size();
-			_model->m_indicies.Resize(uint32_t(oldIndexSize + indicies->count));
+			cgltf_accessor* indices = gltfPrim.indices;
+			subMesh.m_numIndices = uint32_t(indices->count);
+			KT_ASSERT(!indices->is_sparse); // surely not for index buffers?
+			uint32_t oldIndexSize = _model->m_indices.Size();
+			_model->m_indices.Resize(uint32_t(oldIndexSize + indices->count));
 
 			uint32_t const vertexBegin = _model->m_posStream.Size();
 
-			switch (indicies->component_type)
+			switch (indices->component_type)
 			{
 				case cgltf_component_type_r_8u:
 				{
-					CopyIndexBuffer<uint8_t>(indicies, _model->m_indicies.Data() + oldIndexSize, vertexBegin);
+					CopyIndexBuffer<uint8_t>(indices, _model->m_indices.Data() + oldIndexSize, vertexBegin);
 				} break;
 
 				case cgltf_component_type_r_16u:
 				{
-					CopyIndexBuffer<uint16_t>(indicies, _model->m_indicies.Data() + oldIndexSize, vertexBegin);
+					CopyIndexBuffer<uint16_t>(indices, _model->m_indices.Data() + oldIndexSize, vertexBegin);
 				} break;
 
 				case cgltf_component_type_r_32u:
 				{
-					CopyIndexBuffer<uint32_t>(indicies, _model->m_indicies.Data() + oldIndexSize, vertexBegin);
+					CopyIndexBuffer<uint32_t>(indices, _model->m_indices.Data() + oldIndexSize, vertexBegin);
 				} break;
 
 				default:
@@ -386,7 +386,7 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 				CopyVertexStreamGeneric(normalAttr->data, (uint8_t*)(_model->m_tangentStream.Data() + normalStart) + normOffs, sizeof(kt::Vec3), sizeof(TangentSpace));
 
 				// TODO: We should really be recreating index buffer with new tangents (as verticies sharing faces will have different tangent space)
-				GenMikktTangents(_model, oldIndexSize, _model->m_indicies.Size());
+				GenMikktTangents(_model, oldIndexSize, _model->m_indices.Size());
 			}
 		}
 	}
@@ -418,12 +418,12 @@ static void CreateGPUBuffers(Model* _model, kt::StringView _debugNamePrefix = kt
 	indexBufferDesc.m_flags = gpu::BufferFlags::Index;
 	// TODO: fix index buffer size, also add gpu api to create buffer and get back upload pointer, so we don't need to make a temp array to convert to r16.
 	indexBufferDesc.m_format = gpu::Format::R32_Uint;
-	indexBufferDesc.m_sizeInBytes = sizeof(uint32_t) * _model->m_indicies.Size();
+	indexBufferDesc.m_sizeInBytes = sizeof(uint32_t) * _model->m_indices.Size();
 	indexBufferDesc.m_strideInBytes = sizeof(uint32_t);
 	name.Clear();
 	name.Append(baseDebugName);
 	name.Append("_index");
-	_model->m_indexGpuBuf = gpu::CreateBuffer(indexBufferDesc, _model->m_indicies.Data(), name.Data());
+	_model->m_indexGpuBuf = gpu::CreateBuffer(indexBufferDesc, _model->m_indices.Data(), name.Data());
 
 	name.Clear();
 	name.Append(baseDebugName);
@@ -589,7 +589,7 @@ bool SerializeModelCache(char const* _initialPath, kt::ISerializer* _s, Model& _
 	kt::Serialize(_s, _model.m_tangentStream);
 	kt::Serialize(_s, _model.m_uvStream0);
 	kt::Serialize(_s, _model.m_colourStream);
-	kt::Serialize(_s, _model.m_indicies);
+	kt::Serialize(_s, _model.m_indices);
 	kt::Serialize(_s, _model.m_meshes);
 	kt::Serialize(_s, _model.m_boundingBox);
 	kt::Serialize(_s, _model.m_meshBoundingBoxes);

@@ -31,7 +31,7 @@ struct Model
 		uint16_t m_materialIdx;
 
 		uint32_t m_indexBufferStartOffset;
-		uint32_t m_numIndicies;
+		uint32_t m_numIndices;
 	};
 
 	KT_NO_COPY(Model);
@@ -48,7 +48,7 @@ struct Model
 	kt::Array<TangentSpace> m_tangentStream;
 	kt::Array<kt::Vec2> m_uvStream0;
 	kt::Array<uint32_t> m_colourStream;
-	kt::Array<uint32_t> m_indicies;
+	kt::Array<uint32_t> m_indices;
 
 	kt::Array<SubMesh> m_meshes;
 	kt::Array<kt::AABB> m_meshBoundingBoxes;

@@ -174,7 +174,7 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx)
 			descriptors[3].Set(GetTextureHandleOrNull(mat.m_occlusionTex));
 			gpu::cmd::SetGraphicsSRVTable(_ctx, descriptors, 0);
 
-			gpu::cmd::DrawIndexedInstanced(_ctx, mesh.m_numIndicies, numInstances, mesh.m_indexBufferStartOffset, 0, batchInstanceBegin);
+			gpu::cmd::DrawIndexedInstanced(_ctx, mesh.m_numIndices, numInstances, mesh.m_indexBufferStartOffset, 0, batchInstanceBegin);
 		}
 		
 		batchInstanceBegin += numInstances;
