@@ -6,10 +6,11 @@
 #include <core/CVar.h>
 #include <editor/Editor.h>
 #include <input/Input.h>
-#include <gfx/Resources.h>
+#include <gfx/DebugRender.h>
 #include <gfx/Scene.h>
 #include <gfx/SharedResources.h>
 #include <gpu/GPUDevice.h>
+#include <gfx/Resources.h>
 #include <res/ResourceSystem.h>
 
 #include <kt/Macros.h>
@@ -51,6 +52,7 @@ app::WindowHandle PATHOS_INIT(int _argc, char** _argv)
 	editor::Init(wh.nwh);
 	core::InitCVars();
 	res::Init();
+	gfx::DebugRender::Init();
 	return wh;
 }
 
@@ -59,6 +61,7 @@ void PATHOS_SHUTDOWN()
 #if PATHOS_FAST_SHUTDOWN
 	std::quick_exit(0);
 #else
+	gfx::DebugRender::Shutdown();
 	gfx::ShutdownSharedResources();
 	res::Shutdown();
 	core::ShutdownCVars();

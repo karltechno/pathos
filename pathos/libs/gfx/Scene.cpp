@@ -1,6 +1,7 @@
 #include "Scene.h"
 #include "Model.h"
 #include "Camera.h"
+#include "DebugRender.h"
 
 #include <res/ResourceSystem.h>
 #include <gpu/Types.h>
@@ -15,6 +16,30 @@ kt::Array<gfx::Model*> Scene::s_models;
 
 uint32_t constexpr c_indexDataSize = sizeof(float) * 4 * 3;
 
+static kt::AABB CalcSceneBounds(gfx::Scene const& _scene)
+{
+	if (_scene.m_instances.Size() == 0)
+	{
+		return kt::AABB{ kt::Vec3(0.0f), kt::Vec3(0.0f) };
+	}
+
+	kt::AABB sceneBounds = kt::AABB::FloatMax();
+
+	for (Scene::InstanceData const& instance : _scene.m_instances)
+	{
+		kt::AABB const& modelAABB = Scene::s_models[instance.m_modelIdx]->m_boundingBox;
+
+		kt::Mat3 mtx = instance.m_transform.m_mtx;
+		// mtx may contain scale, need to normalize. TODO: Store scale separately?
+		mtx[0] = kt::Normalize(mtx[0]);
+		mtx[1] = kt::Normalize(mtx[1]);
+		mtx[2] = kt::Normalize(mtx[2]);
+
+		sceneBounds = kt::Union(modelAABB.Transformed(mtx, instance.m_transform.m_pos), sceneBounds);
+	}
+
+	return sceneBounds;
+}
 
 gpu::BufferRef CreateLightStructuredBuffer(uint32_t _capacity)
 {
@@ -44,8 +69,10 @@ Scene::Scene()
 	m_instanceGpuBuf = gpu::CreateBuffer(instanceBufferDesc, nullptr, "gfx::Scene instance data");
 }
 
-void Scene::UpdateFrameData(gpu::cmd::Context* _ctx, gfx::Camera const& _mainView, float _dt)
+void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera const& _mainView, float _dt)
 {
+	m_sceneBounds = CalcSceneBounds(*this);
+
 	m_frameConstants.mainViewProj = _mainView.GetCachedViewProj();
 	m_frameConstants.mainProj = _mainView.GetProjection();
 	m_frameConstants.mainView = _mainView.GetView();
@@ -154,7 +181,7 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx)
 			descriptors[3].Set(GetTextureHandleOrNull(mat.m_occlusionTex));
 			gpu::cmd::SetGraphicsSRVTable(_ctx, descriptors, 0);
 
-			gpu::cmd::DrawIndexedInstanced(_ctx, gpu::PrimitiveType::TriangleList, mesh.m_numIndicies, numInstances, mesh.m_indexBufferStartOffset, 0, batchInstanceBegin);
+			gpu::cmd::DrawIndexedInstanced(_ctx, mesh.m_numIndicies, numInstances, mesh.m_indexBufferStartOffset, 0, batchInstanceBegin);
 		}
 		
 		batchInstanceBegin += numInstances;
@@ -166,6 +193,16 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx)
 	}
 
 	gpu::cmd::EndUpdateTransientBuffer(_ctx, m_instanceGpuBuf);
+}
+
+void Scene::EndFrame()
+{
+	
+	gpu::DescriptorData cbv;
+	cbv.Set(m_frameConstantsGpuBuf);
+	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
+	gpu::cmd::SetGraphicsCBVTable(ctx, cbv, 1);
+	gfx::DebugRender::Flush(gpu::GetMainThreadCommandCtx());
 }
 
 gfx::Model* Scene::CreateModel(char const* _name)

@@ -117,6 +117,32 @@ void End(Context* _ctx)
 	delete _ctx;
 }
 
+static void MarkDirtyIfBound(Context* _ctx, gpu::ResourceHandle _handle, AllocatedResource_D3D12* _res)
+{
+	// TODO: This is completely broken with descriptor tables currently since they aren't tracked.
+	// That code is temp and need to be-reworked anyway.
+	KT_ASSERT(!_res->IsTexture());
+	if (!!(_res->m_bufferDesc.m_flags & BufferFlags::Vertex))
+	{
+		for (gpu::BufferRef const hndl : _ctx->m_state.m_vertexStreams)
+		{
+			if (hndl.Handle() == _handle)
+			{
+				_ctx->m_dirtyFlags |= DirtyStateFlags::VertexBuffer;
+				break;
+			}
+		}
+	}
+
+	if (!!(_res->m_bufferDesc.m_flags & BufferFlags::Index))
+	{
+		if (_ctx->m_state.m_indexBuffer.Handle() == _handle)
+		{
+			_ctx->m_dirtyFlags |= DirtyStateFlags::IndexBuffer;
+		}
+	}
+}
+
 void SetVertexBuffer(Context* _ctx, uint32_t _streamIdx, gpu::BufferHandle _handle)
 {
 	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
@@ -183,6 +209,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE MakeCBVTable(Context* _ctx, kt::Slice<DescriptorData
 			{
 				cpuHandle = _ctx->m_device->m_nullCbv;
 			}
+			// TODO: Could use the non simple version with one call?
 			_ctx->m_device->m_d3dDev->CopyDescriptorsSimple(1, tableDestCpu, cpuHandle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 		}
 		else
@@ -201,7 +228,6 @@ D3D12_GPU_DESCRIPTOR_HANDLE MakeCBVTable(Context* _ctx, kt::Slice<DescriptorData
 			_ctx->m_device->m_d3dDev->CreateConstantBufferView(&cbvDesc, tableDestCpu);
 		}
 
-		// TODO: Could use the non simple version with one call?
 		tableDestCpu.ptr += descriptorIncrement;
 	}
 
@@ -316,14 +342,22 @@ void SetGraphicsSRVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descri
 	_ctx->m_cmdList->SetGraphicsRootDescriptorTable(1 + 3 * _space, MakeSRVTable(_ctx, _descriptors));
 }
 
-void DrawIndexedInstanced(Context* _ctx, gpu::PrimitiveType _prim, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startIndex, uint32_t _baseVertex, uint32_t _startInstance)
+void DrawIndexedInstanced(Context* _ctx, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startIndex, uint32_t _baseVertex, uint32_t _startInstance)
 {
 	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
 
 	FlushBarriers(_ctx);
 	_ctx->ApplyStateChanges(CommandListFlags_D3D12::Graphics);
-	_ctx->m_cmdList->IASetPrimitiveTopology(ToD3DPrimType(_prim)); // TODO: Dirty state
 	_ctx->m_cmdList->DrawIndexedInstanced(_indexCount, _instanceCount, _startIndex, _baseVertex, _startInstance);
+}
+
+void DrawInstanced(Context* _ctx, uint32_t _vertexCount, uint32_t _instanceCount, uint32_t _startVertex, uint32_t _startInstance)
+{
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
+
+	FlushBarriers(_ctx);
+	_ctx->ApplyStateChanges(CommandListFlags_D3D12::Graphics);
+	_ctx->m_cmdList->DrawInstanced(_vertexCount, _instanceCount, _startVertex, _startInstance);
 }
 
 void Dispatch(Context* _ctx, uint32_t _x, uint32_t _y, uint32_t _z)
@@ -377,7 +411,9 @@ kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _
 
 void EndUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle)
 {
-	KT_UNUSED2(_ctx, _handle);
+	AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
+	KT_ASSERT(res);
+	MarkDirtyIfBound(_ctx, _handle, res);
 }
 
 void SetPSO(Context* _ctx, gpu::PSOHandle _pso)
@@ -529,6 +565,12 @@ void CommandContext_D3D12::ApplyStateChanges(CommandListFlags_D3D12 _dispatchTyp
 		if (!pso->IsCompute())
 		{
 			m_state.m_numRenderTargets = pso->m_psoDesc.m_numRenderTargets;
+			// Check primitive topology too
+			if (pso->m_psoDesc.m_primType != m_state.m_primitive)
+			{
+				m_state.m_primitive = pso->m_psoDesc.m_primType;
+				m_cmdList->IASetPrimitiveTopology(gpu::ToD3DPrimType(m_state.m_primitive));
+			}
 		}
 		else
 		{
@@ -562,91 +604,6 @@ void CopyResource(Context* _ctx, gpu::ResourceHandle _src, gpu::ResourceHandle _
 	KT_ASSERT(resDst);
 	_ctx->m_cmdList->CopyResource(resDst->m_res, resSrc->m_res);
 }
-//
-//void CopyMips(Context* _ctx, gpu::ResourceHandle _texSrc, gpu::ResourceHandle _texDest, kt::Slice<const uint32_t> const& _mipsToCopy)
-//{
-//	AllocatedResource_D3D12* resSrc = _ctx->m_device->m_resourceHandles.Lookup(_texSrc);
-//	AllocatedResource_D3D12* resDst = _ctx->m_device->m_resourceHandles.Lookup(_texDest);
-//	KT_ASSERT(resSrc);
-//	KT_ASSERT(resDst);
-//
-//	KT_ASSERT(gpu::IsTexture(resSrc->m_type));
-//	KT_ASSERT(resSrc->m_type == resDst->m_type);
-//
-//	uint32_t const arraySize = resSrc->m_type == gpu::ResourceType::TextureCube ? 6 * resSrc->m_textureDesc.m_arraySlices : resSrc->m_textureDesc.m_arraySlices;
-//	
-//	KT_ASSERT(resSrc->m_textureDesc.m_arraySlices == resSrc->m_textureDesc.m_arraySlices);
-//	KT_ASSERT(resSrc->m_textureDesc.m_mipLevels == resSrc->m_textureDesc.m_mipLevels);
-//	KT_ASSERT(resSrc->m_textureDesc.m_format == resDst->m_textureDesc.m_format);
-//
-//	auto transitionMipsFn = [arraySize, _ctx, &_mipsToCopy](AllocatedResource_D3D12* _res, D3D12_RESOURCE_STATES _newState)
-//	{
-//		D3D12_RESOURCE_BARRIER* resBarriers = _ctx->m_state.m_batchedBarriers.PushBack_Raw(_mipsToCopy.Size() * arraySize);
-//		D3D12_RESOURCE_STATES const stateBefore = gpu::D3DTranslateResourceState(_res->m_resState);
-//		for (uint32_t mip : _mipsToCopy)
-//		{
-//			for (uint32_t arrIdx = 0; arrIdx < arraySize; ++arrIdx)
-//			{
-//				D3D12_RESOURCE_BARRIER& bar = *resBarriers++;
-//				bar.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-//				bar.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-//				bar.Transition.pResource = _res->m_res;
-//				bar.Transition.StateBefore = stateBefore;
-//				bar.Transition.StateAfter = _newState;
-//				bar.Transition.Subresource = gpu::D3DSubresourceIndex(mip, arrIdx, _res->m_textureDesc.m_mipLevels);
-//			}
-//		}
-//	};
-//
-//	if (resSrc->m_resState != gpu::ResourceState::CopySrc)
-//	{
-//		transitionMipsFn(resSrc, D3D12_RESOURCE_STATE_COPY_SOURCE);
-//	}
-//
-//	if (resDst->m_resState != gpu::ResourceState::CopyDest)
-//	{
-//		transitionMipsFn(resDst, D3D12_RESOURCE_STATE_COPY_DEST);
-//	}
-//
-//	D3D12_TEXTURE_COPY_LOCATION* srcLocs = (D3D12_TEXTURE_COPY_LOCATION*)KT_ALLOCA(sizeof(D3D12_TEXTURE_COPY_LOCATION) * _mipsToCopy.Size() * arraySize);
-//	D3D12_TEXTURE_COPY_LOCATION* destLocs = (D3D12_TEXTURE_COPY_LOCATION*)KT_ALLOCA(sizeof(D3D12_TEXTURE_COPY_LOCATION) * _mipsToCopy.Size() * arraySize);
-//
-//	{
-//		uint32_t idx = 0;
-//		for (uint32_t mip : _mipsToCopy)
-//		{
-//			for (uint32_t arrIdx = 0; arrIdx < arraySize; ++arrIdx)
-//			{
-//				D3D12_TEXTURE_COPY_LOCATION& srcLoc = srcLocs[idx];
-//				D3D12_TEXTURE_COPY_LOCATION& destLoc = destLocs[idx++];
-//				srcLoc.pResource = resSrc->m_res;
-//				destLoc.pResource = resDst->m_res;
-//				destLoc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-//				srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-//				srcLoc.SubresourceIndex = gpu::D3DSubresourceIndex(mip, arrIdx, resSrc->m_textureDesc.m_mipLevels);
-//				destLoc.SubresourceIndex = gpu::D3DSubresourceIndex(mip, arrIdx, resDst->m_textureDesc.m_mipLevels);
-//			}
-//		}
-//	}
-//
-//	gpu::cmd::FlushBarriers(_ctx);
-//
-//	for (uint32_t i = 0; i < _mipsToCopy.Size() * arraySize; ++i)
-//	{
-//		_ctx->m_cmdList->CopyTextureRegion(destLocs + i, 0, 0, 0, srcLocs + i, nullptr);
-//	}
-//
-//	// translate states back
-//	if (resSrc->m_resState != gpu::ResourceState::CopySrc)
-//	{
-//		transitionMipsFn(resSrc, gpu::D3DTranslateResourceState(resSrc->m_resState));
-//	}
-//
-//	if (resDst->m_resState != gpu::ResourceState::CopyDest)
-//	{
-//		transitionMipsFn(resDst, gpu::D3DTranslateResourceState(resDst->m_resState));
-//	}
-//}
 
 void CommandContext_D3D12::ApplyGraphicsStateChanges()
 {

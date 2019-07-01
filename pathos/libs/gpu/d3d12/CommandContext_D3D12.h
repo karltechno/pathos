@@ -77,7 +77,7 @@ struct CommandContext_D3D12
 
 	struct State
 	{
-		gpu::PrimitiveType m_primitive;
+		gpu::PrimitiveType m_primitive = gpu::PrimitiveType::Num_PrimitiveType;
 		gpu::BufferRef m_vertexStreams[gpu::c_maxVertexStreams];
 		gpu::BufferRef m_indexBuffer;
 

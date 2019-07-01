@@ -176,7 +176,11 @@ void SkyBoxRenderer::Render(gpu::cmd::Context* _ctx, gfx::Camera const& _cam)
 	gpu::Rect rect{ float(w), float(h) };
 
 	gpu::cmd::SetViewport(_ctx, rect, 1.0f, 1.0f);
-	gpu::cmd::DrawIndexedInstanced(_ctx, gpu::PrimitiveType::TriangleList, m_primGpuBuf.m_numIndicies, 1, 0, 0, 0);
+	gpu::cmd::DrawIndexedInstanced(_ctx, m_primGpuBuf.m_numIndicies, 1, 0, 0, 0);
+
+	// Reset viewport
+	gpu::cmd::SetViewport(_ctx, rect, 0.0f, 1.0f);
+
 }
 
 }

@@ -310,7 +310,7 @@ void ImGuiHandler::InternalRender()
 			rect.m_topLeft = kt::Vec2(cmd->ClipRect.x, cmd->ClipRect.y) - clipOffs;
 			rect.m_bottomRight = kt::Vec2(cmd->ClipRect.z, cmd->ClipRect.w) - clipOffs;
 			gpu::cmd::SetScissorRect(ctx, rect);
-			gpu::cmd::DrawIndexedInstanced(ctx, gpu::PrimitiveType::TriangleList, cmd->ElemCount, 1, idxOffs, vtxOffs, 0);
+			gpu::cmd::DrawIndexedInstanced(ctx, cmd->ElemCount, 1, idxOffs, vtxOffs, 0);
 
 			idxOffs += cmd->ElemCount;
 		}

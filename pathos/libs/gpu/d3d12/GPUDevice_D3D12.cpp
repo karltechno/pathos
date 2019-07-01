@@ -466,7 +466,23 @@ static ID3D12PipelineState* CreateD3DGraphicsPSO(ID3D12Device* _device, gpu::Gra
 
 	d3dDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
-	d3dDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE; // TODO: Specify this.
+	switch (_desc.m_primType)
+	{
+		case PrimitiveType::PointList:
+		{
+			d3dDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
+		} break;
+		case PrimitiveType::LineList:
+		case PrimitiveType::LineStrip:
+		{
+			d3dDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+		} break;
+		case PrimitiveType::TriangleList:
+		case PrimitiveType::TriangleStrip:
+		{
+			d3dDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE; 
+		} break;
+	}
 
 	d3dDesc.NumRenderTargets = _desc.m_numRenderTargets;
 	for (uint32_t i = 0; i < _desc.m_numRenderTargets; ++i)

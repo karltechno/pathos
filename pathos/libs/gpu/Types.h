@@ -468,6 +468,7 @@ struct GraphicsPSODesc
 	DepthStencilDesc m_depthStencilDesc;
 	BlendDesc m_blendDesc;
 	VertexLayout m_vertexLayout;
+	PrimitiveType m_primType = PrimitiveType::TriangleList;
 
 	Format m_renderTargetFormats[c_maxRenderTargets];
 	uint32_t m_numRenderTargets = 1;

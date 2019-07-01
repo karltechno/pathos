@@ -27,9 +27,15 @@ public:
 
 	Scene();
 
-	void UpdateFrameData(gpu::cmd::Context* _ctx, gfx::Camera const& _mainView, float _dt);
+	void BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera const& _mainView, float _dt);
 
 	void RenderInstances(gpu::cmd::Context* _ctx);
+
+	void EndFrame();
+
+	// Convenient global list of models.
+	static kt::Array<kt::String64> s_modelNames;
+	static kt::Array<gfx::Model*> s_models;
 
 	kt::Array<shaderlib::LightData> m_lights;
 	gpu::BufferRef m_lightGpuBuf;
@@ -67,9 +73,8 @@ public:
 	kt::Array<InstanceData> m_instances;
 	gpu::BufferRef m_instanceGpuBuf;
 
-	// Convenient global list of models.
-	static kt::Array<kt::String64> s_modelNames;
-	static kt::Array<gfx::Model*> s_models;
+
+	kt::AABB m_sceneBounds;
 };
 
 }

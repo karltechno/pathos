@@ -21,8 +21,8 @@ gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc, void const* _ini
 
 void GetSwapchainDimensions(uint32_t& o_width, uint32_t& o_height);
 
-gpu::PSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc, char const* _debeugName = nullptr);
-gpu::PSOHandle CreateComputePSO(gpu::ShaderHandle _shader, char const* _debeugName = nullptr);
+gpu::PSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc, char const* _debugName = nullptr);
+gpu::PSOHandle CreateComputePSO(gpu::ShaderHandle _shader, char const* _debugName = nullptr);
 
 gpu::ShaderHandle CreateShader(gpu::ShaderType _type, gpu::ShaderBytecode const& _byteCode, char const* _debugName = nullptr);
 void ReloadShader(gpu::ShaderHandle _handle, gpu::ShaderBytecode const& _newBytecode);

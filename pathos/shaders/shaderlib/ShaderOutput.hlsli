@@ -28,6 +28,13 @@ struct VSOut_Pos
     float3 posWS : POSITION;
 };
 
+struct VSOut_PosCol
+{
+    float4 pos : SV_Position;
+    float3 posWS : POSITION;
+    float4 col : COLOR;
+};
+
 struct VSOut_PosUV
 {
     float4 pos  : SV_Position;

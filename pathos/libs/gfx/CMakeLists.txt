@@ -1,4 +1,6 @@
 set(GFX_SOURCES
+    "DebugRender.h"
+    "DebugRender.cpp"
     "Camera.h"
     "Camera.cpp"
     "EnvMap.h"

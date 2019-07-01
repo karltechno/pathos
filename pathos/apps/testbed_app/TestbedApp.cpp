@@ -125,7 +125,7 @@ void TestbedApp::Tick(float _dt)
 	m_camController.UpdateCamera(_dt, m_cam);
 	m_myCbuffer.mvp = kt::Mat4::Identity();
 
-	m_scene.UpdateFrameData(gpu::GetMainThreadCommandCtx(), m_cam, _dt);
+	m_scene.BeginFrameAndUpdateBuffers(gpu::GetMainThreadCommandCtx(), m_cam, _dt);
 
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
@@ -161,6 +161,8 @@ void TestbedApp::Tick(float _dt)
 	m_scene.RenderInstances(ctx);
 
 	m_skyboxRenderer.Render(ctx, m_cam);
+	
+	m_scene.EndFrame();
 }
 
 void TestbedApp::Shutdown()

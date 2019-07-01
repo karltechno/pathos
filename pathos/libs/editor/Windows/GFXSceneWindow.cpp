@@ -3,6 +3,7 @@
 #include <gfx/Scene.h>
 #include <gfx/Camera.h>
 #include <gfx/Model.h>
+#include <gfx/DebugRender.h>
 
 #include "GFXSceneWindow.h"
 
@@ -56,28 +57,42 @@ static void DrawInstancesTab(GFXSceneWindow* _window)
 	kt::Array<gfx::Scene::InstanceData>& instanceArray = _window->m_scene->m_instances;
 	for (uint32_t i = 0; i < instanceArray.Size(); ++i)
 	{
-		//gfx::Model const& model = *gfx::Scene::s_models[instanceArray[i].m_modelIdx];
+		ImGui::PushID(i);
+		gfx::Model const& model = *gfx::Scene::s_models[instanceArray[i].m_modelIdx];
 		char const* modelName = gfx::Scene::s_modelNames[instanceArray[i].m_modelIdx].Data();
-		bool const selected = ImGui::Selectable(modelName, i == _window->m_selectedInstanceIdx);
-		if (selected || _window->m_selectedInstanceIdx == i)
+		if (ImGui::Selectable(modelName, i == _window->m_selectedInstanceIdx))
 		{
 			_window->m_selectedInstanceIdx = i;
-
-			gfx::Scene::InstanceData& instance = instanceArray[i];
-			kt::Mat4 mtx;
-
-			mtx.m_cols[0] = kt::Vec4(instance.m_transform.m_mtx[0], 0.0f);
-			mtx.m_cols[1] = kt::Vec4(instance.m_transform.m_mtx[1], 0.0f);
-			mtx.m_cols[2] = kt::Vec4(instance.m_transform.m_mtx[2], 0.0f);
-			mtx.m_cols[3] = kt::Vec4(instance.m_transform.m_pos, 1.0f);
-
-			ImGuizmo::Manipulate(_window->m_cam->GetView().Data(), _window->m_cam->GetProjection().Data(), _window->m_gizmoOp, _window->m_gizmoMode, mtx.Data(), false);
-
-			instance.m_transform.m_mtx[0] = kt::Vec3(mtx.m_cols[0]);
-			instance.m_transform.m_mtx[1] = kt::Vec3(mtx.m_cols[1]);
-			instance.m_transform.m_mtx[2] = kt::Vec3(mtx.m_cols[2]);
-			instance.m_transform.m_pos = kt::Vec3(mtx.m_cols[3]);
 		}
+
+		gfx::Scene::InstanceData const& instance = instanceArray[i];
+		// aabb
+		//gfx::DebugRender::Line(instanceArray[i].m_transform.m_pos, instanceArray[i].m_transform.m_pos + kt::Vec3(0.0f, 50.0f, 0.0f), kt::Vec4(1.0f), true);
+		kt::AABB aabb = model.m_boundingBox;
+		aabb.m_min += instance.m_transform.m_pos;
+		aabb.m_max += instance.m_transform.m_pos;
+		gfx::DebugRender::LineBox(aabb, instance.m_transform.m_mtx, kt::Vec4(0.0f, 0.0f, 1.0f, 1.0f));
+
+		ImGui::PopID();
+	}
+
+	if (_window->m_selectedInstanceIdx < _window->m_scene->m_instances.Size())
+	{
+		gfx::Scene::InstanceData& instance = instanceArray[_window->m_selectedInstanceIdx];
+		//gfx::Model const& model = *gfx::Scene::s_models[instance.m_modelIdx];
+		kt::Mat4 mtx;
+
+		mtx.m_cols[0] = kt::Vec4(instance.m_transform.m_mtx[0], 0.0f);
+		mtx.m_cols[1] = kt::Vec4(instance.m_transform.m_mtx[1], 0.0f);
+		mtx.m_cols[2] = kt::Vec4(instance.m_transform.m_mtx[2], 0.0f);
+		mtx.m_cols[3] = kt::Vec4(instance.m_transform.m_pos, 1.0f);
+
+		ImGuizmo::Manipulate(_window->m_cam->GetView().Data(), _window->m_cam->GetProjection().Data(), _window->m_gizmoOp, _window->m_gizmoMode, mtx.Data(), false);
+
+		instance.m_transform.m_mtx[0] = kt::Vec3(mtx.m_cols[0]);
+		instance.m_transform.m_mtx[1] = kt::Vec3(mtx.m_cols[1]);
+		instance.m_transform.m_mtx[2] = kt::Vec3(mtx.m_cols[2]);
+		instance.m_transform.m_pos = kt::Vec3(mtx.m_cols[3]);
 	}
 }
 
