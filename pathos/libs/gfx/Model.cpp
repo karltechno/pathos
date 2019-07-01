@@ -107,6 +107,8 @@ static void CopyIndexBuffer(cgltf_accessor* _accessor, uint32_t* o_dest, uint32_
 		src += stride;
 		indicies[2] = (uint32_t)*(IntT*)(src) + _vtxOffset;
 		src += stride;
+
+		// Note: Swizzling indicies here to swap winding order from CCW -> CW.
 		*o_dest++ = indicies[1];
 		*o_dest++ = indicies[0];
 		*o_dest++ = indicies[2];
