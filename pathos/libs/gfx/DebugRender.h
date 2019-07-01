@@ -26,7 +26,7 @@ void Flush(gpu::cmd::Context* _ctx);
 void Line(kt::Vec3 const& _p0, kt::Vec3 const& _p1, kt::Vec4 const& _color, bool _depth = true);
 
 void LineBox(kt::Mat4 const& _mat, kt::Vec4 const& _color, bool _depth = true);
-void LineBox(kt::AABB const& _aabb, kt::Mat3 const& _mtx, kt::Vec4 const& _color, bool _depth = true);
+void LineBox(kt::AABB const& _aabb, kt::Mat3 const& _mtx, kt::Vec3 const& _pos, kt::Vec4 const& _color, bool _depth = true);
 }
 
 }

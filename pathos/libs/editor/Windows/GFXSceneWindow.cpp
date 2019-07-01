@@ -68,10 +68,7 @@ static void DrawInstancesTab(GFXSceneWindow* _window)
 		gfx::Scene::InstanceData const& instance = instanceArray[i];
 		// aabb
 		//gfx::DebugRender::Line(instanceArray[i].m_transform.m_pos, instanceArray[i].m_transform.m_pos + kt::Vec3(0.0f, 50.0f, 0.0f), kt::Vec4(1.0f), true);
-		kt::AABB aabb = model.m_boundingBox;
-		aabb.m_min += instance.m_transform.m_pos;
-		aabb.m_max += instance.m_transform.m_pos;
-		gfx::DebugRender::LineBox(aabb, instance.m_transform.m_mtx, kt::Vec4(0.0f, 0.0f, 1.0f, 1.0f));
+		gfx::DebugRender::LineBox(model.m_boundingBox, instance.m_transform.m_mtx, instance.m_transform.m_pos, kt::Vec4(0.0f, 0.0f, 1.0f, 1.0f));
 
 		ImGui::PopID();
 	}
@@ -94,6 +91,8 @@ static void DrawInstancesTab(GFXSceneWindow* _window)
 		instance.m_transform.m_mtx[2] = kt::Vec3(mtx.m_cols[2]);
 		instance.m_transform.m_pos = kt::Vec3(mtx.m_cols[3]);
 	}
+
+	gfx::DebugRender::LineBox(_window->m_scene->m_sceneBounds, kt::Mat3::Identity(), kt::Vec3(0.0f), kt::Vec4(1.0f, 0.0f, 0.0f, 1.0f));
 }
 
 static void DrawLightsTab(GFXSceneWindow* _window)

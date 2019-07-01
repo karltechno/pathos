@@ -171,9 +171,9 @@ void LineBox(kt::Mat4 const& _mat, kt::Vec4 const& _color, bool _depth)
 	}
 }
 
-void LineBox(kt::AABB const& _aabb, kt::Mat3 const& _mtx, kt::Vec4 const& _color, bool _depth)
+void LineBox(kt::AABB const& _aabb, kt::Mat3 const& _mtx, kt::Vec3 const& _pos, kt::Vec4 const& _color, bool _depth)
 {
-	kt::Mat4 mtx(_mtx, kt::Mul(_mtx, _aabb.Center()));
+	kt::Mat4 mtx(_mtx, _pos + kt::Mul(_mtx, _aabb.Center()));
 	kt::Vec3 const scale = _aabb.HalfSize();
 	
 	mtx[0] *= scale.x;

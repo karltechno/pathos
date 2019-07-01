@@ -28,14 +28,7 @@ static kt::AABB CalcSceneBounds(gfx::Scene const& _scene)
 	for (Scene::InstanceData const& instance : _scene.m_instances)
 	{
 		kt::AABB const& modelAABB = Scene::s_models[instance.m_modelIdx]->m_boundingBox;
-
-		kt::Mat3 mtx = instance.m_transform.m_mtx;
-		// mtx may contain scale, need to normalize. TODO: Store scale separately?
-		mtx[0] = kt::Normalize(mtx[0]);
-		mtx[1] = kt::Normalize(mtx[1]);
-		mtx[2] = kt::Normalize(mtx[2]);
-
-		sceneBounds = kt::Union(modelAABB.Transformed(mtx, instance.m_transform.m_pos), sceneBounds);
+		sceneBounds = kt::Union(modelAABB.Transformed(instance.m_transform.m_mtx, instance.m_transform.m_pos), sceneBounds);
 	}
 
 	return sceneBounds;
