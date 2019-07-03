@@ -9,32 +9,32 @@ namespace gfx
 
 struct Camera
 {
-	//enum FrustumCorner
-	//{
-	//	NearLowerLeft,
-	//	NearUpperLeft,
-	//	NearLowerRight,
-	//	NearUpperRight,
-	//	
-	//	FarLowerLeft,
-	//	FarUpperLeft,
-	//	FarLowerRight,
-	//	FarUpperRight,
+	enum FrustumCorner
+	{
+		NearLowerLeft,
+		NearUpperLeft,
+		NearLowerRight,
+		NearUpperRight,
 
-	//	Num_FrustumCorner
-	//};
+		FarLowerLeft,
+		FarUpperLeft,
+		FarLowerRight,
+		FarUpperRight,
 
-	//enum FrustumPlane
-	//{
-	//	Near,
-	//	Far,
-	//	Left,
-	//	Right,
-	//	Top,
-	//	Bottom,
+		Num_FrustumCorner
+	};
 
-	//	Num_FrustumPlane
-	//};
+	enum FrustumPlane
+	{
+		Near,
+		Far,
+		Left,
+		Right,
+		Top,
+		Bottom,
+
+		Num_FrustumPlane
+	};
 
 	enum class ProjType
 	{
@@ -64,10 +64,17 @@ struct Camera
 	kt::Mat4 const& GetProjection() const { return m_viewToClip; }
 	kt::Vec3 GetPos() const;
 
+	kt::Vec3 const* GetFrustumCorners() const { return m_frustumCorners; }
+	kt::Vec4 const* GetFrustumPlanes() const { return m_frustumPlanes; }
+
 private:
 	void UpdateCachedWorldToClip();
+	void CalcFrustumCornersAndPlanes();
 
 	ProjectionParams m_projParams;
+
+	kt::Vec3 m_frustumCorners[FrustumCorner::Num_FrustumCorner];
+	kt::Vec4 m_frustumPlanes[FrustumPlane::Num_FrustumPlane];
 
 	kt::Mat4 m_invView = kt::Mat4::Identity(); // Camera in world space
 	kt::Mat4 m_view = kt::Mat4::Identity(); // Inverse camera
