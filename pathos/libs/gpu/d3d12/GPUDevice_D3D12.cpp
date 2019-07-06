@@ -302,11 +302,11 @@ void AllocatedResource_D3D12::Destroy()
 		m_rtv.ptr = 0;
 	}
 
-	if (m_dsv.ptr)
+	for (D3D12_CPU_DESCRIPTOR_HANDLE dsv : m_dsvs)
 	{
-		g_device->m_dsvHeap.Free(m_dsv);
-		m_dsv.ptr = 0;
+		g_device->m_dsvHeap.Free(dsv);
 	}
+	m_uavs.Clear();
 
 	m_mappedCpuData = nullptr;
 	m_gpuAddress = 0;
@@ -412,12 +412,16 @@ static ID3D12PipelineState* CreateD3DComputePSO(ID3D12Device* _device, gpu::Shad
 }
 
 
-static ID3D12PipelineState* CreateD3DGraphicsPSO(ID3D12Device* _device, gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const& _vs, gpu::ShaderBytecode const& _ps)
+static ID3D12PipelineState* CreateD3DGraphicsPSO(ID3D12Device* _device, gpu::GraphicsPSODesc const& _desc, gpu::ShaderBytecode const* _vs, gpu::ShaderBytecode const* _ps)
 {
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC d3dDesc{};
 
-	d3dDesc.VS = D3D12_SHADER_BYTECODE{ _vs.m_data, _vs.m_size };
-	d3dDesc.PS = D3D12_SHADER_BYTECODE{ _ps.m_data, _ps.m_size };
+	d3dDesc.VS = D3D12_SHADER_BYTECODE{ _vs->m_data, _vs->m_size };
+	
+	if (_ps)
+	{
+		d3dDesc.PS = D3D12_SHADER_BYTECODE{ _ps->m_data, _ps->m_size };
+	}
 
 	d3dDesc.pRootSignature = g_device->m_graphicsRootSig;
 
@@ -530,23 +534,36 @@ void AllocatedPSO_D3D12::InitAsCompute(gpu::ShaderHandle _handle, gpu::ShaderByt
 void AllocatedPSO_D3D12::InitAsGraphics
 (
 	gpu::GraphicsPSODesc const& _desc, 
-	gpu::ShaderBytecode const& _vs,  
-	gpu::ShaderBytecode const& _ps,
+	gpu::ShaderBytecode const* _vs,  
+	gpu::ShaderBytecode const* _ps,
 	char const* _debugName
 )
 {
 	KT_ASSERT(!m_pso);
 	m_psoDesc = _desc;
 	gpu::AddRef(m_psoDesc.m_vs);
-	gpu::AddRef(m_psoDesc.m_ps);
-	
+
+	if (_ps)
+	{
+		gpu::AddRef(m_psoDesc.m_ps);
+	}
+
 	m_pso = CreateD3DGraphicsPSO(g_device->m_d3dDev, _desc, _vs, _ps);
 
 	AllocatedObjectBase_D3D12::Init(_debugName);
 	D3D_SET_DEBUG_NAME(m_pso, m_debugName.Data());
 }
 
+DXGI_FORMAT TranslateDXGIFormat_SRVUAV_Compatible(DXGI_FORMAT _fmt)
+{
+	switch (_fmt)
+	{
+		case DXGI_FORMAT_D32_FLOAT: return DXGI_FORMAT_R32_FLOAT;
 
+		default:
+			return _fmt;;
+	}
+}
 
 bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const* _initialData, char const* _debugName /* = nullptr */)
 {
@@ -681,12 +698,40 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 
 	if (!!(_desc.m_usageFlags & gpu::TextureUsageFlags::DepthStencil))
 	{
-		m_dsv = g_device->m_dsvHeap.AllocOne();
-		g_device->m_d3dDev->CreateDepthStencilView(m_res, nullptr, m_dsv);
+		KT_ASSERT(d3dDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D); // Surely we don't need to support anything else!
+
+		// TODO: Maybe specify during resource creation what kind of descriptors are necessary?
+		D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+		dsvDesc.Format = d3dDesc.Format;
+
+		if (_desc.m_arraySlices == 1)
+		{
+			dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+			dsvDesc.Texture2D.MipSlice = 0;
+			g_device->m_d3dDev->CreateDepthStencilView(m_res, &dsvDesc, m_dsvs.PushBack(g_device->m_dsvHeap.AllocOne()));
+		}
+		else
+		{
+			dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+			dsvDesc.Texture2DArray.ArraySize = 1;
+
+			D3D12_CPU_DESCRIPTOR_HANDLE* dsv = m_dsvs.PushBack_Raw(_desc.m_arraySlices * _desc.m_mipLevels);
+			for (uint32_t arr = 0; arr < _desc.m_arraySlices; ++arr)
+			{
+				for (uint32_t mip = 0; mip < _desc.m_mipLevels; ++mip)
+				{
+					dsvDesc.Texture2DArray.MipSlice = mip;
+					dsvDesc.Texture2DArray.FirstArraySlice = arr;
+					dsv[gpu::D3DSubresourceIndex(mip, arr, _desc.m_mipLevels)] = g_device->m_dsvHeap.AllocOne();
+					g_device->m_d3dDev->CreateDepthStencilView(m_res, &dsvDesc, dsv[gpu::D3DSubresourceIndex(mip, arr, _desc.m_mipLevels)]);
+				}
+			}
+		}
 	}
 
 	if (!!(_desc.m_usageFlags & gpu::TextureUsageFlags::RenderTarget))
 	{
+		// TODO: Array/mip.
 		m_rtv = g_device->m_rtvHeap.AllocOne();
 		g_device->m_d3dDev->CreateRenderTargetView(m_res, nullptr, m_rtv);
 	}
@@ -695,9 +740,9 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 
 	// TODO: Might need to convert uav fmt
-	uavDesc.Format = d3dDesc.Format;
+	uavDesc.Format = TranslateDXGIFormat_SRVUAV_Compatible(d3dDesc.Format);
 
-	srvDesc.Format = d3dDesc.Format;
+	srvDesc.Format = uavDesc.Format;
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
 	switch (d3dDesc.Dimension)
@@ -748,6 +793,7 @@ bool AllocatedResource_D3D12::InitAsTexture(TextureDesc const& _desc, void const
 					srvDesc.Texture2DArray.MostDetailedMip = 0;
 					srvDesc.Texture2DArray.PlaneSlice = 0;
 					srvDesc.Texture2DArray.ResourceMinLODClamp = 0.0f;
+					srvDesc.Texture2DArray.MipLevels = d3dDesc.MipLevels;
 				}
 
 				uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
@@ -1569,12 +1615,16 @@ gpu::ShaderHandle CreateShader(ShaderType _type, gpu::ShaderBytecode const& _byt
 
 gpu::PSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc, char const* _name)
 {
-	// Make sure VS and PS are valid.
-	AllocatedShader_D3D12* psShader = g_device->m_shaderHandles.Lookup(_desc.m_ps);
-	if (!psShader || psShader->m_shaderType != ShaderType::Pixel)
+	// Make sure VS and PS are valid. (allow null ps)
+	AllocatedShader_D3D12* psShader = nullptr;
+	if (_desc.m_ps.IsValid())
 	{
-		KT_ASSERT(!"Invalid pixel shader handle passed to CreateGraphicsPSO.");
-		return gpu::PSOHandle{};
+		psShader = g_device->m_shaderHandles.Lookup(_desc.m_ps);
+		if (!psShader || psShader->m_shaderType != ShaderType::Pixel)
+		{
+			KT_ASSERT(!"Invalid pixel shader handle passed to CreateGraphicsPSO.");
+			return gpu::PSOHandle{};
+		}
 	}
 
 	AllocatedShader_D3D12* vsShader = g_device->m_shaderHandles.Lookup(_desc.m_vs);
@@ -1599,10 +1649,14 @@ gpu::PSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc, char const* 
 
 	AllocatedPSO_D3D12* psoData;
 	gpu::PSOHandle const psoHandle = gpu::PSOHandle(g_device->m_psoHandles.Alloc(psoData));
-	psoData->InitAsGraphics(_desc, vsShader->m_byteCode, psShader->m_byteCode, _name);
+	psoData->InitAsGraphics(_desc, &vsShader->m_byteCode, psShader ? &psShader->m_byteCode : nullptr, _name);
 	g_device->m_psoCache.Insert(hash, gpu::PSORef{ psoHandle });
 
-	psShader->m_linkedPsos.PushBack(psoHandle);
+	if (psShader)
+	{
+		psShader->m_linkedPsos.PushBack(psoHandle);
+	}
+
 	vsShader->m_linkedPsos.PushBack(psoHandle);
 
 	return psoHandle;
@@ -1686,8 +1740,8 @@ void ReloadShader(ShaderHandle _handle, ShaderBytecode const& _newBytecode)
 				continue;
 			}
 
-			ShaderBytecode const& vsBytecode = g_device->m_shaderHandles.Lookup(psoData->m_psoDesc.m_vs)->m_byteCode;
-			ShaderBytecode const& psBytecode = g_device->m_shaderHandles.Lookup(psoData->m_psoDesc.m_ps)->m_byteCode;
+			ShaderBytecode const* vsBytecode = &g_device->m_shaderHandles.Lookup(psoData->m_psoDesc.m_vs)->m_byteCode;
+			ShaderBytecode const* psBytecode = psoData->m_psoDesc.m_ps.IsValid() ? &g_device->m_shaderHandles.Lookup(psoData->m_psoDesc.m_ps)->m_byteCode : nullptr;
 
 			if (psoData->m_pso)
 			{

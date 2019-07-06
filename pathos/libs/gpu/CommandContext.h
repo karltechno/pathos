@@ -35,7 +35,7 @@ void SetVertexBuffer(Context* _ctx, uint32_t _streamIdx, gpu::BufferHandle _hand
 void SetIndexBuffer(Context* _ctx, gpu::BufferHandle _handle);
 
 void SetRenderTarget(Context* _ctx, uint32_t _idx, gpu::TextureHandle _handle);
-void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle);
+void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle, uint32_t _arrayIdx = 0, uint32_t _mipIdx = 0);
 
 void SetComputeCBVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
 void SetComputeUAVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
@@ -57,7 +57,7 @@ void DrawInstanced(Context* _ctx, uint32_t _vertexCount, uint32_t _instanceCount
 void Dispatch(Context* _ctx, uint32_t _x, uint32_t _y, uint32_t _z);
 
 void ClearRenderTarget(Context* _ctx, gpu::TextureHandle _handle, float const _color[4]);
-void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth); // TODO: Stencil
+void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth, uint32_t _arrayIdx = 0, uint32_t _mipIdx = 0); // TODO: Stencil
 
 // Merge functions?
 void UpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem, uint32_t _size, uint32_t _destOffset = 0);

@@ -456,9 +456,9 @@ void SetRenderTarget(Context* _ctx, uint32_t _idx, gpu::TextureHandle _handle)
 	}
 }
 
-void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle)
+void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle, uint32_t _arrayIdx, uint32_t _mipIdx)
 {
-	if (_ctx->m_state.m_depthBuffer.Handle() != _handle)
+	if (!_ctx->m_state.m_depthBuffer.Equals(_handle, _arrayIdx, _mipIdx))
 	{
 #if KT_DEBUG
 		if (_handle.IsValid())
@@ -466,24 +466,28 @@ void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle)
 			AllocatedResource_D3D12* tex = _ctx->m_device->m_resourceHandles.Lookup(_handle);
 			KT_ASSERT(tex);
 			KT_ASSERT(tex->IsTexture());
-			KT_ASSERT(tex->m_dsv.ptr);
 		}
 #endif
 
-		_ctx->m_state.m_depthBuffer.Acquire(_handle);
+		_ctx->m_state.m_depthBuffer.m_tex = _handle;
+		_ctx->m_state.m_depthBuffer.m_arrayIdx = _arrayIdx;
+		_ctx->m_state.m_depthBuffer.m_mipIdx = _mipIdx;
 		_ctx->m_dirtyFlags |= DirtyStateFlags::DepthBuffer;
 	}
 }
 
-void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth)
+void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth, uint32_t _arrayIdx, uint32_t _mipIdx)
 {
 	AllocatedResource_D3D12* tex = _ctx->m_device->m_resourceHandles.Lookup(_handle);
 	// TODO: Flush barriers for depth target?
 	KT_ASSERT(tex);
 	KT_ASSERT(tex->IsTexture());
 	KT_ASSERT(!!(tex->m_textureDesc.m_usageFlags & TextureUsageFlags::DepthStencil));
-	KT_ASSERT(tex->m_dsv.ptr);
-	_ctx->m_cmdList->ClearDepthStencilView(tex->m_dsv, D3D12_CLEAR_FLAG_DEPTH, _depth, 0, 0, nullptr);
+
+	uint32_t const descriptorIdx = gpu::D3DSubresourceIndex(_mipIdx, _arrayIdx, tex->m_textureDesc.m_mipLevels);
+	KT_ASSERT(descriptorIdx < tex->m_dsvs.Size());
+	D3D12_CPU_DESCRIPTOR_HANDLE const descriptor = tex->m_dsvs[descriptorIdx];
+	_ctx->m_cmdList->ClearDepthStencilView(descriptor, D3D12_CLEAR_FLAG_DEPTH, _depth, 0, 0, nullptr);
 }
 
 void ResourceBarrier(Context* _ctx, gpu::ResourceHandle _handle, gpu::ResourceState _newState)
@@ -679,12 +683,14 @@ void CommandContext_D3D12::ApplyGraphicsStateChanges()
 	{
 		D3D12_CPU_DESCRIPTOR_HANDLE dsv = {};
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvs[gpu::c_maxRenderTargets] = {};
-		if (m_state.m_depthBuffer.IsValid())
+		if (m_state.m_depthBuffer.m_tex.IsValid())
 		{
-			AllocatedResource_D3D12* tex = m_device->m_resourceHandles.Lookup(m_state.m_depthBuffer);
+			AllocatedResource_D3D12* tex = m_device->m_resourceHandles.Lookup(m_state.m_depthBuffer.m_tex);
 			KT_ASSERT(tex);
-			KT_ASSERT(tex->m_dsv.ptr);
-			dsv = tex->m_dsv;
+
+			uint32_t const descriptorIdx = gpu::D3DSubresourceIndex(m_state.m_depthBuffer.m_mipIdx, m_state.m_depthBuffer.m_arrayIdx, tex->m_textureDesc.m_mipLevels);
+			KT_ASSERT(descriptorIdx < tex->m_dsvs.Size());
+			dsv = tex->m_dsvs[descriptorIdx];
 		}
 
 		uint32_t const numRenderTargets = m_state.m_numRenderTargets;

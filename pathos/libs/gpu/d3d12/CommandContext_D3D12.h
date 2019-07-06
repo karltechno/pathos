@@ -75,6 +75,18 @@ struct CommandContext_D3D12
 	ContextType m_ctxType;
 	CommandListFlags_D3D12 m_cmdListFlags;
 
+	struct TextureWithArrayMipIdx
+	{
+		bool Equals(gpu::TextureHandle _h, uint32_t _arrayIdx, uint32_t _mipIdx) const
+		{
+			return m_tex.Handle() == _h && m_arrayIdx == _arrayIdx && m_mipIdx == _mipIdx;
+		}
+
+		gpu::TextureRef m_tex;
+		uint32_t m_arrayIdx;
+		uint32_t m_mipIdx;
+	};
+
 	struct State
 	{
 		gpu::PrimitiveType m_primitive = gpu::PrimitiveType::Num_PrimitiveType;
@@ -84,7 +96,7 @@ struct CommandContext_D3D12
 		gpu::PSORef m_pso;
 		uint32_t m_numRenderTargets = 0;
 
-		gpu::TextureRef m_depthBuffer;
+		TextureWithArrayMipIdx m_depthBuffer;
 		gpu::TextureRef m_renderTargets[gpu::c_maxRenderTargets];
 
 		gpu::Rect m_scissorRect;
