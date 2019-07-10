@@ -429,19 +429,10 @@ struct BlendDesc
 {
 	BlendDesc()
 	{
-		m_blendEnable = 0;
-		m_alphaToCoverageEnable = 0;
-
-		m_srcBlend = BlendMode::One;
-		m_destBlend = BlendMode::Zero;
-		m_blendOp = BlendOp::Add;
-
-		m_srcAlpha = BlendMode::One;
-		m_destAlpha = BlendMode::Zero;
-		m_blendOpAlpha = BlendOp::Add;
+		SetOpaque();
 	}
 
-	static BlendDesc Opaque();
+	void SetOpaque();
 
 	uint32_t m_blendEnable : 1;
 	uint32_t m_alphaToCoverageEnable : 1;

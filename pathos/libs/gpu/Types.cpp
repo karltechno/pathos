@@ -123,22 +123,17 @@ bool IsSRGBFormat(Format _fmt)
 	}
 }
 
-gpu::BlendDesc BlendDesc::Opaque()
-{
-	BlendDesc desc;
+void BlendDesc::SetOpaque()
+{	m_blendEnable = 0;
+	m_alphaToCoverageEnable = 0;
 
-	desc.m_blendEnable = 0;
-	desc.m_alphaToCoverageEnable = 0;
+	m_srcBlend = BlendMode::One;
+	m_destBlend = BlendMode::Zero;
+	m_blendOp = BlendOp::Add;
 
-	desc.m_srcBlend = BlendMode::One;
-	desc.m_destBlend = BlendMode::Zero;
-	desc.m_blendOp = BlendOp::Add;
-
-	desc.m_srcAlpha = BlendMode::One;
-	desc.m_destAlpha = BlendMode::Zero;
-	desc.m_blendOpAlpha = BlendOp::Add;
-	return desc;
+	m_srcAlpha = BlendMode::One;
+	m_destAlpha = BlendMode::Zero;
+	m_blendOpAlpha = BlendOp::Add;
 }
-
 
 }
