@@ -31,6 +31,7 @@ VSOut_ObjectFull main(in VSIn_ObjectFullInstanced _input)
     ret.pos = mul(float4(modelPos, 1.0), g_frame.mainViewProj);
     ret.posWS = modelPos; 
     ret.uv = _input.uv;
+    ret.viewDepth = ret.pos.w;
 
     ret.normal = TransformInstanceData_Dir(_input, _input.normal);
     ret.tangentSign = float4(TransformInstanceData_Dir(_input, _input.tangentSign.xyz), _input.tangentSign.w);

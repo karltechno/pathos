@@ -22,6 +22,16 @@ struct VSIn_ObjectFullInstanced
     float3 instanceCol3 : TEXCOORD4;
 };
 
+struct VSIn_ObjectPosInstanced
+{
+    float3 pos : POSITION;
+
+    float3 instanceCol0 : TEXCOORD0;
+    float3 instanceCol1 : TEXCOORD1;
+    float3 instanceCol2 : TEXCOORD2;
+    float3 instanceCol3 : TEXCOORD3;
+};
+
 struct VSOut_Pos
 {
     float4 pos  : SV_Position;
@@ -54,7 +64,8 @@ struct VSOut_ObjectFull
 {
     float4 pos : SV_Position;
     float3 posWS : POSITION;
-    float2 uv : TEXCOORD;
+    float viewDepth : TEXCOORD1;
+    float2 uv : TEXCOORD2;
     float3 normal : NORMAL;
     float4 tangentSign : TANGENT;
 };

@@ -1106,7 +1106,7 @@ static void CreateRootSigs(ID3D12Device* _dev, ID3D12RootSignature*& o_gfx, ID3D
 	D3D12_ROOT_SIGNATURE_DESC graphicsDesc = {};
 	D3D12_ROOT_SIGNATURE_DESC computeDesc = {};
 
-	D3D12_STATIC_SAMPLER_DESC samplers[5] = {};
+	D3D12_STATIC_SAMPLER_DESC samplers[6] = {};
 
 	graphicsDesc.pStaticSamplers = samplers;
 	graphicsDesc.NumStaticSamplers = KT_ARRAY_COUNT(samplers);
@@ -1181,6 +1181,19 @@ static void CreateRootSigs(ID3D12Device* _dev, ID3D12RootSignature*& o_gfx, ID3D
 		samplers[4].RegisterSpace = 0;
 		samplers[4].ShaderRegister = 4;
 		samplers[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	}
+
+	// Shadow cmp less
+	{
+		samplers[5].AddressU = samplers[5].AddressV = samplers[5].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+		samplers[5].Filter = D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
+		samplers[5].MinLOD = 0.0f;
+		samplers[5].MaxLOD = D3D12_FLOAT32_MAX;
+		samplers[5].MipLODBias = 0.0f;
+		samplers[5].RegisterSpace = 0;
+		samplers[5].ShaderRegister = 5;
+		samplers[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		samplers[5].ComparisonFunc = D3D12_COMPARISON_FUNC_LESS;
 	}
 
 	D3D12_ROOT_PARAMETER tables[3 * c_numShaderSpaces];

@@ -2,6 +2,8 @@
 #define COMMON_SHARED_H
 #include "CPPInterop.h"
 
+#define PATHOS_MAX_SHADOW_CASCADES 4
+
 SHADERLIB_NAMESPACE_BEGIN
 
 struct FrameConstants
@@ -10,6 +12,9 @@ struct FrameConstants
     float4x4 mainProj;
     float4x4 mainView;
     float4x4 mainInvView;
+
+	float4x4 cascadeMatricies[PATHOS_MAX_SHADOW_CASCADES];
+	float4 cascadeSplits;
 
     float3 camPos;
     float camDist; // distance from origin
@@ -31,6 +36,7 @@ struct BatchConstants
 {
     float4x4 modelMtx;
 };
+
 
 SHADERLIB_NAMESPACE_END
 

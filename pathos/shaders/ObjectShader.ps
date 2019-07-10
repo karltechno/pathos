@@ -4,11 +4,6 @@
 #include "shaderlib/LightingStructs.h"
 #include "shaderlib/CommonShared.h"
 
-struct TestData
-{
-    float4x4 mvp;
-};
-
 Texture2D<float4> g_albedo : register(t0, space0);
 Texture2D<float4> g_normal : register(t1, space0);
 Texture2D<float4> g_metalRoughness : register(t2, space0);
@@ -17,13 +12,42 @@ Texture2D<float4> g_ao : register(t3, space0);
 TextureCube<float4> g_irrad : register(t0, space1);
 TextureCube<float4> g_ggxEnv : register(t1, space1);
 Texture2D<float4> g_ggxLut : register(t2, space1);
-
 StructuredBuffer<LightData> g_lights : register(t3, space1);
+Texture2DArray<float> g_shadowCascades : register(t4, space1);
 
 ConstantBuffer<BatchConstants> g_batch : register(b0, space0);
 ConstantBuffer<FrameConstants> g_frame : register(b0, space1);
 
+static const float3 c_cascadeCols[4] = 
+{
+    float3(1, 0, 0),
+    float3(0, 1, 0),
+    float3(0, 0, 1),
+    float3(1, 1, 0)
+};
 
+
+void SelectCascade(float3 _world, float _viewZ, out float _cascade, out float3 _lightSpace)
+{
+    // Branchless cascade selection (assuming 4 csm)
+    float4 weights = _viewZ < g_frame.cascadeSplits;
+    weights.yzw -= weights.xyz;
+    _cascade = dot(weights, float4(0, 1, 2, 3));
+    float4 coord = mul(float4(_world, 1.), g_frame.cascadeMatricies[_cascade]);
+
+    _lightSpace = coord.xyz / coord.w;
+}
+
+float ComputeDirectionalShadow(float3 _world, float _viewZ, float3 _surfNorm, float3 _sunDir)
+{
+    float cascade;
+    float3 shadowPos;
+    SelectCascade(_world, _viewZ, cascade, shadowPos);
+
+    float bias = lerp(0.004, 0.001, saturate(dot(_surfNorm, _sunDir)));
+
+    return g_shadowCascades.SampleCmp(g_samplerCmp, float3(shadowPos.xy, cascade), shadowPos.z - bias);
+}
 
 float4 main(in VSOut_ObjectFull _input) : SV_Target
 {
@@ -38,11 +62,12 @@ float4 main(in VSOut_ObjectFull _input) : SV_Target
     float3 metalRough = g_metalRoughness.Sample(g_samplerAnisoWrap, _input.uv).xyz;
     float3 normalTex = normalize(g_normal.Sample(g_samplerAnisoWrap, _input.uv).xyz * 2.0 - 1.0);
     normalTex = mul(normalTex, tbn);
-    normalTex = normal;
 
     float roughness = metalRough.g;
+
     float metallic = metalRough.b;
     float3 baseCol = g_albedo.Sample(g_samplerAnisoWrap, _input.uv).xyz;
+
 
     SurfaceData surf = CreateSurfaceData(normalTex, _input.posWS, metallic, roughness, baseCol);
 
@@ -52,7 +77,8 @@ float4 main(in VSOut_ObjectFull _input) : SV_Target
         color += ComputeLighting_Point(light, surf, view);
     }
 
-    color += ComputeLighting_Common(g_frame.sunColor, surf, -g_frame.sunDir, view);
+    float dirShadow = ComputeDirectionalShadow(_input.posWS, _input.viewDepth, normal, g_frame.sunDir);
+    color += ComputeLighting_Common(g_frame.sunColor, surf, -g_frame.sunDir, view) * dirShadow;
     
     float3 irrad = g_irrad.Sample(g_samplerLinearWrap, surf.norm).xyz;
 

@@ -9,4 +9,5 @@ SamplerState g_samplerLinearWrap    : register(s3);
 
 SamplerState g_samplerAnisoWrap     : register(s4);
 
+SamplerComparisonState g_samplerCmp : register(s5);
 #endif // GLOBAL_SAMPLERS_INCLUDED
