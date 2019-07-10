@@ -1,5 +1,6 @@
 #include "DebugRender.h"
 #include "Resources.h"
+#include "Camera.h"
 
 #include <gpu/HandleRef.h>
 #include <res/ResourceSystem.h>
@@ -36,7 +37,6 @@ struct LineVertex
 struct State
 {
 	// First is no depth, second is depth.
-
 	gpu::PSORef m_linePsos[2];
 	kt::Array<LineVertex> m_lines[2];
 
@@ -89,6 +89,9 @@ void Shutdown()
 
 void Flush(gpu::cmd::Context* _ctx)
 {
+	gpu::cmd::SetDepthBuffer(_ctx, gpu::BackbufferDepth());
+	gpu::cmd::SetRenderTarget(_ctx, 0, gpu::CurrentBackbuffer());
+
 	for (uint32_t depth = 0; depth < 2; ++depth)
 	{
 		// TODO: should just write directly into mapped memory?
@@ -181,6 +184,69 @@ void LineBox(kt::AABB const& _aabb, kt::Mat3 const& _mtx, kt::Vec3 const& _pos, 
 	mtx[2] *= scale.z;
 	LineBox(mtx, _color, _depth);
 }
+
+void LineBox(kt::AABB const& _aabb, kt::Mat4 const& _mtx, kt::Vec4 const& _color, bool _depth /*= true*/)
+{
+	kt::Mat4 mtx;
+	mtx = _mtx;
+	mtx.SetPos(kt::MulPoint(_mtx, _aabb.Center()));
+	kt::Vec3 const scale = _aabb.HalfSize();
+
+	mtx[0] *= scale.x;
+	mtx[1] *= scale.y;
+	mtx[2] *= scale.z;
+	LineBox(mtx, _color, _depth);
+}
+
+void LineFrustum(gfx::Camera const& _cam, kt::Vec4 const& _color, bool _depth /*= true*/)
+{
+	LineVertex* vtx = s_state.FetchLineVertices(8 * 3, _depth);
+	uint32_t const col = PackColor(_color);
+
+	kt::Vec3 const* corners = _cam.GetFrustumCorners();
+
+	auto doCorner = [&vtx, col, corners](Camera::FrustumCorner _c) { vtx->m_col = col; vtx->m_pos = corners[_c]; ++vtx; };
+
+	// near plane
+	doCorner(Camera::FrustumCorner::NearLowerLeft);
+	doCorner(Camera::FrustumCorner::NearLowerRight);
+
+	doCorner(Camera::FrustumCorner::NearLowerRight);
+	doCorner(Camera::FrustumCorner::NearUpperRight);
+	
+	doCorner(Camera::FrustumCorner::NearUpperRight);
+	doCorner(Camera::FrustumCorner::NearUpperLeft);
+
+	doCorner(Camera::FrustumCorner::NearUpperLeft);
+	doCorner(Camera::FrustumCorner::NearLowerLeft);
+
+	// far plane
+	doCorner(Camera::FrustumCorner::FarLowerLeft);
+	doCorner(Camera::FrustumCorner::FarLowerRight);
+
+	doCorner(Camera::FrustumCorner::FarLowerRight);
+	doCorner(Camera::FrustumCorner::FarUpperRight);
+
+	doCorner(Camera::FrustumCorner::FarUpperRight);
+	doCorner(Camera::FrustumCorner::FarUpperLeft);
+
+	doCorner(Camera::FrustumCorner::FarUpperLeft);
+	doCorner(Camera::FrustumCorner::FarLowerLeft);
+
+	// Edges connecting near/far
+	doCorner(Camera::FrustumCorner::FarLowerLeft);
+	doCorner(Camera::FrustumCorner::NearLowerLeft);
+
+	doCorner(Camera::FrustumCorner::FarLowerRight);
+	doCorner(Camera::FrustumCorner::NearLowerRight);
+
+	doCorner(Camera::FrustumCorner::FarUpperRight);
+	doCorner(Camera::FrustumCorner::NearUpperRight);
+
+	doCorner(Camera::FrustumCorner::FarUpperLeft);
+	doCorner(Camera::FrustumCorner::NearUpperLeft);
+}
+
 
 }
 
