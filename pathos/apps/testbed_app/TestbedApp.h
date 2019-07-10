@@ -41,7 +41,8 @@ struct TestbedApp : app::GraphicsApp
 	app::CameraController m_camController;
 
 	gpu::PSORef m_pso;
-	gpu::PSORef m_irradPso;
+
+	gpu::PSORef m_shadowMapPso;
 
 	gpu::BufferRef m_constantBuffer;
 	gpu::TextureRef m_cubeMap;

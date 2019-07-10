@@ -2,6 +2,7 @@
 #include "Model.h"
 #include "Camera.h"
 #include "DebugRender.h"
+#include "ShadowUtils.h"
 
 #include <res/ResourceSystem.h>
 #include <gpu/Types.h>
@@ -54,7 +55,7 @@ Scene::Scene()
 
 	m_frameConstants.time = kt::Vec4(0.0f);
 	m_frameConstants.sunColor = kt::Vec3(1.0f);
-	m_frameConstants.sunDir = kt::Vec3(0.0f, -1.0f, 0.0f);
+	m_frameConstants.sunDir = kt::Normalize(kt::Vec3(0.4f, -1.0f, 0.15f));
 
 	gpu::BufferDesc instanceBufferDesc;
 	instanceBufferDesc.m_flags = gpu::BufferFlags::Vertex | gpu::BufferFlags::Transient; // TODO: Should instance data be copied out of upload heap?
@@ -62,11 +63,19 @@ Scene::Scene()
 	m_instanceGpuBuf = gpu::CreateBuffer(instanceBufferDesc, nullptr, "gfx::Scene instance data");
 }
 
+void Scene::Init(uint32_t _shadowMapResolution /*= 2048*/)
+{
+	gpu::TextureUsageFlags const flags = gpu::TextureUsageFlags::DepthStencil | gpu::TextureUsageFlags::ShaderResource;
+	gpu::TextureDesc desc = gpu::TextureDesc::Desc2D(_shadowMapResolution, _shadowMapResolution, flags, gpu::Format::D32_Float);
+	desc.m_arraySlices = c_numShadowCascades;
+	m_shadowCascadeTex = gpu::CreateTexture(desc, nullptr, "Shadow Cascades");
+}
+
 void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera const& _mainView, float _dt)
 {
 	m_sceneBounds = CalcSceneBounds(*this);
 
-	m_frameConstants.mainViewProj = _mainView.GetCachedViewProj();
+	m_frameConstants.mainViewProj = _mainView.GetViewProj();
 	m_frameConstants.mainProj = _mainView.GetProjection();
 	m_frameConstants.mainView = _mainView.GetView();
 	m_frameConstants.mainInvView = _mainView.GetInverseView();
@@ -84,6 +93,20 @@ void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera cons
 	m_frameConstants.time.x += _dt;
 	m_frameConstants.time.y += _dt*0.1f;
 	m_frameConstants.time.z = _dt;
+
+	{
+	// calculate cascades
+		gpu::TextureDesc desc;
+		gpu::ResourceType f;
+		gpu::GetResourceInfo(m_shadowCascadeTex, f, nullptr, &desc);
+		gfx::CalculateShadowCascades(_mainView, m_frameConstants.sunDir, desc.m_width, c_numShadowCascades, m_shadowCascades, &m_frameConstants.cascadeSplits[0]);
+
+		for (uint32_t cascadeIdx = 0; cascadeIdx < c_numShadowCascades; ++cascadeIdx)
+		{
+			//m_frameConstants.cascadeMatricies[cascadeIdx] = m_shadowCascades[cascadeIdx].GetViewProj();
+			m_frameConstants.cascadeMatricies[cascadeIdx] = kt::Mul(gfx::NDC_To_UV_Matrix(), m_shadowCascades[cascadeIdx].GetViewProj());
+		}
+	}
 
 	// resize light buffer if necessary
 	uint32_t const reqLightSize = sizeof(shaderlib::LightData) * m_lights.Size();
@@ -113,7 +136,7 @@ static gpu::TextureHandle GetTextureHandleOrNull(gfx::TextureResHandle _res)
 	return _res.IsValid() ? res::GetData(_res)->m_gpuTex : gpu::TextureHandle{};
 }
 
-void Scene::RenderInstances(gpu::cmd::Context* _ctx)
+void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 {
 	if (m_instances.Size() == 0)
 	{
@@ -138,7 +161,7 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx)
 	InstanceData const* begin = instancesSorted.Begin();
 	InstanceData const* end = instancesSorted.End() - 1; // -1 for sentinel
 
-	gpu::cmd::SetVertexBuffer(_ctx, 3, m_instanceGpuBuf);
+	gpu::cmd::SetVertexBuffer(_ctx, _shadowMap ? 1 : 3, m_instanceGpuBuf);
 	
 	uint32_t batchInstanceBegin = 0;
 	for (;;)
@@ -159,20 +182,28 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx)
 		// Write out draw calls
 		gfx::Model const& model = *s_models[curModelIdx];
 		gpu::cmd::SetVertexBuffer(_ctx, 0, model.m_posGpuBuf);
-		gpu::cmd::SetVertexBuffer(_ctx, 1, model.m_tangentGpuBuf);
-		gpu::cmd::SetVertexBuffer(_ctx, 2, model.m_uv0GpuBuf);
 		gpu::cmd::SetIndexBuffer(_ctx, model.m_indexGpuBuf);
+
+		if (!_shadowMap)
+		{
+			gpu::cmd::SetVertexBuffer(_ctx, 1, model.m_tangentGpuBuf);
+			gpu::cmd::SetVertexBuffer(_ctx, 2, model.m_uv0GpuBuf);
+		}
 
 		for (gfx::Model::SubMesh const& mesh : model.m_meshes)
 		{
 			gfx::Material const& mat = model.m_materials[mesh.m_materialIdx];
 
-			gpu::DescriptorData descriptors[4];
-			descriptors[0].Set(GetTextureHandleOrNull(mat.m_albedoTex));
-			descriptors[1].Set(GetTextureHandleOrNull(mat.m_normalTex));
-			descriptors[2].Set(GetTextureHandleOrNull(mat.m_metallicRoughnessTex));
-			descriptors[3].Set(GetTextureHandleOrNull(mat.m_occlusionTex));
-			gpu::cmd::SetGraphicsSRVTable(_ctx, descriptors, 0);
+			if (!_shadowMap)
+			{
+				gpu::DescriptorData descriptors[4];
+				descriptors[0].Set(GetTextureHandleOrNull(mat.m_albedoTex));
+				descriptors[1].Set(GetTextureHandleOrNull(mat.m_normalTex));
+				descriptors[2].Set(GetTextureHandleOrNull(mat.m_metallicRoughnessTex));
+				descriptors[3].Set(GetTextureHandleOrNull(mat.m_occlusionTex));
+				gpu::cmd::SetGraphicsSRVTable(_ctx, descriptors, 0);
+			}
+
 
 			gpu::cmd::DrawIndexedInstanced(_ctx, mesh.m_numIndices, numInstances, mesh.m_indexBufferStartOffset, 0, batchInstanceBegin);
 		}

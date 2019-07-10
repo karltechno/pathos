@@ -4,10 +4,13 @@
 
 #include <core/CVar.h>
 #include <editor/Editor.h>
+#include <gfx/DebugRender.h>
 #include <gfx/SharedResources.h>
 #include <gfx/Primitive.h>
 #include <gfx/Model.h>
 #include <gfx/EnvMap.h>
+#include <gfx/Texture.h>
+#include <gfx/ShadowUtils.h>
 #include <gpu/GPUDevice.h>
 #include <input/Input.h>
 
@@ -18,13 +21,18 @@
 #include <kt/Vec4.h>
 
 #include "imgui.h"
-#include "gfx/Texture.h"
 
 static core::CVar<float> s_camFov("cam.fov", "Camera field of view", 65.0f, 40.0f, 100.0f);
 static core::CVar<bool> s_vsync("app.vsync", "Vsync enabled", true);
 
+constexpr uint32_t c_numShadowCascades = 4;
+
+static const float c_shadowMapRes = 2048.0f;
+
 void TestbedApp::Setup()
 {
+	m_scene.Init(uint32_t(c_shadowMapRes));
+
 	m_sceneWindow.SetScene(&m_scene);
 	m_sceneWindow.SetMainViewCamera(&m_cam);
 
@@ -51,6 +59,10 @@ void TestbedApp::Setup()
 		m_ggxMap = gpu::CreateTexture(texDesc, nullptr, "GGX_MAP");
 	}
 
+	{
+		m_shadowMapPso = gfx::CreateShadowMapPSO_Instanced(gpu::Format::D32_Float);
+	}
+
 	m_skyboxRenderer.Init(m_cubeMap);
 
 	{
@@ -62,25 +74,26 @@ void TestbedApp::Setup()
 		psoDesc.m_vs = res::GetData(m_vertexShader)->m_shader;
 		psoDesc.m_ps = res::GetData(m_pixelShader)->m_shader;
 
-		m_pso = gpu::CreateGraphicsPSO(psoDesc);
-
+		m_pso = gpu::CreateGraphicsPSO(psoDesc, "Object PSO Test");
+		
 		gpu::BufferDesc constantBufferDesc;
 		constantBufferDesc.m_flags = gpu::BufferFlags::Constant | gpu::BufferFlags::Transient;
 		constantBufferDesc.m_sizeInBytes = sizeof(DummyCbuffer);
 		m_constantBuffer = gpu::CreateBuffer(constantBufferDesc);
 
 		//m_modelHandle = res::LoadResourceSync<gfx::Model>("models/DamagedHelmet/DamagedHelmet.gltf");
-		//m_modelHandle = res::LoadResourceSync<gfx::Model>("models/sponza/Sponza.gltf");
-		m_modelHandle = res::LoadResourceSync<gfx::Model>("models/MetalRoughSpheres/MetalRoughSpheres.gltf");
+		m_modelHandle = res::LoadResourceSync<gfx::Model>("models/sponza/Sponza.gltf");
+		//m_modelHandle = res::LoadResourceSync<gfx::Model>("models/rainier_ak/Scene.gltf");
+		//m_modelHandle = res::LoadResourceSync<gfx::Model>("models/MetalRoughSpheres/MetalRoughSpheres.gltf");
 
 	}
 
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
 	//gfx::CreateCubemapFromEquirect(ctx, "textures/qwantani_2k.hdr", m_cubeMap);
-	//gfx::CreateCubemapFromEquirect(ctx, "textures/Alexs_Apt_2k.hdr", m_cubeMap);
+	gfx::CreateCubemapFromEquirect(ctx, "textures/Alexs_Apt_2k.hdr", m_cubeMap);
 	//gfx::CreateCubemapFromEquirect(ctx, "textures/environment.hdr", m_cubeMap);
-	gfx::CreateCubemapFromEquirect(ctx, "textures/cayley_interior_2k.hdr", m_cubeMap);
+	//gfx::CreateCubemapFromEquirect(ctx, "textures/cayley_interior_2k.hdr", m_cubeMap);
 	
 	gpu::GenerateMips(ctx, m_cubeMap);
 
@@ -104,22 +117,47 @@ void TestbedApp::Setup()
 	}
 }
 
+void ShadowTest(gpu::cmd::Context* _ctx, TestbedApp& _app)
+{
+	KT_UNUSED2(_ctx, _app);
+
+	// HACK
+	gpu::cmd::SetViewport(_ctx, gpu::Rect{ c_shadowMapRes, c_shadowMapRes }, 0.0f, 1.0f);
+	gpu::cmd::SetScissorRect(_ctx, gpu::Rect{ c_shadowMapRes, c_shadowMapRes });
+	gpu::cmd::ResourceBarrier(_ctx, _app.m_scene.m_shadowCascadeTex, gpu::ResourceState::DepthStencilTarget);
+	gpu::cmd::SetRenderTarget(_ctx, 0, gpu::TextureHandle{});
+
+	// TODO: Hack because barrier handling is bad atm.
+	gpu::cmd::FlushBarriers(_ctx);
+
+	for (uint32_t cascadeIdx = 0; cascadeIdx < c_numShadowCascades; ++cascadeIdx)
+	{
+		gpu::cmd::ClearDepth(_ctx, _app.m_scene.m_shadowCascadeTex, 1.0f, cascadeIdx);
+		gpu::cmd::SetDepthBuffer(_ctx, _app.m_scene.m_shadowCascadeTex, cascadeIdx);
+		gpu::DescriptorData cbv;
+		cbv.Set(_app.m_scene.m_shadowCascades[cascadeIdx].GetViewProj().Data(), sizeof(kt::Mat4));
+
+		gpu::cmd::SetGraphicsCBVTable(_ctx, cbv, 0);
+		gpu::cmd::SetPSO(_ctx, _app.m_shadowMapPso);
+
+		_app.m_scene.RenderInstances(_ctx, true);
+	}
+
+	gpu::cmd::ResourceBarrier(_ctx, _app.m_scene.m_shadowCascadeTex, gpu::ResourceState::ShaderResource);
+	// MASSIVE HACK
+	gpu::cmd::SetViewport(_ctx, gpu::Rect{ 1280.0f, 720.0f }, 0.0f, 1.0f);
+	gpu::cmd::SetScissorRect(_ctx, gpu::Rect{ 1280.0f, 720.0f });
+}
+
 void TestbedApp::Tick(float _dt)
 {
 	gpu::SetVsyncEnabled(s_vsync);
-
 
 	uint32_t swapchainW, swapchainH;
 	gpu::GetSwapchainDimensions(swapchainW, swapchainH);
 
 	gfx::Camera::ProjectionParams params;
-	params.m_farPlane = 10000.0f;
-	params.m_fov = kt::ToRadians(s_camFov);
-	params.m_nearPlane = 1.0f;
-	params.m_type = gfx::Camera::ProjType::Perspective;
-	params.m_viewHeight = float(swapchainH);
-	params.m_viewWidth = float(swapchainW);
-
+	params.SetPerspective(5.0f, 5000.0f, kt::ToRadians(s_camFov), float(swapchainW) / float(swapchainH));
 	m_cam.SetProjection(params);
 
 	m_camController.UpdateCamera(_dt, m_cam);
@@ -128,10 +166,11 @@ void TestbedApp::Tick(float _dt)
 	m_scene.BeginFrameAndUpdateBuffers(gpu::GetMainThreadCommandCtx(), m_cam, _dt);
 
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
+	ShadowTest(ctx, *this);
+
 
 	gpu::TextureHandle backbuffer = gpu::CurrentBackbuffer();
 	gpu::TextureHandle depth = gpu::BackbufferDepth();
-
 
 	gpu::cmd::SetPSO(ctx, m_pso);
 	gpu::cmd::UpdateTransientBuffer(ctx, m_constantBuffer, &m_myCbuffer, sizeof(m_myCbuffer));
@@ -151,17 +190,19 @@ void TestbedApp::Tick(float _dt)
 	gpu::cmd::ClearRenderTarget(ctx, backbuffer, col);
 	gpu::cmd::ClearDepth(ctx, depth, 1.0f);
 
-	gpu::DescriptorData envMaps[4];
-	envMaps[0].Set(m_irradMap);
-	envMaps[1].Set(m_ggxMap);
-	envMaps[2].Set(gfx::GetSharedResources().m_ggxLut);
-	envMaps[3].Set(m_scene.m_lightGpuBuf);;
+	gpu::DescriptorData space1srv[5];
+	space1srv[0].Set(m_irradMap);
+	space1srv[1].Set(m_ggxMap);
+	space1srv[2].Set(gfx::GetSharedResources().m_ggxLut);
+	space1srv[3].Set(m_scene.m_lightGpuBuf);
+	space1srv[4].Set(m_scene.m_shadowCascadeTex);
 
-	gpu::cmd::SetGraphicsSRVTable(ctx, envMaps, 1);
-	m_scene.RenderInstances(ctx);
+	gpu::cmd::SetGraphicsSRVTable(ctx, space1srv, 1);
+	m_scene.RenderInstances(ctx, false);
 
 	m_skyboxRenderer.Render(ctx, m_cam);
 	
+
 	m_scene.EndFrame();
 }
 

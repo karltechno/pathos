@@ -33,6 +33,9 @@ struct GFXSceneWindow
 	ImGuizmo::OPERATION m_gizmoOp = ImGuizmo::TRANSLATE;
 	ImGuizmo::MODE m_gizmoMode = ImGuizmo::WORLD;
 
+	gfx::Camera m_lockedCam;
+	bool m_lockFrustum = false;
+
 };
 
 }

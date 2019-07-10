@@ -54,29 +54,38 @@ static void DrawModelsTab(GFXSceneWindow* _window)
 
 static void DrawInstancesTab(GFXSceneWindow* _window)
 {
+	ImGui::Text("Total Instances: %u", _window->m_scene->m_instances.Size());
+	static bool s_drawsSceneBounds = false;
+	ImGui::Checkbox("Draw Scene Bounds", &s_drawsSceneBounds); 
+
+	if (s_drawsSceneBounds)
+	{
+		gfx::DebugRender::LineBox(_window->m_scene->m_sceneBounds, kt::Mat3::Identity(), kt::Vec3(0.0f), kt::Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+	}
+
+	ImGui::Separator();
+	ImGui::Columns(2);
+
 	kt::Array<gfx::Scene::InstanceData>& instanceArray = _window->m_scene->m_instances;
 	for (uint32_t i = 0; i < instanceArray.Size(); ++i)
 	{
 		ImGui::PushID(i);
-		gfx::Model const& model = *gfx::Scene::s_models[instanceArray[i].m_modelIdx];
 		char const* modelName = gfx::Scene::s_modelNames[instanceArray[i].m_modelIdx].Data();
 		if (ImGui::Selectable(modelName, i == _window->m_selectedInstanceIdx))
 		{
 			_window->m_selectedInstanceIdx = i;
 		}
-
-		gfx::Scene::InstanceData const& instance = instanceArray[i];
-		// aabb
-		//gfx::DebugRender::Line(instanceArray[i].m_transform.m_pos, instanceArray[i].m_transform.m_pos + kt::Vec3(0.0f, 50.0f, 0.0f), kt::Vec4(1.0f), true);
-		gfx::DebugRender::LineBox(model.m_boundingBox, instance.m_transform.m_mtx, instance.m_transform.m_pos, kt::Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-
 		ImGui::PopID();
 	}
+
+	ImGui::NextColumn();
 
 	if (_window->m_selectedInstanceIdx < _window->m_scene->m_instances.Size())
 	{
 		gfx::Scene::InstanceData& instance = instanceArray[_window->m_selectedInstanceIdx];
-		//gfx::Model const& model = *gfx::Scene::s_models[instance.m_modelIdx];
+		gfx::Model const& model = *gfx::Scene::s_models[instance.m_modelIdx];
+		gfx::DebugRender::LineBox(model.m_boundingBox, instance.m_transform.m_mtx, instance.m_transform.m_pos, kt::Vec4(0.0f, 0.0f, 1.0f, 1.0f));
+
 		kt::Mat4 mtx;
 
 		mtx.m_cols[0] = kt::Vec4(instance.m_transform.m_mtx[0], 0.0f);
@@ -92,7 +101,7 @@ static void DrawInstancesTab(GFXSceneWindow* _window)
 		instance.m_transform.m_pos = kt::Vec3(mtx.m_cols[3]);
 	}
 
-	gfx::DebugRender::LineBox(_window->m_scene->m_sceneBounds, kt::Mat3::Identity(), kt::Vec3(0.0f), kt::Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+	ImGui::Columns();
 }
 
 static void DrawLightsTab(GFXSceneWindow* _window)
@@ -163,6 +172,16 @@ void GFXSceneWindow::Draw(float _dt)
 	{
 		ImGui::Text("No scene set.");
 		return;
+	}
+
+	if (ImGui::Checkbox("Lock camera", &m_lockFrustum))
+	{
+		m_lockedCam = *m_cam;
+	}
+
+	if (m_lockFrustum)
+	{
+		gfx::DebugRender::LineFrustum(m_lockedCam, kt::Vec4(0.0f, 1.0f, 1.0f, 1.0f));
 	}
 
 	ImGui::ColorEdit3("Sun Color", &m_scene->m_frameConstants.sunColor[0]);

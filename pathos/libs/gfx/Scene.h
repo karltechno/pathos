@@ -9,6 +9,8 @@
 #include <gpu/CommandContext.h>
 #include <gpu/HandleRef.h>
 
+#include "Camera.h"
+
 
 namespace gfx
 {
@@ -19,6 +21,8 @@ struct Camera;
 class Scene
 {
 public:
+	static uint32_t constexpr c_numShadowCascades = 4;
+
 	static gfx::Model* CreateModel(char const* _name);
 	static void SetModelName(gfx::Model* _m, char const* _name);
 
@@ -27,21 +31,14 @@ public:
 
 	Scene();
 
+	void Init(uint32_t _shadowMapResolution = 2048);
+
 	void BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera const& _mainView, float _dt);
 
-	void RenderInstances(gpu::cmd::Context* _ctx);
+	// TODO: Shadow map bool hack.
+	void RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap);
 
 	void EndFrame();
-
-	// Convenient global list of models.
-	static kt::Array<kt::String64> s_modelNames;
-	static kt::Array<gfx::Model*> s_models;
-
-	kt::Array<shaderlib::LightData> m_lights;
-	gpu::BufferRef m_lightGpuBuf;
-
-	shaderlib::FrameConstants m_frameConstants;
-	gpu::BufferRef m_frameConstantsGpuBuf;
 
 	struct LoadedModel
 	{
@@ -51,9 +48,10 @@ public:
 
 	struct KT_ALIGNAS(16) InstanceData
 	{
-		InstanceData() 
+		InstanceData()
 			: m_transform()
-		{}
+		{
+		}
 
 		union
 		{
@@ -70,9 +68,23 @@ public:
 		uint32_t __pad0__[3];
 	};
 
+
+	// Convenient global list of models.
+	static kt::Array<kt::String64> s_modelNames;
+	static kt::Array<gfx::Model*> s_models;
+
+	gfx::Camera m_shadowCascades[c_numShadowCascades];
+
+	kt::Array<shaderlib::LightData> m_lights;
+	gpu::BufferRef m_lightGpuBuf;
+
+	shaderlib::FrameConstants m_frameConstants;
+	gpu::BufferRef m_frameConstantsGpuBuf;
+
 	kt::Array<InstanceData> m_instances;
 	gpu::BufferRef m_instanceGpuBuf;
 
+	gpu::TextureRef m_shadowCascadeTex;
 
 	kt::AABB m_sceneBounds;
 };
