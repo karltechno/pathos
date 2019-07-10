@@ -44,21 +44,45 @@ struct Camera
 
 	struct ProjectionParams
 	{
+		void SetOrtho(float _near, float _far, float _height, float _width);
+		void SetOrtho(float _near, float _far, float _left, float _right, float _top, float _bottom);
+
+		void SetPerspective(float _near, float _far, float _fov, float _aspect);
+
 		ProjType m_type;
 		float m_nearPlane;
 		float m_farPlane;
-		float m_fov;
-		float m_viewHeight;
-		float m_viewWidth;
+		
+		union
+		{
+			struct  
+			{
+				float left;
+				float right;
+				float bottom;
+				float top;
+			} m_ortho;
+
+			struct  
+			{
+				float fov;
+				float aspect;
+			} m_proj;
+		};
 	};
 
-	void SetProjection(ProjectionParams const& _params);
+
 	ProjectionParams const& GetProjectionParams() const { return m_projParams; }
+	void SetProjection(ProjectionParams const& _params);
+	
+	// TODO: ProjectionParams may be invalid if projection is set manually! (only currently used to append sub-pixel offset for stable csm's)
+	void SetProjection(ProjType _type, kt::Mat4 const& _proj);
 
 	void SetCameraPos(kt::Vec3 const& _pos);
 	void SetCameraMatrix(kt::Mat4 const& _viewToWorld);
+	void SetView(kt::Mat4 const& _worldToView);
 
-	kt::Mat4 const& GetCachedViewProj() const { return m_cachedWorldToClip; }
+	kt::Mat4 const& GetViewProj() const { return m_cachedWorldToClip; }
 	kt::Mat4 const& GetInverseView() const { return m_invView; }
 	kt::Mat4 const& GetView() const { return m_view; }
 	kt::Mat4 const& GetProjection() const { return m_viewToClip; }

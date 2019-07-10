@@ -17,6 +17,8 @@ set(GFX_SOURCES
     "Texture.cpp"
     "Scene.h"
     "Scene.cpp"
+    "ShadowUtils.h"
+    "ShadowUtils.cpp"
     "SharedResources.h"
     "SharedResources.cpp"
 )
