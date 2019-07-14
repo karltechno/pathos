@@ -153,7 +153,7 @@ float3 ComputeLighting_IBL
     // TODO: Maybe store in surface data?
     float n_dot_v = dot(V, surface.norm);
     
-    float3 F = F_Schlick(surface.f0, n_dot_v);
+    float3 F = F_Schlick(surface.f0, saturate(n_dot_v));
 
     float3 diffuse = (1.0 - F) * surface.baseCol * _irrad;
     float3 refl = reflect(-V, surface.norm);
