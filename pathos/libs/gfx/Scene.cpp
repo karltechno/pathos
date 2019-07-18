@@ -197,10 +197,10 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 			if (!_shadowMap)
 			{
 				gpu::DescriptorData descriptors[4];
-				descriptors[0].Set(GetTextureHandleOrNull(mat.m_albedoTex));
-				descriptors[1].Set(GetTextureHandleOrNull(mat.m_normalTex));
-				descriptors[2].Set(GetTextureHandleOrNull(mat.m_metallicRoughnessTex));
-				descriptors[3].Set(GetTextureHandleOrNull(mat.m_occlusionTex));
+				descriptors[0].Set(GetTextureHandleOrNull(mat.m_textures[gfx::Material::Albedo]));
+				descriptors[1].Set(GetTextureHandleOrNull(mat.m_textures[gfx::Material::Normal]));
+				descriptors[2].Set(GetTextureHandleOrNull(mat.m_textures[gfx::Material::MetallicRoughness]));
+				descriptors[3].Set(GetTextureHandleOrNull(mat.m_textures[gfx::Material::Occlusion]));
 				gpu::cmd::SetGraphicsSRVTable(_ctx, descriptors, 0);
 			}
 

@@ -6,6 +6,7 @@
 namespace gfx
 {
 
+
 struct Material
 {
 	enum class AlphaMode : uint8_t
@@ -18,17 +19,29 @@ struct Material
 	// TODO: 
 	// Samplers
 	// Other material params
+	struct Params
+	{
+		kt::Vec4 m_baseColour;
+		float m_roughnessFactor;
+		float m_metallicFactor;
+		float m_alphaCutoff;
+		AlphaMode m_alphaMode;
+	};
 
-	kt::Vec4 m_baseColour;
-	float m_rougnessFactor;
-	float m_metallicFactor;
-	float m_alphaCutoff;
-	AlphaMode m_alphaMode;
+	enum TextureType : uint32_t
+	{
+		Albedo,
+		Normal,
+		MetallicRoughness,
+		Occlusion,
+		Emissive,
 
-	TextureResHandle m_albedoTex;
-	TextureResHandle m_normalTex;
-	TextureResHandle m_metallicRoughnessTex;
-	TextureResHandle m_occlusionTex;
+		Num_TextureType
+	};
+
+	Params m_params;
+
+	gfx::TextureResHandle m_textures[TextureType::Num_TextureType] = {};
 };
 
 

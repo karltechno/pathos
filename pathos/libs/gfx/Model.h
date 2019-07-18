@@ -16,12 +16,14 @@ struct IReader;
 
 namespace gfx
 {
+
 // Todo: move to another file?
 struct TangentSpace
 {
 	kt::Vec3 m_norm;
 	kt::Vec4 m_tangentWithSign;
 };
+
 
 
 struct Model

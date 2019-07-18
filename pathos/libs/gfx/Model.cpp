@@ -47,8 +47,6 @@ struct ModelLoader : res::IResourceHandler
 	}
 };
 
-
-
 void Model::RegisterResourceLoader()
 {
 	static char const* extensions[] = {
@@ -481,33 +479,33 @@ static void LoadMaterials(Model* _model, cgltf_data* _data, char const* _basePat
 		if (gltfMat.has_pbr_metallic_roughness)
 		{
 			cgltf_pbr_metallic_roughness const& pbrMetalRough = gltfMat.pbr_metallic_roughness;
-			modelMat.m_baseColour[0] = pbrMetalRough.base_color_factor[0];
-			modelMat.m_baseColour[1] = pbrMetalRough.base_color_factor[1];
-			modelMat.m_baseColour[2] = pbrMetalRough.base_color_factor[2];
-			modelMat.m_baseColour[3] = pbrMetalRough.base_color_factor[3];
+			modelMat.m_params.m_baseColour[0] = pbrMetalRough.base_color_factor[0];
+			modelMat.m_params.m_baseColour[1] = pbrMetalRough.base_color_factor[1];
+			modelMat.m_params.m_baseColour[2] = pbrMetalRough.base_color_factor[2];
+			modelMat.m_params.m_baseColour[3] = pbrMetalRough.base_color_factor[3];
 		
-			modelMat.m_rougnessFactor = pbrMetalRough.roughness_factor;
-			modelMat.m_metallicFactor = pbrMetalRough.metallic_factor;
+			modelMat.m_params.m_roughnessFactor = pbrMetalRough.roughness_factor;
+			modelMat.m_params.m_metallicFactor = pbrMetalRough.metallic_factor;
 
-			modelMat.m_alphaCutoff = gltfMat.alpha_cutoff;
+			modelMat.m_params.m_alphaCutoff = gltfMat.alpha_cutoff;
 
 			switch (gltfMat.alpha_mode)
 			{
-				case cgltf_alpha_mode_blend:	modelMat.m_alphaMode = Material::AlphaMode::Transparent; break;
-				case cgltf_alpha_mode_mask:		modelMat.m_alphaMode = Material::AlphaMode::Mask; break;
-				case cgltf_alpha_mode_opaque:	modelMat.m_alphaMode = Material::AlphaMode::Opaque; break;
+				case cgltf_alpha_mode_blend:	modelMat.m_params.m_alphaMode = Material::AlphaMode::Transparent; break;
+				case cgltf_alpha_mode_mask:		modelMat.m_params.m_alphaMode = Material::AlphaMode::Mask; break;
+				case cgltf_alpha_mode_opaque:	modelMat.m_params.m_alphaMode = Material::AlphaMode::Opaque; break;
 			}
 
 			// TODO: Samplers
 			// TOdo: Transform
 			if (pbrMetalRough.base_color_texture.texture)
 			{
-				modelMat.m_albedoTex = LoadTexture(_basePath, pbrMetalRough.base_color_texture.texture->image->uri, TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
+				modelMat.m_textures[Material::Albedo] = LoadTexture(_basePath, pbrMetalRough.base_color_texture.texture->image->uri, TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
 			}
 
 			if (pbrMetalRough.metallic_roughness_texture.texture)
 			{
-				modelMat.m_metallicRoughnessTex = LoadTexture(_basePath, pbrMetalRough.metallic_roughness_texture.texture->image->uri, TextureLoadFlags::GenMips);
+				modelMat.m_textures[Material::MetallicRoughness] = LoadTexture(_basePath, pbrMetalRough.metallic_roughness_texture.texture->image->uri, TextureLoadFlags::GenMips);
 			}
 			
 		}
@@ -518,23 +516,19 @@ static void LoadMaterials(Model* _model, cgltf_data* _data, char const* _basePat
 
 		if (gltfMat.normal_texture.texture)
 		{
-			modelMat.m_normalTex = LoadTexture(_basePath, gltfMat.normal_texture.texture->image->uri, TextureLoadFlags::Normalize | TextureLoadFlags::GenMips);
+			modelMat.m_textures[Material::Normal] = LoadTexture(_basePath, gltfMat.normal_texture.texture->image->uri, TextureLoadFlags::Normalize | TextureLoadFlags::GenMips);
 		}
 
 		if (gltfMat.occlusion_texture.texture)
 		{
-			modelMat.m_occlusionTex = LoadTexture(_basePath, gltfMat.occlusion_texture.texture->image->uri, TextureLoadFlags::GenMips);
+			modelMat.m_textures[Material::Occlusion] = LoadTexture(_basePath, gltfMat.occlusion_texture.texture->image->uri, TextureLoadFlags::GenMips);
 		}
 	}
 }
 
 void SerializeMaterial(kt::ISerializer* _s, Material& _mat)
 {
-	kt::Serialize(_s, _mat.m_baseColour);
-	kt::Serialize(_s, _mat.m_rougnessFactor);
-	kt::Serialize(_s, _mat.m_metallicFactor);
-	kt::Serialize(_s, _mat.m_alphaCutoff);
-	kt::Serialize(_s, _mat.m_alphaMode);
+	kt::Serialize(_s, _mat.m_params);
 
 	auto serializeTex = [&_s, &_mat](TextureResHandle& _handle, TextureLoadFlags _flags)
 	{
@@ -564,13 +558,13 @@ void SerializeMaterial(kt::ISerializer* _s, Material& _mat)
 
 	};
 	
-	serializeTex(_mat.m_albedoTex, TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
-	serializeTex(_mat.m_normalTex, TextureLoadFlags::Normalize | TextureLoadFlags::GenMips);
-	serializeTex(_mat.m_metallicRoughnessTex, TextureLoadFlags::GenMips);
-	serializeTex(_mat.m_occlusionTex, TextureLoadFlags::GenMips);
+	serializeTex(_mat.m_textures[Material::Albedo], TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
+	serializeTex(_mat.m_textures[Material::Normal], TextureLoadFlags::Normalize | TextureLoadFlags::GenMips);
+	serializeTex(_mat.m_textures[Material::MetallicRoughness], TextureLoadFlags::GenMips);
+	serializeTex(_mat.m_textures[Material::Occlusion], TextureLoadFlags::GenMips);
 }
 
-uint32_t constexpr c_modelCacheVersion = 3;
+uint32_t constexpr c_modelCacheVersion = 4;
 
 bool SerializeModelCache(char const* _initialPath, kt::ISerializer* _s, Model& _model)
 {
