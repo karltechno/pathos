@@ -129,6 +129,8 @@ gpu::PSORef CreateShadowMapPSO_Instanced(gpu::Format _depthFormat)
 	desc.m_depthStencilDesc.m_depthWrite = true;
 	desc.m_depthStencilDesc.m_depthEnable = true;
 
+	desc.m_rasterDesc.m_scopedScaledDepthBias = 3.0f;
+
 	// instance data
 	desc.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 0, 1);
 	desc.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 1, 1);

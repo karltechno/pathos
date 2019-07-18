@@ -341,6 +341,8 @@ struct RasterizerDesc
 		m_frontFaceCCW = 0;
 	}
 
+	float m_scopedScaledDepthBias = 0.0f;
+	float m_depthBias = 0.0f;
 	FillMode m_fillMode : c_fillModeBits;
 	CullMode m_cullMode : c_cullModeBits;
 	uint8_t m_frontFaceCCW : 1;

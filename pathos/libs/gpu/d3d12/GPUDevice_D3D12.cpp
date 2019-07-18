@@ -457,9 +457,9 @@ static ID3D12PipelineState* CreateD3DGraphicsPSO(ID3D12Device* _device, gpu::Gra
 	d3dDesc.RasterizerState.CullMode = cullMode == CullMode::Back ? D3D12_CULL_MODE_BACK : (cullMode == CullMode::Front ? D3D12_CULL_MODE_FRONT : D3D12_CULL_MODE_NONE);
 	d3dDesc.RasterizerState.FillMode = _desc.m_rasterDesc.m_fillMode == FillMode::Solid ? D3D12_FILL_MODE_SOLID : D3D12_FILL_MODE_WIREFRAME;
 	d3dDesc.RasterizerState.FrontCounterClockwise = _desc.m_rasterDesc.m_frontFaceCCW ? TRUE : FALSE;
-	d3dDesc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
+	d3dDesc.RasterizerState.DepthBias = INT(_desc.m_rasterDesc.m_depthBias); // TODO: Need to convert to fixed point d3d expects
 	d3dDesc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-	d3dDesc.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+	d3dDesc.RasterizerState.SlopeScaledDepthBias = _desc.m_rasterDesc.m_scopedScaledDepthBias;
 	d3dDesc.RasterizerState.DepthClipEnable = TRUE;
 	d3dDesc.RasterizerState.MultisampleEnable = FALSE;
 	d3dDesc.RasterizerState.AntialiasedLineEnable = FALSE;

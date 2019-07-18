@@ -44,9 +44,7 @@ float ComputeDirectionalShadow(float3 _world, float _viewZ, float3 _surfNorm, fl
     float3 shadowPos;
     SelectCascade(_world, _viewZ, cascade, shadowPos);
 
-    float bias = lerp(0.004, 0.001, saturate(dot(_surfNorm, _sunDir)));
-
-    return g_shadowCascades.SampleCmp(g_samplerCmp, float3(shadowPos.xy, cascade), shadowPos.z - bias);
+    return g_shadowCascades.SampleCmp(g_samplerCmp, float3(shadowPos.xy, cascade), shadowPos.z);
 }
 
 float4 main(in VSOut_ObjectFull _input) : SV_Target
