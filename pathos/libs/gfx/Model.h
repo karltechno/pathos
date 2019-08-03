@@ -66,6 +66,14 @@ struct Model
 
 	kt::Array<ResourceManager::MeshIdx> m_meshes;
 
+	struct Node
+	{
+		kt::Mat4 m_mtx;
+		uint32_t m_internalMeshIdx;
+	};
+
+	kt::Array<Node> m_nodes;
+
 	kt::AABB m_boundingBox;
 };
 

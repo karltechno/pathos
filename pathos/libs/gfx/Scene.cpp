@@ -149,7 +149,7 @@ struct KT_ALIGNAS(16) InstanceData
 
 	union
 	{
-		float m_data[4 * 3];
+		float m_mtx43[4 * 3];
 
 		struct
 		{
@@ -164,6 +164,18 @@ struct KT_ALIGNAS(16) InstanceData
 	uint8_t __pad0__[sizeof(m_transform) - sizeof(ResourceManager::MeshIdx)];
 };
 
+static void PackMat44_to_Mat43(kt::Mat4 const& _mat4, float* o_mat43)
+{
+	float const* mtxPtr = _mat4.Data();
+
+	for (uint32_t col = 0; col < 4; ++col)
+	{
+		o_mat43[col * 3 + 0] = mtxPtr[col * 4 + 0];
+		o_mat43[col * 3 + 1] = mtxPtr[col * 4 + 1];
+		o_mat43[col * 3 + 2] = mtxPtr[col * 4 + 2];
+	}
+}
+
 void BuildMeshInstanceArray(kt::Slice<Scene::ModelInstance> const& _modelInstances, kt::Array<InstanceData>& o_instances)
 {
 	// TODO: Temp allocator, better size.
@@ -175,24 +187,17 @@ void BuildMeshInstanceArray(kt::Slice<Scene::ModelInstance> const& _modelInstanc
 	{
 		gfx::Model const& model = *ResourceManager::GetModel(modelInstance.m_modelIdx);
 
-		float mtx43[4 * 3];
-		float const* mtxPtr = modelInstance.m_mtx.Data();
-		for (uint32_t col = 0; col < 4; ++col)
+		InstanceData* instances = o_instances.PushBack_Raw(model.m_nodes.Size());
+		// TODO: Bad name?
+		for (gfx::Model::Node const& modelMeshInstance : model.m_nodes)
 		{
-			mtx43[col * 3 + 0] = mtxPtr[col * 4 + 0];
-			mtx43[col * 3 + 1] = mtxPtr[col * 4 + 1];
-			mtx43[col * 3 + 2] = mtxPtr[col * 4 + 2];
-		}
-
-		InstanceData* instances = o_instances.PushBack_Raw(model.m_meshes.Size());
-		for (ResourceManager::MeshIdx const& meshIdx : model.m_meshes)
-		{
-			static_assert(sizeof(instances->m_transform) == sizeof(mtx43), "Bad instance data size");
+			ResourceManager::MeshIdx const meshIdx = model.m_meshes[modelMeshInstance.m_internalMeshIdx];
+			static_assert(sizeof(instances->m_transform) == sizeof(float[4*3]), "Bad instance data size");
 			instances->m_meshIdx = meshIdx;
-			memcpy(&instances->m_transform, mtx43, sizeof(mtx43));
-			instances->m_transform.m_pos = modelInstance.m_mtx.GetPos();
+			PackMat44_to_Mat43(kt::Mul(modelInstance.m_mtx, modelMeshInstance.m_mtx), instances->m_mtx43);
 			++instances;
 		}
+
 	}
 }
 
@@ -233,7 +238,7 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 
 		do 
 		{
-			memcpy(instanceStream, begin->m_data, c_instanceDataSize);
+			memcpy(instanceStream, begin->m_mtx43, c_instanceDataSize);
 			instanceStream += c_instanceDataSize;
 
 			++numInstances;

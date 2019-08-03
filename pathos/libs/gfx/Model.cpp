@@ -190,6 +190,25 @@ static void GenMikktTangents(Mesh* _model, uint32_t _idxBegin, uint32_t _idxEnd)
 	KT_ASSERT(mikktOk);
 }
 
+static void LoadInstances(Model& io_model, cgltf_data* _data)
+{
+	for (uint32_t i = 0; i < _data->nodes_count; ++i)
+	{
+		cgltf_node* gltfNode = _data->nodes + i;
+
+		// For now, only care about nodes with meshes.
+		if (!gltfNode->mesh)
+		{
+			continue;
+		}
+
+		Model::Node& instance = io_model.m_nodes.PushBack();
+		instance.m_mtx = kt::Mat4::Identity();
+		instance.m_internalMeshIdx = uint32_t(gltfNode->mesh - _data->meshes);
+		cgltf_node_transform_world(gltfNode, instance.m_mtx.Data());
+	}
+}
+
 static bool LoadMeshes(Model* _model, cgltf_data* _data, kt::Slice<ResourceManager::MaterialIdx> const& _materialIndicies)
 {
 	_model->m_boundingBox = kt::AABB::FloatMax();
@@ -359,7 +378,7 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data, kt::Slice<ResourceManag
 
 		for (kt::AABB const& aabb : mesh.m_subMeshBoundingBoxes)
 		{
-			_model->m_boundingBox = kt::Union(_model->m_boundingBox, aabb);
+			mesh.m_boundingBox = kt::Union(_model->m_boundingBox, aabb);
 		}
 
 		_model->m_boundingBox = kt::Union(_model->m_boundingBox, mesh.m_boundingBox);
@@ -544,7 +563,7 @@ void SerializeMaterial(kt::ISerializer* _s, Material& _mat)
 	serializeTex(_mat.m_textures[Material::Occlusion], c_occlusionTexLoadFlags);
 }
 
-uint32_t constexpr c_modelCacheVersion = 5;
+uint32_t constexpr c_modelCacheVersion = 7;
 
 static void SerializeMesh(kt::ISerializer* _s, Mesh& _mesh)
 {
@@ -573,7 +592,9 @@ bool SerializeModelCache(char const* _initialPath, kt::ISerializer* _s, Model& _
 		}
 	}
 
+	// Do the easy stuff first.
 	kt::Serialize(_s, _model.m_boundingBox);
+	kt::Serialize(_s, _model.m_nodes);
 
 	struct MaterialRemapData
 	{
@@ -719,6 +740,8 @@ bool Model::LoadFromGLTF(char const* _path)
 	{
 		return false;
 	}
+
+	LoadInstances(*this, data);
 
 	// Serialize to cache
 

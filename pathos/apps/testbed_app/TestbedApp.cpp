@@ -81,16 +81,16 @@ void TestbedApp::Setup()
 		constantBufferDesc.m_sizeInBytes = sizeof(DummyCbuffer);
 		m_constantBuffer = gpu::CreateBuffer(constantBufferDesc);
 
-		//m_modelHandle = gfx::SceneResourceManager::CreateModelFromGLTF("models/DamagedHelmet/DamagedHelmet.gltf");
+		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/DamagedHelmet/DamagedHelmet.gltf");
 		m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/sponza/Sponza.gltf");
-		//m_modelHandle = gfx::SceneResourceManager::CreateModelFromGLTF("models/rainier_ak/Scene.gltf");
-		//m_modelHandle = gfx::SceneResourceManager::CreateModelFromGLTF("models/MetalRoughSpheres/MetalRoughSpheres.gltf");
+		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/rainier_ak/Scene.gltf");
+		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/MetalRoughSpheres/MetalRoughSpheres.gltf");
 	}
 
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
-	//gfx::CreateCubemapFromEquirect(ctx, "textures/qwantani_2k.hdr", m_cubeMap);
-	gfx::CreateCubemapFromEquirect(ctx, "textures/Alexs_Apt_2k.hdr", m_cubeMap);
+	gfx::CreateCubemapFromEquirect(ctx, "textures/qwantani_2k.hdr", m_cubeMap);
+	//gfx::CreateCubemapFromEquirect(ctx, "textures/Alexs_Apt_2k.hdr", m_cubeMap);
 	//gfx::CreateCubemapFromEquirect(ctx, "textures/environment.hdr", m_cubeMap);
 	//gfx::CreateCubemapFromEquirect(ctx, "textures/cayley_interior_2k.hdr", m_cubeMap);
 	
