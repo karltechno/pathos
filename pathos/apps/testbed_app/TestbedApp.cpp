@@ -36,8 +36,8 @@ void TestbedApp::Setup()
 	m_sceneWindow.SetScene(&m_scene);
 	m_sceneWindow.SetMainViewCamera(&m_cam);
 
-	m_pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ObjectShader.ps.cso");
-	m_vertexShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ObjectShader.vs.cso");
+	gpu::ShaderRef const pixelShader = gfx::ResourceManager::LoadShader("shaders/ObjectShader.ps.cso", gpu::ShaderType::Pixel);
+	gpu::ShaderRef const vertexShader = gfx::ResourceManager::LoadShader("shaders/ObjectShader.vs.cso", gpu::ShaderType::Vertex);
 
 	{
 		gpu::TextureUsageFlags const flags = gpu::TextureUsageFlags::UnorderedAccess | gpu::TextureUsageFlags::ShaderResource;
@@ -71,8 +71,8 @@ void TestbedApp::Setup()
 		psoDesc.m_numRenderTargets = 1;
 		psoDesc.m_renderTargetFormats[0] = gpu::BackbufferFormat();
 		psoDesc.m_vertexLayout = gfx::Model::FullVertexLayoutInstanced();
-		psoDesc.m_vs = res::GetData(m_vertexShader)->m_shader;
-		psoDesc.m_ps = res::GetData(m_pixelShader)->m_shader;
+		psoDesc.m_vs = vertexShader;
+		psoDesc.m_ps = pixelShader;
 
 		m_pso = gpu::CreateGraphicsPSO(psoDesc, "Object PSO Test");
 		
@@ -81,11 +81,10 @@ void TestbedApp::Setup()
 		constantBufferDesc.m_sizeInBytes = sizeof(DummyCbuffer);
 		m_constantBuffer = gpu::CreateBuffer(constantBufferDesc);
 
-		//m_modelHandle = res::LoadResourceSync<gfx::Model>("models/DamagedHelmet/DamagedHelmet.gltf");
-		m_modelHandle = res::LoadResourceSync<gfx::Model>("models/sponza/Sponza.gltf");
-		//m_modelHandle = res::LoadResourceSync<gfx::Model>("models/rainier_ak/Scene.gltf");
-		//m_modelHandle = res::LoadResourceSync<gfx::Model>("models/MetalRoughSpheres/MetalRoughSpheres.gltf");
-
+		//m_modelHandle = gfx::SceneResourceManager::CreateModelFromGLTF("models/DamagedHelmet/DamagedHelmet.gltf");
+		m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/sponza/Sponza.gltf");
+		//m_modelHandle = gfx::SceneResourceManager::CreateModelFromGLTF("models/rainier_ak/Scene.gltf");
+		//m_modelHandle = gfx::SceneResourceManager::CreateModelFromGLTF("models/MetalRoughSpheres/MetalRoughSpheres.gltf");
 	}
 
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();

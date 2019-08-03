@@ -3,7 +3,7 @@
 #include <kt/Platform.h>
 #include <kt/StaticFunction.h>
 
-namespace res
+namespace core
 {
 
 struct FolderWatcher;

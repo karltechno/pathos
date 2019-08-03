@@ -1,13 +1,13 @@
 #include "ShadowUtils.h"
 #include "Camera.h"
 #include "DebugRender.h"
-#include "Resources.h"
 
 #include <core/CVar.h>
-#include <res/ResourceSystem.h>
 
 #include <kt/AABB.h>
 #include <kt/MathUtil.h>
+
+#include "Scene.h"
 
 
 namespace gfx
@@ -137,7 +137,9 @@ gpu::PSORef CreateShadowMapPSO_Instanced(gpu::Format _depthFormat)
 	desc.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 2, 1);
 	desc.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 3, 1);
 
-	desc.m_vs = res::GetData(res::LoadResourceSync<gfx::ShaderResource>("shaders/ShadowMap.vs.cso"))->m_shader;
+	gpu::ShaderRef const vs = ResourceManager::LoadShader("shaders/ShadowMap.vs.cso", gpu::ShaderType::Vertex);
+
+	desc.m_vs = vs;
 	return gpu::CreateGraphicsPSO(desc, "Shadow Map PSO");
 }
 

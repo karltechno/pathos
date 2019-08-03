@@ -1,13 +1,11 @@
 #include "EnvMap.h"
 #include "Texture.h"
 #include "SharedResources.h"
-#include "Resources.h"
 #include "Primitive.h"
 #include "Camera.h"
 
 #include <gpu/CommandContext.h>
 #include <gpu/GPUDevice.h>
-#include <res/ResourceSystem.h>
 
 namespace gfx
 {
@@ -130,8 +128,8 @@ void SkyBoxRenderer::Init(gpu::ResourceHandle _cubeMap)
 {
 	m_cubemap = _cubeMap;
 
-	res::ResourceHandle<gfx::ShaderResource> skyBoxVS = res::LoadResourceSync<gfx::ShaderResource>("shaders/SkyBox.vs.cso");
-	res::ResourceHandle<gfx::ShaderResource> skyBoxPS = res::LoadResourceSync<gfx::ShaderResource>("shaders/SkyBox.ps.cso");
+	gpu::ShaderRef const skyBoxVS = gfx::ResourceManager::LoadShader("shaders/SkyBox.vs.cso", gpu::ShaderType::Vertex);
+	gpu::ShaderRef const skyBoxPS = gfx::ResourceManager::LoadShader("shaders/SkyBox.ps.cso", gpu::ShaderType::Pixel);
 
 	gpu::GraphicsPSODesc skyBoxPso;
 	skyBoxPso.m_depthStencilDesc.m_depthEnable = 1;
@@ -142,8 +140,8 @@ void SkyBoxRenderer::Init(gpu::ResourceHandle _cubeMap)
 	skyBoxPso.m_numRenderTargets = 1;
 	skyBoxPso.m_renderTargetFormats[0] = gpu::BackbufferFormat();
 	skyBoxPso.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position, false);
-	skyBoxPso.m_vs = res::GetData(skyBoxVS)->m_shader;
-	skyBoxPso.m_ps = res::GetData(skyBoxPS)->m_shader;
+	skyBoxPso.m_vs = skyBoxVS;
+	skyBoxPso.m_ps = skyBoxPS;
 	m_skyBoxPso = gpu::CreateGraphicsPSO(skyBoxPso);
 
 	gfx::PrimitiveBuffers buf;

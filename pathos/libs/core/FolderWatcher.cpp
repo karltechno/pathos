@@ -1,4 +1,5 @@
 #include "FolderWatcher.h"
+
 #include <kt/Array.h>
 #include <kt/Logging.h>
 #include <kt/HashMap.h>
@@ -7,7 +8,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
-namespace res
+namespace core
 {
 
 static kt::Duration const s_watchExpiredDuration = kt::Duration::FromMilliseconds(250);

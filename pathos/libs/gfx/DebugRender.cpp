@@ -1,12 +1,11 @@
-#include "DebugRender.h"
-#include "Resources.h"
-#include "Camera.h"
-
-#include <gpu/HandleRef.h>
-#include <res/ResourceSystem.h>
-
 #include <kt/Vec3.h>
 #include <kt/Array.h>
+
+#include <gpu/HandleRef.h>
+
+#include "Camera.h"
+#include "DebugRender.h"
+#include "Scene.h"
 
 namespace gfx
 {
@@ -52,8 +51,8 @@ struct State
 void Init()
 {
 	{
-		gpu::ShaderRef const vs = res::GetData(res::LoadResourceSync<gfx::ShaderResource>("shaders/DebugRender.vs.cso"))->m_shader;
-		gpu::ShaderRef const ps = res::GetData(res::LoadResourceSync<gfx::ShaderResource>("shaders/DebugRender.ps.cso"))->m_shader;
+		gpu::ShaderRef const vs = gfx::ResourceManager::LoadShader("shaders/DebugRender.vs.cso", gpu::ShaderType::Vertex);
+		gpu::ShaderRef const ps = gfx::ResourceManager::LoadShader("shaders/DebugRender.ps.cso", gpu::ShaderType::Pixel);
 
 		gpu::GraphicsPSODesc linePsoDesc;
 

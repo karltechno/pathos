@@ -7,14 +7,14 @@ set(GFX_SOURCES
     "EnvMap.cpp"
     "Material.h"
     "Material.cpp"
-    "Resources.h"
-    "Resources.cpp"
     "Model.h"
     "Model.cpp"
     "Primitive.h"
     "Primitive.cpp"
     "Texture.h"
     "Texture.cpp"
+    "ResourceManager.h"
+    "ResourceManager.cpp"
     "Scene.h"
     "Scene.cpp"
     "ShadowUtils.h"
@@ -24,5 +24,5 @@ set(GFX_SOURCES
 )
 
 add_pathos_lib(gfx "${GFX_SOURCES}")
-target_link_libraries(gfx PUBLIC kt core gpu res PRIVATE cgltf mikktspace stb)
+target_link_libraries(gfx PUBLIC kt core gpu PRIVATE cgltf mikktspace stb)
 target_include_directories(gfx PUBLIC ${PATHOS_SHADER_SRC})

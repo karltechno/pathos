@@ -7,9 +7,12 @@
 #include <shaderlib/LightingStructs.h>
 
 #include <gpu/CommandContext.h>
+#include <gpu/Types.h>
 #include <gpu/HandleRef.h>
 
 #include "Camera.h"
+#include "Texture.h"
+#include "ResourceManager.h"
 
 
 namespace gfx
@@ -23,12 +26,6 @@ class Scene
 public:
 	static uint32_t constexpr c_numShadowCascades = 4;
 
-	static gfx::Model* CreateModel(char const* _name);
-	static void SetModelName(gfx::Model* _m, char const* _name);
-
-	// Free allocated models, if you care :)
-	static void Shutdown();
-
 	Scene();
 
 	void Init(uint32_t _shadowMapResolution = 2048);
@@ -40,38 +37,13 @@ public:
 
 	void EndFrame();
 
-	struct LoadedModel
+	struct ModelInstance
 	{
-		kt::String64 m_name;
-		gfx::Model* m_model;
+		kt::Mat4 m_mtx;
+		ResourceManager::ModelIdx m_modelIdx;
 	};
 
-	struct KT_ALIGNAS(16) InstanceData
-	{
-		InstanceData()
-			: m_transform()
-		{
-		}
-
-		union
-		{
-			float m_data[4 * 3];
-
-			struct
-			{
-				// rotation and uniform scale
-				kt::Mat3 m_mtx;
-				kt::Vec3 m_pos;
-			} m_transform;
-		};
-		uint32_t m_modelIdx;
-		uint32_t __pad0__[3];
-	};
-
-
-	// Convenient global list of models.
-	static kt::Array<kt::String64> s_modelNames;
-	static kt::Array<gfx::Model*> s_models;
+	kt::Array<ModelInstance> m_modelInstances;
 
 	gfx::Camera m_shadowCascades[c_numShadowCascades];
 
@@ -81,7 +53,6 @@ public:
 	shaderlib::FrameConstants m_frameConstants;
 	gpu::BufferRef m_frameConstantsGpuBuf;
 
-	kt::Array<InstanceData> m_instances;
 	gpu::BufferRef m_instanceGpuBuf;
 
 	gpu::TextureRef m_shadowCascadeTex;

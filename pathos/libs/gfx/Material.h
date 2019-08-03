@@ -6,7 +6,6 @@
 namespace gfx
 {
 
-
 struct Material
 {
 	enum class AlphaMode : uint8_t
@@ -41,7 +40,7 @@ struct Material
 
 	Params m_params;
 
-	gfx::TextureResHandle m_textures[TextureType::Num_TextureType] = {};
+	ResourceManager::TextureIdx m_textures[TextureType::Num_TextureType];
 };
 
 

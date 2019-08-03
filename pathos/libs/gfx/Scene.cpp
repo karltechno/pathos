@@ -1,35 +1,39 @@
+#include <string>
+#include <gpu/Types.h>
+
+#include <kt/Sort.h>
+#include <kt/Hash.h>
+#include <kt/HashMap.h>
+#include <kt/FilePath.h>
+#include <kt/Serialization.h>
+
 #include "Scene.h"
 #include "Model.h"
 #include "Camera.h"
 #include "DebugRender.h"
 #include "ShadowUtils.h"
+#include "Material.h"
 
-#include <res/ResourceSystem.h>
-#include <gpu/Types.h>
-
-#include <kt/Sort.h>
 
 namespace gfx
 {
 
-kt::Array<kt::String64> Scene::s_modelNames;
-kt::Array<gfx::Model*> Scene::s_models;
-
-uint32_t constexpr c_indexDataSize = sizeof(float) * 4 * 3;
+uint32_t constexpr c_instanceDataSize = sizeof(float[4*3]);
 
 static kt::AABB CalcSceneBounds(gfx::Scene const& _scene)
 {
-	if (_scene.m_instances.Size() == 0)
+	if (_scene.m_modelInstances.Size() == 0)
 	{
 		return kt::AABB{ kt::Vec3(0.0f), kt::Vec3(0.0f) };
 	}
 
 	kt::AABB sceneBounds = kt::AABB::FloatMax();
 
-	for (Scene::InstanceData const& instance : _scene.m_instances)
+	for (Scene::ModelInstance const& instance : _scene.m_modelInstances)
 	{
-		kt::AABB const& modelAABB = Scene::s_models[instance.m_modelIdx]->m_boundingBox;
-		sceneBounds = kt::Union(modelAABB.Transformed(instance.m_transform.m_mtx, instance.m_transform.m_pos), sceneBounds);
+		gfx::Model const& model = *ResourceManager::GetModel(instance.m_modelIdx);
+		kt::AABB const& modelAABB = model.m_boundingBox;
+		sceneBounds = kt::Union(modelAABB.Transformed(instance.m_mtx), sceneBounds);
 	}
 
 	return sceneBounds;
@@ -59,7 +63,7 @@ Scene::Scene()
 
 	gpu::BufferDesc instanceBufferDesc;
 	instanceBufferDesc.m_flags = gpu::BufferFlags::Vertex | gpu::BufferFlags::Transient; // TODO: Should instance data be copied out of upload heap?
-	instanceBufferDesc.m_strideInBytes = c_indexDataSize;
+	instanceBufferDesc.m_strideInBytes = c_instanceDataSize;
 	m_instanceGpuBuf = gpu::CreateBuffer(instanceBufferDesc, nullptr, "gfx::Scene instance data");
 }
 
@@ -103,7 +107,6 @@ void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera cons
 
 		for (uint32_t cascadeIdx = 0; cascadeIdx < c_numShadowCascades; ++cascadeIdx)
 		{
-			//m_frameConstants.cascadeMatricies[cascadeIdx] = m_shadowCascades[cascadeIdx].GetViewProj();
 			m_frameConstants.cascadeMatricies[cascadeIdx] = kt::Mul(gfx::NDC_To_UV_Matrix(), m_shadowCascades[cascadeIdx].GetViewProj());
 		}
 	}
@@ -131,32 +134,90 @@ void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera cons
 	gpu::cmd::ResourceBarrier(_ctx, m_frameConstantsGpuBuf, gpu::ResourceState::ConstantBuffer);
 }
 
-static gpu::TextureHandle GetTextureHandleOrNull(gfx::TextureResHandle _res)
+static gpu::TextureHandle GetTextureHandleOrNull(ResourceManager::TextureIdx _tex)
 {
-	return _res.IsValid() ? res::GetData(_res)->m_gpuTex : gpu::TextureHandle{};
+	return _tex.IsValid() ? ResourceManager::GetTexture(_tex)->m_gpuTex : gpu::TextureHandle{};
+}
+
+
+struct KT_ALIGNAS(16) InstanceData
+{
+	InstanceData()
+		: m_transform()
+	{
+	}
+
+	union
+	{
+		float m_data[4 * 3];
+
+		struct
+		{
+			// rotation and uniform scale
+			kt::Mat3 m_mtx;
+			kt::Vec3 m_pos;
+		} m_transform;
+	};
+
+	ResourceManager::MeshIdx m_meshIdx;
+
+	uint8_t __pad0__[sizeof(m_transform) - sizeof(ResourceManager::MeshIdx)];
+};
+
+void BuildMeshInstanceArray(kt::Slice<Scene::ModelInstance> const& _modelInstances, kt::Array<InstanceData>& o_instances)
+{
+	// TODO: Temp allocator, better size.
+	o_instances.Reserve(_modelInstances.Size() * 4);
+
+	// TODO: Culling
+	// TODO: Slow
+	for (Scene::ModelInstance const& modelInstance : _modelInstances)
+	{
+		gfx::Model const& model = *ResourceManager::GetModel(modelInstance.m_modelIdx);
+
+		float mtx43[4 * 3];
+		float const* mtxPtr = modelInstance.m_mtx.Data();
+		for (uint32_t col = 0; col < 4; ++col)
+		{
+			mtx43[col * 3 + 0] = mtxPtr[col * 4 + 0];
+			mtx43[col * 3 + 1] = mtxPtr[col * 4 + 1];
+			mtx43[col * 3 + 2] = mtxPtr[col * 4 + 2];
+		}
+
+		InstanceData* instances = o_instances.PushBack_Raw(model.m_meshes.Size());
+		for (ResourceManager::MeshIdx const& meshIdx : model.m_meshes)
+		{
+			static_assert(sizeof(instances->m_transform) == sizeof(mtx43), "Bad instance data size");
+			instances->m_meshIdx = meshIdx;
+			memcpy(&instances->m_transform, mtx43, sizeof(mtx43));
+			instances->m_transform.m_pos = modelInstance.m_mtx.GetPos();
+			++instances;
+		}
+	}
 }
 
 void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 {
-	if (m_instances.Size() == 0)
+	if (m_modelInstances.Size() == 0)
 	{
 		return;
 	}
 
-	// TODO: Temp allocator here
 	kt::Array<InstanceData> instancesSorted;
+	BuildMeshInstanceArray(kt::MakeSlice(m_modelInstances.Begin(), m_modelInstances.End()), instancesSorted);
+
+	// TODO: Temp allocator here
 	// +1 for sentinel
-	memcpy(instancesSorted.PushBack_Raw(m_instances.Size() + 1), m_instances.Data(), sizeof(InstanceData) * m_instances.Size());
+	instancesSorted.PushBack().m_meshIdx = ResourceManager::MeshIdx{};
 
 	{
 		// TODO: big if we actually render lots of instance, again - temp allocator.
-		InstanceData* tmp = (InstanceData*)KT_ALLOCA(sizeof(InstanceData) * m_instances.Size());
+		InstanceData* tmp = (InstanceData*)KT_ALLOCA(sizeof(InstanceData) * instancesSorted.Size());
 		// -1, don't sort sentinel
-		kt::RadixSort(instancesSorted.Begin(), instancesSorted.End() - 1, tmp, [](InstanceData const& _inst) { return _inst.m_modelIdx; });
+		kt::RadixSort(instancesSorted.Begin(), instancesSorted.End() - 1, tmp, [](InstanceData const& _inst) { return _inst.m_meshIdx.idx; });
 	}
-	instancesSorted.Back().m_modelIdx = UINT32_MAX;
 
-	uint8_t* instanceStream = gpu::cmd::BeginUpdateTransientBuffer(_ctx, m_instanceGpuBuf, sizeof(InstanceData) * m_instances.Size()).Data();
+	uint8_t* instanceStream = gpu::cmd::BeginUpdateTransientBuffer(_ctx, m_instanceGpuBuf, sizeof(InstanceData) * instancesSorted.Size()).Data();
 
 	InstanceData const* begin = instancesSorted.Begin();
 	InstanceData const* end = instancesSorted.End() - 1; // -1 for sentinel
@@ -166,33 +227,33 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 	uint32_t batchInstanceBegin = 0;
 	for (;;)
 	{
-		uint32_t const curModelIdx = begin->m_modelIdx;
-		KT_ASSERT(curModelIdx < s_models.Size());
+		ResourceManager::MeshIdx const curMeshIdx = begin->m_meshIdx;
+		
 		uint32_t numInstances = 0;
 
 		do 
 		{
-			memcpy(instanceStream, begin->m_data, c_indexDataSize);
-			instanceStream += c_indexDataSize;
+			memcpy(instanceStream, begin->m_data, c_instanceDataSize);
+			instanceStream += c_instanceDataSize;
 
 			++numInstances;
 			++begin;
-		} while (begin->m_modelIdx == curModelIdx);
+		} while (begin->m_meshIdx == curMeshIdx);
 
 		// Write out draw calls
-		gfx::Model const& model = *s_models[curModelIdx];
-		gpu::cmd::SetVertexBuffer(_ctx, 0, model.m_posGpuBuf);
-		gpu::cmd::SetIndexBuffer(_ctx, model.m_indexGpuBuf);
+		gfx::Mesh const& mesh = *ResourceManager::GetMesh(curMeshIdx);
+		gpu::cmd::SetVertexBuffer(_ctx, 0, mesh.m_posGpuBuf);
+		gpu::cmd::SetIndexBuffer(_ctx, mesh.m_indexGpuBuf);
 
 		if (!_shadowMap)
 		{
-			gpu::cmd::SetVertexBuffer(_ctx, 1, model.m_tangentGpuBuf);
-			gpu::cmd::SetVertexBuffer(_ctx, 2, model.m_uv0GpuBuf);
+			gpu::cmd::SetVertexBuffer(_ctx, 1, mesh.m_tangentGpuBuf);
+			gpu::cmd::SetVertexBuffer(_ctx, 2, mesh.m_uv0GpuBuf);
 		}
 
-		for (gfx::Model::SubMesh const& mesh : model.m_meshes)
+		for (gfx::Mesh::SubMesh const& subMesh : mesh.m_subMeshes)
 		{
-			gfx::Material const& mat = model.m_materials[mesh.m_materialIdx];
+			gfx::Material const& mat = *ResourceManager::GetMaterial(subMesh.m_materialIdx);
 
 			if (!_shadowMap)
 			{
@@ -205,7 +266,7 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 			}
 
 
-			gpu::cmd::DrawIndexedInstanced(_ctx, mesh.m_numIndices, numInstances, mesh.m_indexBufferStartOffset, 0, batchInstanceBegin);
+			gpu::cmd::DrawIndexedInstanced(_ctx, subMesh.m_numIndices, numInstances, subMesh.m_indexBufferStartOffset, 0, batchInstanceBegin);
 		}
 		
 		batchInstanceBegin += numInstances;
@@ -227,31 +288,6 @@ void Scene::EndFrame()
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 	gpu::cmd::SetGraphicsCBVTable(ctx, cbv, 1);
 	gfx::DebugRender::Flush(gpu::GetMainThreadCommandCtx());
-}
-
-gfx::Model* Scene::CreateModel(char const* _name)
-{
-	s_modelNames.PushBack(kt::String64(_name));
-	gfx::Model* m = s_models.PushBack(new gfx::Model);
-	m->m_globalSceneIndex = s_models.Size() - 1;
-	return m;
-}
-
-void Scene::SetModelName(gfx::Model* _m, char const* _name)
-{
-	KT_ASSERT(_m && _m->m_globalSceneIndex < s_models.Size());
-	s_modelNames[_m->m_globalSceneIndex] = kt::String64{ _name };
-}
-
-void Scene::Shutdown()
-{
-	for (gfx::Model* m : s_models)
-	{
-		delete m;
-	}
-
-	s_models.ClearAndFree();
-	s_modelNames.ClearAndFree();
 }
 
 

@@ -2,12 +2,9 @@
 
 #include <input/InputTypes.h>
 #include <input/Input.h>
-
+#include <gfx/Scene.h>
 #include <gpu/GPUDevice.h>
 #include <gpu/CommandContext.h>
-#include <gfx/Resources.h>
-#include <res/Resource.h>
-#include <res/ResourceSystem.h>
 
 #include <kt/Mat4.h>
 
@@ -55,13 +52,13 @@ void ImGuiHandler::Init(void* _nwh)
 	io.KeyMap[ImGuiKey_Y] = uint32_t(input::Key::KeyY);
 	io.KeyMap[ImGuiKey_Z] = uint32_t(input::Key::KeyZ);
 
-	res::ResourceHandle<gfx::ShaderResource> pixelShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ImGui.ps.cso");
-	res::ResourceHandle<gfx::ShaderResource> vertexShader = res::LoadResourceSync<gfx::ShaderResource>("shaders/ImGui.vs.cso");
+	gpu::ShaderRef const pixelShader = gfx::ResourceManager::LoadShader("shaders/ImGui.ps.cso", gpu::ShaderType::Pixel);
+	gpu::ShaderRef const vertexShader = gfx::ResourceManager::LoadShader("shaders/ImGui.vs.cso", gpu::ShaderType::Vertex);
 
 	gpu::GraphicsPSODesc psoDesc;
 
-	psoDesc.m_vs = res::GetData(vertexShader)->m_shader;
-	psoDesc.m_ps = res::GetData(pixelShader)->m_shader;
+	psoDesc.m_vs = vertexShader;
+	psoDesc.m_ps = pixelShader;
 	psoDesc.m_rasterDesc.m_frontFaceCCW = 0;
 
 	psoDesc.m_vertexLayout

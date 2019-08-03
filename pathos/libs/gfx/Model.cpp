@@ -5,57 +5,21 @@
 #include <kt/Serialization.h>
 #include <kt/File.h>
 
-#include <res/ResourceSystem.h>
-
 #include "cgltf.h"
 #include "mikktspace.h"
 
 #include "Scene.h"
+#include "Material.h"
+#include "ResourceManager.h"
 
 
 namespace gfx
 {
 
-struct ModelLoader : res::IResourceHandler
-{
-	bool CreateFromFile(char const* _filePath, void*& o_res) override
-	{
-		kt::FilePath path(_filePath);
-		Model* model = gfx::Scene::CreateModel(path.GetFileNameNoExt().Data());
-		if (model->LoadFromGLTF(_filePath))
-		{
-			o_res = model;
-			return true;
-		}
-
-		// pop model and model name
-		gfx::Scene::s_modelNames.PopBack();
-		gfx::Scene::s_models.PopBack();
-		return false;
-	}
-
-	bool CreateEmpty(void*& o_res) override
-	{
-		o_res = gfx::Scene::CreateModel("UN-NAMED");
-		return true;
-	}
-
-	void Destroy(void* _ptr) override
-	{
-		KT_UNUSED(_ptr);
-		// No-op
-	}
-};
-
-void Model::RegisterResourceLoader()
-{
-	static char const* extensions[] = {
-		".gltf",
-		".glb"
-	};
-
-	res::RegisterResource<Model>("Model", kt::MakeSlice(extensions), new ModelLoader);
-}
+static TextureLoadFlags const c_albedoTexLoadFlags		=	TextureLoadFlags::sRGB | TextureLoadFlags::GenMips;
+static TextureLoadFlags const c_normalTexLoadFlags		=	TextureLoadFlags::Normalize | TextureLoadFlags::GenMips;
+static TextureLoadFlags const c_metalRoughTexLoadFlags	=	TextureLoadFlags::GenMips;
+static TextureLoadFlags const c_occlusionTexLoadFlags	=	TextureLoadFlags::GenMips;
 
 
 gpu::VertexLayout Model::FullVertexLayout()
@@ -126,7 +90,7 @@ static void CopyVertexStreamGeneric(cgltf_accessor* _accessor, uint8_t* _dest, s
 	}
 }
 
-static void CopyPrecomputedTangentSpace(Model* _model, cgltf_accessor* _normalAccessor, cgltf_accessor* _tangentAccessor)
+static void CopyPrecomputedTangentSpace(Mesh* _model, cgltf_accessor* _normalAccessor, cgltf_accessor* _tangentAccessor)
 {
 	// TODO: Stop mixing assert/log. Assert should log.
 	KT_ASSERT(_normalAccessor->component_type == cgltf_component_type_r_32f);
@@ -153,7 +117,7 @@ static void CopyPrecomputedTangentSpace(Model* _model, cgltf_accessor* _normalAc
 	}
 }
 
-static void GenMikktTangents(Model* _model, uint32_t _idxBegin, uint32_t _idxEnd)
+static void GenMikktTangents(Mesh* _model, uint32_t _idxBegin, uint32_t _idxEnd)
 {
 	SMikkTSpaceContext mikktCtx{};
 	SMikkTSpaceInterface mikktInterface{};
@@ -167,7 +131,7 @@ static void GenMikktTangents(Model* _model, uint32_t _idxBegin, uint32_t _idxEnd
 			return m_model->m_indices[uint32_t(faceIdx * 3 + _vert)];
 		}
 
-		Model* m_model;
+		Mesh* m_model;
 		uint32_t m_faceBegin;
 		uint32_t m_numFaces;
 	};
@@ -226,11 +190,15 @@ static void GenMikktTangents(Model* _model, uint32_t _idxBegin, uint32_t _idxEnd
 	KT_ASSERT(mikktOk);
 }
 
-static bool LoadMeshes(Model* _model, cgltf_data* _data)
+static bool LoadMeshes(Model* _model, cgltf_data* _data, kt::Slice<ResourceManager::MaterialIdx> const& _materialIndicies)
 {
-	for (cgltf_size meshIdx = 0; meshIdx < _data->meshes_count; ++meshIdx)
+	_model->m_boundingBox = kt::AABB::FloatMax();
+
+	for (cgltf_size gltfMeshIdx = 0; gltfMeshIdx < _data->meshes_count; ++gltfMeshIdx)
 	{
-		cgltf_mesh& gltfMesh = _data->meshes[meshIdx];
+		_model->m_meshes.PushBack(gfx::ResourceManager::CreateMesh());
+		gfx::Mesh& mesh = *gfx::ResourceManager::GetMesh(_model->m_meshes.Back());
+		cgltf_mesh& gltfMesh = _data->meshes[gltfMeshIdx];
 
 		for (cgltf_size primIdx = 0; primIdx < gltfMesh.primitives_count; ++primIdx)
 		{
@@ -241,48 +209,47 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 				return false;
 			}
 
-			Model::SubMesh& subMesh = _model->m_meshes.PushBack();
-			kt::AABB& boundingBox = _model->m_meshBoundingBoxes.PushBack();
+			Mesh::SubMesh& subMesh = mesh.m_subMeshes.PushBack();
+			kt::AABB& boundingBox = mesh.m_subMeshBoundingBoxes.PushBack();
 
 			if (gltfPrim.material)
 			{
 				cgltf_size const materialIdx = gltfPrim.material - _data->materials;
-				KT_ASSERT(materialIdx < UINT16_MAX);
-				subMesh.m_materialIdx = uint16_t(materialIdx);
+				subMesh.m_materialIdx = _materialIndicies[uint32_t(materialIdx)];
 			}
 			else
 			{
 				// TODO: gltf specifies a default material in this case.
-				subMesh.m_materialIdx = 0;
+				subMesh.m_materialIdx = ResourceManager::MaterialIdx{};
 			}
 
-			subMesh.m_indexBufferStartOffset = _model->m_indices.Size();
+			subMesh.m_indexBufferStartOffset = mesh.m_indices.Size();
 			
 
 			// Copy index buffer.
 			cgltf_accessor* indices = gltfPrim.indices;
 			subMesh.m_numIndices = uint32_t(indices->count);
 			KT_ASSERT(!indices->is_sparse); // surely not for index buffers?
-			uint32_t oldIndexSize = _model->m_indices.Size();
-			_model->m_indices.Resize(uint32_t(oldIndexSize + indices->count));
+			uint32_t oldIndexSize = mesh.m_indices.Size();
+			mesh.m_indices.Resize(uint32_t(oldIndexSize + indices->count));
 
-			uint32_t const vertexBegin = _model->m_posStream.Size();
+			uint32_t const vertexBegin = mesh.m_posStream.Size();
 
 			switch (indices->component_type)
 			{
 				case cgltf_component_type_r_8u:
 				{
-					CopyIndexBuffer<uint8_t>(indices, _model->m_indices.Data() + oldIndexSize, vertexBegin);
+					CopyIndexBuffer<uint8_t>(indices, mesh.m_indices.Data() + oldIndexSize, vertexBegin);
 				} break;
 
 				case cgltf_component_type_r_16u:
 				{
-					CopyIndexBuffer<uint16_t>(indices, _model->m_indices.Data() + oldIndexSize, vertexBegin);
+					CopyIndexBuffer<uint16_t>(indices, mesh.m_indices.Data() + oldIndexSize, vertexBegin);
 				} break;
 
 				case cgltf_component_type_r_32u:
 				{
-					CopyIndexBuffer<uint32_t>(indices, _model->m_indices.Data() + oldIndexSize, vertexBegin);
+					CopyIndexBuffer<uint32_t>(indices, mesh.m_indices.Data() + oldIndexSize, vertexBegin);
 				} break;
 
 				default:
@@ -307,10 +274,10 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 							KT_LOG_ERROR("gltf mesh %s has non float positions", gltfMesh.name ? gltfMesh.name : "Unnamed");
 							return false;
 						}
-						uint32_t const posStart = _model->m_posStream.Size();
-						_model->m_posStream.Resize(uint32_t(posStart + attrib.data->count));
+						uint32_t const posStart = mesh.m_posStream.Size();
+						mesh.m_posStream.Resize(uint32_t(posStart + attrib.data->count));
 						KT_ASSERT(attrib.data->type == cgltf_type_vec3);
-						CopyVertexStreamGeneric(attrib.data, (uint8_t*)(_model->m_posStream.Data() + posStart), sizeof(kt::Vec3));
+						CopyVertexStreamGeneric(attrib.data, (uint8_t*)(mesh.m_posStream.Data() + posStart), sizeof(kt::Vec3));
 						
 						KT_ASSERT(attrib.data->has_max && attrib.data->has_min);
 						memcpy(&boundingBox.m_min, attrib.data->min, sizeof(float) * 3);
@@ -330,10 +297,10 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 							//return false;
 							continue;
 						}
-						uint32_t const uvStart = _model->m_uvStream0.Size();
-						_model->m_uvStream0.Resize(uint32_t(uvStart + attrib.data->count));
+						uint32_t const uvStart = mesh.m_uvStream0.Size();
+						mesh.m_uvStream0.Resize(uint32_t(uvStart + attrib.data->count));
 						KT_ASSERT(attrib.data->type == cgltf_type_vec2);
-						CopyVertexStreamGeneric(attrib.data, (uint8_t*)(_model->m_uvStream0.Data() + uvStart), sizeof(kt::Vec2));
+						CopyVertexStreamGeneric(attrib.data, (uint8_t*)(mesh.m_uvStream0.Data() + uvStart), sizeof(kt::Vec2));
 					} break;
 
 					case cgltf_attribute_type_color:
@@ -367,7 +334,7 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 
 			if (!!normalAttr == !!tangentAttr)
 			{
-				CopyPrecomputedTangentSpace(_model, normalAttr->data, tangentAttr->data);
+				CopyPrecomputedTangentSpace(&mesh, normalAttr->data, tangentAttr->data);
 			}
 			else
 			{
@@ -377,89 +344,103 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data)
 					KT_LOG_ERROR("gltf mesh %s has non float positions", gltfMesh.name ? gltfMesh.name : "Unnamed");
 					return false;
 				}
-				uint32_t const normalStart = _model->m_tangentStream.Size();
-				_model->m_tangentStream.Resize(uint32_t(normalStart + normalAttr->data->count));
+				uint32_t const normalStart = mesh.m_tangentStream.Size();
+				mesh.m_tangentStream.Resize(uint32_t(normalStart + normalAttr->data->count));
 				KT_ASSERT(normalAttr->data->type == cgltf_type_vec3);
 				uint32_t const normOffs = offsetof(TangentSpace, m_norm);
-				CopyVertexStreamGeneric(normalAttr->data, (uint8_t*)(_model->m_tangentStream.Data() + normalStart) + normOffs, sizeof(kt::Vec3), sizeof(TangentSpace));
+				CopyVertexStreamGeneric(normalAttr->data, (uint8_t*)(mesh.m_tangentStream.Data() + normalStart) + normOffs, sizeof(kt::Vec3), sizeof(TangentSpace));
 
 				// TODO: We should really be recreating index buffer with new tangents (as verticies sharing faces will have different tangent space)
-				GenMikktTangents(_model, oldIndexSize, _model->m_indices.Size());
+				GenMikktTangents(&mesh, oldIndexSize, mesh.m_indices.Size());
 			}
 		}
-	}
 
-	_model->m_boundingBox = kt::AABB::FloatMax();
-	for (kt::AABB const& aabb : _model->m_meshBoundingBoxes)
-	{
-		_model->m_boundingBox = kt::Union(_model->m_boundingBox, aabb);
+		mesh.m_boundingBox = kt::AABB::FloatMax();
+
+		for (kt::AABB const& aabb : mesh.m_subMeshBoundingBoxes)
+		{
+			_model->m_boundingBox = kt::Union(_model->m_boundingBox, aabb);
+		}
+
+		_model->m_boundingBox = kt::Union(_model->m_boundingBox, mesh.m_boundingBox);
 	}
 
 	return true;
 }
 
-static void CreateGPUBuffers(Model* _model, kt::StringView _debugNamePrefix = kt::StringView{})
+void Mesh::CreateGPUBuffers(bool _keepDataOnCpu, kt::StringView _debugNamePrefix)
 {
-	gpu::BufferDesc posBufferDesc{};
-	posBufferDesc.m_flags = gpu::BufferFlags::Vertex;
-	posBufferDesc.m_strideInBytes = sizeof(kt::Vec3);
-	posBufferDesc.m_sizeInBytes = _model->m_posStream.Size() * sizeof(kt::Vec3);
-
-	kt::String64 name;
 	kt::StringView const baseDebugName = _debugNamePrefix.Empty() ? kt::StringView("UNKNOWN") : _debugNamePrefix;
+	kt::String64 name;
 	name.Append(baseDebugName);
 
-	name.Append("_pos_stream");
-	_model->m_posGpuBuf = gpu::CreateBuffer(posBufferDesc, _model->m_posStream.Data(), name.Data());
-
-	gpu::BufferDesc indexBufferDesc{};
-	indexBufferDesc.m_flags = gpu::BufferFlags::Index;
-	// TODO: fix index buffer size, also add gpu api to create buffer and get back upload pointer, so we don't need to make a temp array to convert to r16.
-	indexBufferDesc.m_format = gpu::Format::R32_Uint;
-	indexBufferDesc.m_sizeInBytes = sizeof(uint32_t) * _model->m_indices.Size();
-	indexBufferDesc.m_strideInBytes = sizeof(uint32_t);
-	name.Clear();
-	name.Append(baseDebugName);
-	name.Append("_index");
-	_model->m_indexGpuBuf = gpu::CreateBuffer(indexBufferDesc, _model->m_indices.Data(), name.Data());
-
-	name.Clear();
-	name.Append(baseDebugName);
-	name.Append("_uv0");
-	gpu::BufferDesc uv0Desc;
-	uv0Desc.m_flags = gpu::BufferFlags::Vertex;
-	uv0Desc.m_format = gpu::Format::R32G32_Float;
-	uv0Desc.m_sizeInBytes = _model->m_uvStream0.Size() * sizeof(kt::Vec2);
-	uv0Desc.m_strideInBytes = sizeof(kt::Vec2);
-	_model->m_uv0GpuBuf = gpu::CreateBuffer(uv0Desc, _model->m_uvStream0.Data(), name.Data());
-
-	name.Clear();
-	name.Append(baseDebugName);
-	name.Append("_norm_tang");
-	gpu::BufferDesc tangentDesc;
-	tangentDesc.m_flags = gpu::BufferFlags::Vertex;
-	tangentDesc.m_format = gpu::Format::Unknown;
-	tangentDesc.m_sizeInBytes = _model->m_tangentStream.Size() * sizeof(TangentSpace);
-	tangentDesc.m_strideInBytes = sizeof(TangentSpace);
-	_model->m_tangentGpuBuf = gpu::CreateBuffer(tangentDesc, _model->m_tangentStream.Data(), name.Data());
-}
-
-static TextureResHandle LoadTexture(char const* _path, TextureLoadFlags _loadFlags)
-{
-	Texture* tex;
-	bool wasAlreadycreated;
-	TextureResHandle handle = res::CreateEmptyResource(_path, tex, wasAlreadycreated);
-	if (wasAlreadycreated)
+	if (m_posStream.Size() > 0)
 	{
-		return handle;
+		gpu::BufferDesc posBufferDesc{};
+		posBufferDesc.m_flags = gpu::BufferFlags::Vertex;
+		posBufferDesc.m_strideInBytes = sizeof(kt::Vec3);
+		posBufferDesc.m_sizeInBytes = m_posStream.Size() * sizeof(kt::Vec3);
+		name.Append("_pos_stream");
+		m_posGpuBuf = gpu::CreateBuffer(posBufferDesc, m_posStream.Data(), name.Data());
+		
 	}
 
-	tex->LoadFromFile(_path, _loadFlags);
-	// TODO: Delete resource if this fails.
-	return handle;
+	if (m_indices.Size() > 0)
+	{
+		gpu::BufferDesc indexBufferDesc{};
+		indexBufferDesc.m_flags = gpu::BufferFlags::Index;
+		// TODO: fix index buffer size, also add gpu api to create buffer and get back upload pointer, so we don't need to make a temp array to convert to r16.
+		indexBufferDesc.m_format = gpu::Format::R32_Uint;
+		indexBufferDesc.m_sizeInBytes = sizeof(uint32_t) * m_indices.Size();
+		indexBufferDesc.m_strideInBytes = sizeof(uint32_t);
+		name.Clear();
+		name.Append(baseDebugName);
+		name.Append("_index");
+		m_indexGpuBuf = gpu::CreateBuffer(indexBufferDesc, m_indices.Data(), name.Data());
+	}
+
+	if (m_uvStream0.Size() > 0)
+	{
+		name.Clear();
+		name.Append(baseDebugName);
+		name.Append("_uv0");
+		gpu::BufferDesc uv0Desc;
+		uv0Desc.m_flags = gpu::BufferFlags::Vertex;
+		uv0Desc.m_format = gpu::Format::R32G32_Float;
+		uv0Desc.m_sizeInBytes = m_uvStream0.Size() * sizeof(kt::Vec2);
+		uv0Desc.m_strideInBytes = sizeof(kt::Vec2);
+		m_uv0GpuBuf = gpu::CreateBuffer(uv0Desc, m_uvStream0.Data(), name.Data());
+	}
+
+	if (m_tangentStream.Size() > 0)
+	{
+		name.Clear();
+		name.Append(baseDebugName);
+		name.Append("_norm_tang");
+		gpu::BufferDesc tangentDesc;
+		tangentDesc.m_flags = gpu::BufferFlags::Vertex;
+		tangentDesc.m_format = gpu::Format::Unknown;
+		tangentDesc.m_sizeInBytes = m_tangentStream.Size() * sizeof(TangentSpace);
+		tangentDesc.m_strideInBytes = sizeof(TangentSpace);
+		m_tangentGpuBuf = gpu::CreateBuffer(tangentDesc, m_tangentStream.Data(), name.Data());
+	}
+
+	if (!_keepDataOnCpu)
+	{
+		m_posStream.ClearAndFree();
+		m_tangentStream.ClearAndFree();
+		m_uvStream0.ClearAndFree();
+		m_colourStream.ClearAndFree();
+		m_indices.ClearAndFree();
+	}
 }
 
-static TextureResHandle LoadTexture(char const* _gltfPath, char const* _imageUri, TextureLoadFlags _loadFlags)
+static ResourceManager::TextureIdx LoadTexture(char const* _path, TextureLoadFlags _loadFlags)
+{
+	return ResourceManager::CreateTextureFromFile(_path, _loadFlags);
+}
+
+static ResourceManager::TextureIdx LoadTexture(char const* _gltfPath, char const* _imageUri, TextureLoadFlags _loadFlags)
 {
 	kt::FilePath path(_gltfPath);
 	path = path.GetPath();
@@ -469,12 +450,11 @@ static TextureResHandle LoadTexture(char const* _gltfPath, char const* _imageUri
 	return LoadTexture(path.Data(), _loadFlags);
 }
 
-static void LoadMaterials(Model* _model, cgltf_data* _data, char const* _basePath)
+static void LoadMaterials(cgltf_data* _data, char const* _basePath, kt::Slice<ResourceManager::MaterialIdx> const& _materialIndicies)
 {
-	_model->m_materials.Resize(uint32_t(_data->materials_count));
 	for (uint32_t materialIdx = 0; materialIdx < _data->materials_count; ++materialIdx)
 	{
-		Material& modelMat = _model->m_materials[materialIdx];
+		gfx::Material& modelMat = *ResourceManager::GetMaterial(_materialIndicies[materialIdx]);
 		cgltf_material const& gltfMat = _data->materials[materialIdx];
 		if (gltfMat.has_pbr_metallic_roughness)
 		{
@@ -500,12 +480,12 @@ static void LoadMaterials(Model* _model, cgltf_data* _data, char const* _basePat
 			// TOdo: Transform
 			if (pbrMetalRough.base_color_texture.texture)
 			{
-				modelMat.m_textures[Material::Albedo] = LoadTexture(_basePath, pbrMetalRough.base_color_texture.texture->image->uri, TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
+				modelMat.m_textures[Material::Albedo] = LoadTexture(_basePath, pbrMetalRough.base_color_texture.texture->image->uri, c_albedoTexLoadFlags);
 			}
 
 			if (pbrMetalRough.metallic_roughness_texture.texture)
 			{
-				modelMat.m_textures[Material::MetallicRoughness] = LoadTexture(_basePath, pbrMetalRough.metallic_roughness_texture.texture->image->uri, TextureLoadFlags::GenMips);
+				modelMat.m_textures[Material::MetallicRoughness] = LoadTexture(_basePath, pbrMetalRough.metallic_roughness_texture.texture->image->uri, c_metalRoughTexLoadFlags);
 			}
 			
 		}
@@ -516,7 +496,7 @@ static void LoadMaterials(Model* _model, cgltf_data* _data, char const* _basePat
 
 		if (gltfMat.normal_texture.texture)
 		{
-			modelMat.m_textures[Material::Normal] = LoadTexture(_basePath, gltfMat.normal_texture.texture->image->uri, TextureLoadFlags::Normalize | TextureLoadFlags::GenMips);
+			modelMat.m_textures[Material::Normal] = LoadTexture(_basePath, gltfMat.normal_texture.texture->image->uri, c_normalTexLoadFlags);
 		}
 
 		if (gltfMat.occlusion_texture.texture)
@@ -530,7 +510,7 @@ void SerializeMaterial(kt::ISerializer* _s, Material& _mat)
 {
 	kt::Serialize(_s, _mat.m_params);
 
-	auto serializeTex = [&_s, &_mat](TextureResHandle& _handle, TextureLoadFlags _flags)
+	auto serializeTex = [&_s, &_mat](ResourceManager::TextureIdx& _handle, TextureLoadFlags _flags)
 	{
 		bool ok;
 		kt::StaticString<512> pathSerialize;
@@ -546,27 +526,41 @@ void SerializeMaterial(kt::ISerializer* _s, Material& _mat)
 		}
 		else
 		{
-			char const* path = res::GetResourcePath(_handle);
-			ok = path != nullptr;
+			gfx::Texture* tex = ResourceManager::GetTexture(_handle);
+			ok = tex != nullptr;
 			kt::Serialize(_s, ok);
 			if(ok)
 			{
-				pathSerialize = path;
+				pathSerialize = tex->m_path.c_str();
 				kt::Serialize(_s, pathSerialize);
 			}
 		}
 
 	};
 	
-	serializeTex(_mat.m_textures[Material::Albedo], TextureLoadFlags::sRGB | TextureLoadFlags::GenMips);
-	serializeTex(_mat.m_textures[Material::Normal], TextureLoadFlags::Normalize | TextureLoadFlags::GenMips);
-	serializeTex(_mat.m_textures[Material::MetallicRoughness], TextureLoadFlags::GenMips);
-	serializeTex(_mat.m_textures[Material::Occlusion], TextureLoadFlags::GenMips);
+	serializeTex(_mat.m_textures[Material::Albedo], c_albedoTexLoadFlags);
+	serializeTex(_mat.m_textures[Material::Normal], c_normalTexLoadFlags);
+	serializeTex(_mat.m_textures[Material::MetallicRoughness], c_metalRoughTexLoadFlags);
+	serializeTex(_mat.m_textures[Material::Occlusion], c_occlusionTexLoadFlags);
 }
 
-uint32_t constexpr c_modelCacheVersion = 4;
+uint32_t constexpr c_modelCacheVersion = 5;
 
-bool SerializeModelCache(char const* _initialPath, kt::ISerializer* _s, Model& _model)
+static void SerializeMesh(kt::ISerializer* _s, Mesh& _mesh)
+{
+	kt::AABB m_boundingBox;
+
+	kt::Serialize(_s, _mesh.m_posStream);
+	kt::Serialize(_s, _mesh.m_tangentStream);
+	kt::Serialize(_s, _mesh.m_uvStream0);
+	kt::Serialize(_s, _mesh.m_colourStream);
+	kt::Serialize(_s, _mesh.m_indices);
+	kt::Serialize(_s, _mesh.m_subMeshes);
+	kt::Serialize(_s, _mesh.m_boundingBox);
+	kt::Serialize(_s, _mesh.m_subMeshBoundingBoxes);
+}
+
+bool SerializeModelCache(char const* _initialPath, kt::ISerializer* _s, Model& _model, kt::Slice<ResourceManager::MaterialIdx> const* _matsToWrite = nullptr)
 {
 	uint32_t cache = c_modelCacheVersion;
 	kt::Serialize(_s, cache);
@@ -579,22 +573,88 @@ bool SerializeModelCache(char const* _initialPath, kt::ISerializer* _s, Model& _
 		}
 	}
 
-	kt::Serialize(_s, _model.m_posStream);
-	kt::Serialize(_s, _model.m_tangentStream);
-	kt::Serialize(_s, _model.m_uvStream0);
-	kt::Serialize(_s, _model.m_colourStream);
-	kt::Serialize(_s, _model.m_indices);
-	kt::Serialize(_s, _model.m_meshes);
 	kt::Serialize(_s, _model.m_boundingBox);
-	kt::Serialize(_s, _model.m_meshBoundingBoxes);
-	kt::Serialize(_s, _model.m_materials, SerializeMaterial);
+
+	struct MaterialRemapData
+	{
+		gfx::ResourceManager::MaterialIdx m_serializedIdx;
+		gfx::ResourceManager::MaterialIdx m_newIdx;
+	};
+	kt::Array<MaterialRemapData> remapData;
+
+	uint32_t materialSize = _matsToWrite ? _matsToWrite->Size() : 0;
+	kt::Serialize(_s, materialSize);
+	
+	// First, serialize material remapping data.
+	if (_s->SerializeMode() == kt::ISerializer::Mode::Write)
+	{
+		KT_ASSERT(_matsToWrite);
+		for (uint32_t i = 0; i < _matsToWrite->Size(); ++i)
+		{
+			ResourceManager::MaterialIdx matIdx = (*_matsToWrite)[i];
+			kt::Serialize(_s, matIdx);
+			SerializeMaterial(_s, *ResourceManager::GetMaterial(matIdx));
+		}
+	}
+	else
+	{
+		remapData.Resize(materialSize);
+		for (MaterialRemapData& remapMaterial : remapData)
+		{
+			kt::Serialize(_s, remapMaterial.m_serializedIdx);
+			remapMaterial.m_newIdx = ResourceManager::CreateMaterial();
+			gfx::Material* newMat = ResourceManager::GetMaterial(remapMaterial.m_newIdx);
+			SerializeMaterial(_s, *newMat);
+		}
+	}
+
+	// Now serialize meshes.
+	uint32_t meshCount = _model.m_meshes.Size();
+
+	kt::Serialize(_s, meshCount);
+
+	if (_s->SerializeMode() == kt::ISerializer::Mode::Read)
+	{
+		_model.m_meshes.Resize(meshCount);
+		for (ResourceManager::MeshIdx& meshIdx : _model.m_meshes)
+		{
+			meshIdx = ResourceManager::CreateMesh();
+			gfx::Mesh& newMesh = *ResourceManager::GetMesh(meshIdx);
+			SerializeMesh(_s, newMesh);
+			newMesh.CreateGPUBuffers();
+			// if we are reading, we need to remap submesh material indices.
+			for (gfx::Mesh::SubMesh& subMesh : newMesh.m_subMeshes)
+			{
+				bool remapped = false;
+				for (MaterialRemapData const& remapMaterial : remapData)
+				{
+					if (remapMaterial.m_serializedIdx == subMesh.m_materialIdx)
+					{
+						remapped = true;
+						subMesh.m_materialIdx = remapMaterial.m_newIdx;
+						break;
+					}
+				}
+				KT_ASSERT(remapped);
+			}
+		}
+
+	}
+	else
+	{
+		for (ResourceManager::MeshIdx& meshIdx : _model.m_meshes)
+		{
+			SerializeMesh(_s, *ResourceManager::GetMesh(meshIdx));
+		}
+	}
 	
 	return true;
 }
 
-
 bool Model::LoadFromGLTF(char const* _path)
 {
+	m_name = _path;
+
 	// try cache
 	kt::String512 cachePath(_path);
 	cachePath.Append(".cache");
@@ -620,8 +680,6 @@ bool Model::LoadFromGLTF(char const* _path)
 
 	if (hasReadFromCache)
 	{
-		kt::FilePath const path(_path);
-		CreateGPUBuffers(this, path.GetFileNameNoExt());
 		return true;
 	}
 
@@ -646,14 +704,21 @@ bool Model::LoadFromGLTF(char const* _path)
 
 	kt::FilePath const path(_path);
 
-	LoadMaterials(this, data, _path);
+	ResourceManager::MaterialIdx* materialIndices = (ResourceManager::MaterialIdx*)KT_ALLOCA(sizeof(ResourceManager::MaterialIdx) * data->materials_count);
 
-	if (!LoadMeshes(this, data))
+	kt::Slice<ResourceManager::MaterialIdx> materialSlice = kt::MakeSlice(materialIndices, materialIndices + data->materials_count);
+
+	for (ResourceManager::MaterialIdx& materialIdx : materialSlice)
+	{
+		materialIdx = ResourceManager::CreateMaterial();
+	}
+
+	LoadMaterials(data, _path, materialSlice);
+
+	if (!LoadMeshes(this, data, materialSlice))
 	{
 		return false;
 	}
-
-	CreateGPUBuffers(this, path.GetFileNameNoExt());
 
 	// Serialize to cache
 
@@ -669,8 +734,14 @@ bool Model::LoadFromGLTF(char const* _path)
 			KT_SCOPE_EXIT(fclose(file));
 			kt::FileWriter writer(file);
 			kt::ISerializer serializer(&writer, c_modelCacheVersion);
-			SerializeModelCache(_path, &serializer, *this);
+			SerializeModelCache(_path, &serializer, *this, &materialSlice);
 		}
+	}
+
+	// Create gpu buffers and free data on cpu.
+	for (ResourceManager::MeshIdx meshIdx : m_meshes)
+	{
+		ResourceManager::GetMesh(meshIdx)->CreateGPUBuffers();
 	}
 
 	return true;

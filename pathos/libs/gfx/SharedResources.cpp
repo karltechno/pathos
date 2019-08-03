@@ -1,9 +1,9 @@
 #include "SharedResources.h"
-#include "Resources.h"
 
-#include <res/ResourceSystem.h>
 #include <gpu/GPUDevice.h>
 #include <gfx/Texture.h>
+
+#include "Scene.h"
 
 namespace gfx
 {
@@ -12,20 +12,20 @@ static SharedResources s_sharedResources;
 
 void InitSharedResources()
 {
-    auto irradCs = res::LoadResourceSync<gfx::ShaderResource>("shaders/BakeIrradianceMap.cs.cso");
-    s_sharedResources.m_bakeIrradPso = gpu::CreateComputePSO(res::GetData(irradCs)->m_shader, "Bake_Irradiance");
+    gpu::ShaderRef irradCs = ResourceManager::LoadShader("shaders/BakeIrradianceMap.cs.cso", gpu::ShaderType::Compute);
+    s_sharedResources.m_bakeIrradPso = gpu::CreateComputePSO(irradCs, "Bake_Irradiance");
 
-	auto ggxMapCs = res::LoadResourceSync<gfx::ShaderResource>("shaders/BakeEnvMapGGX.cs.cso");
-	s_sharedResources.m_bakeGgxPso = gpu::CreateComputePSO(res::GetData(ggxMapCs)->m_shader, "Bake_GGX");
+	gpu::ShaderRef ggxMapCs = ResourceManager::LoadShader("shaders/BakeEnvMapGGX.cs.cso", gpu::ShaderType::Compute);
+	s_sharedResources.m_bakeGgxPso = gpu::CreateComputePSO(ggxMapCs, "Bake_GGX");
 
-    auto equics = res::LoadResourceSync<gfx::ShaderResource>("shaders/EquirectToCubemap.cs.cso");
-	s_sharedResources.m_equiRectToCubePso = gpu::CreateComputePSO(res::GetData(equics)->m_shader, "Equirect_To_CubeMap");
+	gpu::ShaderRef equics = ResourceManager::LoadShader("shaders/EquirectToCubemap.cs.cso", gpu::ShaderType::Compute);
+	s_sharedResources.m_equiRectToCubePso = gpu::CreateComputePSO(equics, "Equirect_To_CubeMap");
 
-	auto copyTexCs = res::LoadResourceSync<gfx::ShaderResource>("shaders/CopyTexture.cs.cso");
-	s_sharedResources.m_copyTexturePso = gpu::CreateComputePSO(res::GetData(copyTexCs)->m_shader, "Copy_Texture");
+	gpu::ShaderRef copyTexCs = ResourceManager::LoadShader("shaders/CopyTexture.cs.cso", gpu::ShaderType::Compute);
+	s_sharedResources.m_copyTexturePso = gpu::CreateComputePSO(copyTexCs, "Copy_Texture");
 
-	auto copyTexArrayCs = res::LoadResourceSync<gfx::ShaderResource>("shaders/CopyTextureArray.cs.cso");
-	s_sharedResources.m_copyTextureArrayPso = gpu::CreateComputePSO(res::GetData(copyTexArrayCs)->m_shader, "Copy_Texture_Array");
+	gpu::ShaderRef copyTexArrayCs = ResourceManager::LoadShader("shaders/CopyTextureArray.cs.cso", gpu::ShaderType::Compute);
+	s_sharedResources.m_copyTextureArrayPso = gpu::CreateComputePSO(copyTexArrayCs, "Copy_Texture_Array");
 
 	{
 		gpu::TextureDesc const texDesc = gpu::TextureDesc::Desc2D(4, 4, gpu::TextureUsageFlags::ShaderResource, gpu::Format::R8G8B8A8_UNorm);
@@ -42,8 +42,8 @@ void InitSharedResources()
 		s_sharedResources.m_ggxLut = gpu::CreateTexture(desc, nullptr, "GGX_BRDF_LUT");
 		gpu::cmd::ResourceBarrier(cmdList, s_sharedResources.m_ggxLut, gpu::ResourceState::UnorderedAccess);
 
-		auto ggxLutCs = res::LoadResourceSync<gfx::ShaderResource>("shaders/BakeGGXLut.cs.cso");
-		gpu::PSORef ggxLutPso = gpu::CreateComputePSO(res::GetData(ggxLutCs)->m_shader, "GGX_Lut_Bake");
+		gpu::ShaderRef ggxLutCs = ResourceManager::LoadShader("shaders/BakeGGXLut.cs.cso", gpu::ShaderType::Compute);
+		gpu::PSORef ggxLutPso = gpu::CreateComputePSO(ggxLutCs, "GGX_Lut_Bake");
 
 		gpu::cmd::SetPSO(cmdList, ggxLutPso);
 		gpu::DescriptorData uav;
@@ -63,5 +63,6 @@ SharedResources const& GetSharedResources()
 {
     return s_sharedResources;
 }
+
 
 }

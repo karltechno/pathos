@@ -10,8 +10,6 @@
 #include <gfx/Scene.h>
 #include <gfx/SharedResources.h>
 #include <gpu/GPUDevice.h>
-#include <gfx/Resources.h>
-#include <res/ResourceSystem.h>
 
 #include <kt/Macros.h>
 #include <kt/Timer.h>
@@ -46,12 +44,9 @@ app::WindowHandle PATHOS_INIT(int _argc, char** _argv)
 
 	app::WindowHandle const wh = CreatePlatformWindow(params);
 
-	gfx::RegisterResourceLoaders();
-
 	gpu::Init(wh.nwh);
 	editor::Init(wh.nwh);
 	core::InitCVars();
-	res::Init();
 	gfx::DebugRender::Init();
 	return wh;
 }
@@ -63,7 +58,6 @@ void PATHOS_SHUTDOWN()
 #else
 	gfx::DebugRender::Shutdown();
 	gfx::ShutdownSharedResources();
-	res::Shutdown();
 	core::ShutdownCVars();
 	editor::Shutdown();
 	gpu::Shutdown();
@@ -77,6 +71,8 @@ void GraphicsApp::SubsystemPreable(int _argc, char** _argv)
 {
 	KT_UNUSED2(_argc, _argv);
 
+	gfx::ResourceManager::Init();
+
 	input::Init(m_window.nwh, [this](input::Event const& _ev)
 	{
 		if (!editor::HandleInputEvent(_ev))
@@ -89,7 +85,7 @@ void GraphicsApp::SubsystemPreable(int _argc, char** _argv)
 void GraphicsApp::SubsystemPostable()
 {
 	input::Shutdown();
-	gfx::Scene::Shutdown();
+	gfx::ResourceManager::Shutdown();
 }
 
 
@@ -121,7 +117,7 @@ void GraphicsApp::Go(WindowHandle _wh, int _argc, char** _argv)
 		gpu::BeginFrame();
 
 		float const dt = float(tickTime.Seconds());
-		res::Tick();
+		gfx::ResourceManager::UpdateHotReload();
 
 		PumpMessageLoop(m_window);
 		input::Tick(dt);

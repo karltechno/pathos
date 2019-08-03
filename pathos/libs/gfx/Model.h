@@ -3,11 +3,12 @@
 #include <kt/Array.h>
 #include <kt/Vec3.h>
 #include <kt/Vec4.h>
+#include <kt/Strings.h>
 
 #include <gpu/Types.h>
 #include <gpu/HandleRef.h>
 
-#include "Material.h"
+#include "Scene.h"
 
 namespace kt
 {
@@ -17,34 +18,25 @@ struct IReader;
 namespace gfx
 {
 
-// Todo: move to another file?
 struct TangentSpace
 {
 	kt::Vec3 m_norm;
 	kt::Vec4 m_tangentWithSign;
 };
 
-
-
-struct Model
+struct Mesh
 {
+	void CreateGPUBuffers(bool _keepDataOnCpu = false, kt::StringView _debugNamePrefix = kt::StringView{});
+
 	struct SubMesh
 	{
-		uint16_t m_materialIdx;
+		ResourceManager::MaterialIdx m_materialIdx;
 
 		uint32_t m_indexBufferStartOffset;
 		uint32_t m_numIndices;
 	};
 
-	KT_NO_COPY(Model);
-	Model() = default;
-
-	static void RegisterResourceLoader();
-
-	static gpu::VertexLayout FullVertexLayout();
-	static gpu::VertexLayout FullVertexLayoutInstanced();
-
-	bool LoadFromGLTF(char const* _path);
+	kt::AABB m_boundingBox;
 
 	kt::Array<kt::Vec3> m_posStream;
 	kt::Array<TangentSpace> m_tangentStream;
@@ -52,20 +44,29 @@ struct Model
 	kt::Array<uint32_t> m_colourStream;
 	kt::Array<uint32_t> m_indices;
 
-	kt::Array<SubMesh> m_meshes;
-	kt::Array<kt::AABB> m_meshBoundingBoxes;
+	kt::Array<SubMesh> m_subMeshes;
+	kt::Array<kt::AABB> m_subMeshBoundingBoxes;
 
 	gpu::BufferRef m_posGpuBuf;
 	gpu::BufferRef m_indexGpuBuf;
 	gpu::BufferRef m_tangentGpuBuf;
 	gpu::BufferRef m_uv0GpuBuf;
+};
 
-	kt::Array<Material> m_materials;
+struct Model
+{
+	Model() = default;
+
+	static gpu::VertexLayout FullVertexLayout();
+	static gpu::VertexLayout FullVertexLayoutInstanced();
+
+	bool LoadFromGLTF(char const* _path);
+
+	std::string m_name;
+
+	kt::Array<ResourceManager::MeshIdx> m_meshes;
 
 	kt::AABB m_boundingBox;
-
-	// Index into global scene struct.
-	uint32_t m_globalSceneIndex;
 };
 
 

@@ -2,9 +2,10 @@
 #include <kt/kt.h>
 #include <kt/Array.h>
 
-#include <res/Resource.h>
 #include <gpu/Types.h>
 #include <gpu/HandleRef.h>
+
+#include <string>
 
 namespace gfx
 {
@@ -36,17 +37,16 @@ struct Texture
 	bool LoadFromRGBA8(uint8_t* _texels, uint32_t _width, uint32_t _height, TextureLoadFlags _flags = TextureLoadFlags::None, char const* _debugName = nullptr);
 	bool LoadFromMemory(uint8_t* _textureData, uint32_t const _size, TextureLoadFlags _flags = TextureLoadFlags::None, char const* _debugName = nullptr);
 
+	std::string m_path;
+
 	kt::Array<uint8_t> m_texelData;
 	uint32_t m_mipOffsets[c_maxMips];
 	uint32_t m_numMips = 0;
 	uint32_t m_width = 0;
 	uint32_t m_height = 0;
 
-
 	gpu::TextureRef m_gpuTex;
 };
-
-using TextureResHandle = res::ResourceHandle<Texture>;
 
 KT_FORCEINLINE uint32_t MipDimForLevel(uint32_t _extent, uint32_t _level)
 {

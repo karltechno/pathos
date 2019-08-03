@@ -7,13 +7,9 @@
 
 #include <gfx/EnvMap.h>
 #include <gfx/Camera.h>
-#include <gfx/Resources.h>
 #include <gfx/Model.h>
 #include <gfx/Scene.h>
 #include <gfx/Primitive.h>
-
-#include <res/Resource.h>
-#include <res/ResourceSystem.h>
 
 #include <editor/Windows/GFXSceneWindow.h>
 #include <shaderlib/LightingStructs.h>
@@ -51,8 +47,6 @@ struct TestbedApp : app::GraphicsApp
 
 	gfx::SkyBoxRenderer m_skyboxRenderer;
 
-	res::ResourceHandle<gfx::ShaderResource> m_pixelShader;
-	res::ResourceHandle<gfx::ShaderResource> m_vertexShader;
-	res::ResourceHandle<gfx::Model> m_modelHandle;
+	gfx::ResourceManager::ModelIdx m_modelIdx;
 };
 

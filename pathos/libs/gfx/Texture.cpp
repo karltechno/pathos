@@ -3,8 +3,6 @@
 #include <kt/File.h>
 #include <kt/Serialization.h>
 
-#include <res/ResourceSystem.h>
-
 #include "stb_image.h"
 #include "stb_image_resize.h"
 
@@ -12,33 +10,6 @@
 
 namespace gfx
 {
-
-struct TextureLoader : res::IResourceHandler
-{
-	bool CreateFromFile(char const* _filePath, void*& o_res) override
-	{
-		Texture* tex = new Texture;
-		if (!tex->LoadFromFile(_filePath, TextureLoadFlags::None))
-		{
-			delete tex;
-			return false;
-		}
-
-		o_res = tex;
-		return true;
-	}
-
-	bool CreateEmpty(void*& o_res) override
-	{
-		o_res = new Texture;
-		return true;
-	}
-
-	void Destroy(void* _ptr) override
-	{
-		delete (Texture*)_ptr;
-	}
-};
 
 constexpr uint32_t c_textureCacheVersion = 1;
 
@@ -121,23 +92,10 @@ static void CreateGPUBuffer2D(Texture& _tex, void const* _texelData, uint32_t _x
 	_tex.m_gpuTex = gpu::CreateTexture(desc, _texelData, _debugName);
 }
 
-void Texture::RegisterResourceLoader()
-{
-	char const* extensions[] = {
-		".jpeg",
-		".jpg",
-		".png",
-		".tga"
-		/*
-		".dds" // todo
-		*/
-	};
-
-	res::RegisterResource<Texture>("Texture", kt::MakeSlice(extensions), new TextureLoader);
-}
-
 bool Texture::LoadFromFile(char const* _fileName, TextureLoadFlags _flags)
 {
+	m_path = std::string(_fileName);
+
 	if (LoadFromCache(*this, _flags, _fileName))
 	{
 		gpu::Format const gpuFmt = !!(_flags & TextureLoadFlags::sRGB) ? gpu::Format::R8G8B8A8_UNorm_SRGB : gpu::Format::R8G8B8A8_UNorm;

@@ -24,4 +24,5 @@ void InitSharedResources();
 void ShutdownSharedResources();
 
 SharedResources const& GetSharedResources();
+
 }

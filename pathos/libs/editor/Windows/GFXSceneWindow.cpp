@@ -4,6 +4,7 @@
 #include <gfx/Camera.h>
 #include <gfx/Model.h>
 #include <gfx/DebugRender.h>
+#include <gfx/ResourceManager.h>
 
 #include "GFXSceneWindow.h"
 
@@ -12,8 +13,6 @@
 
 namespace editor
 {
-
-
 
 GFXSceneWindow::GFXSceneWindow()
 {
@@ -27,25 +26,24 @@ GFXSceneWindow::~GFXSceneWindow()
 
 static void DrawModelsTab(GFXSceneWindow* _window)
 {
-	for (uint32_t i = 0; i < gfx::Scene::s_models.Size(); ++i)
+	kt::Slice<gfx::Model> models = gfx::ResourceManager::GetAllModels();
+	for (uint32_t i = 0; i < models.Size(); ++i)
 	{
 		ImGui::PushID(i);
-		char const* name = gfx::Scene::s_modelNames[i].Data();
+		gfx::Model const& model = models[i];
+		char const* name = model.m_name.c_str();
 		if (ImGui::CollapsingHeader(name))
 		{
-			gfx::Model const& model = *gfx::Scene::s_models[i];
 			ImGui::Text("Sub Meshes: %u", model.m_meshes.Size());
 			ImGui::Text("Bounding Box Min: x: %.2f, y: %.2f, z: %.2f", model.m_boundingBox.m_min[0], model.m_boundingBox.m_min[1], model.m_boundingBox.m_min[2]);
 			ImGui::Text("Bounding Box Max: x: %.2f, y: %.2f, z: %.2f", model.m_boundingBox.m_max[0], model.m_boundingBox.m_max[1], model.m_boundingBox.m_max[2]);
-			ImGui::Text("Num Materials: %u", model.m_materials.Size());
 
 			if (ImGui::Button("Add instance"))
 			{
-				gfx::Scene::InstanceData& instance = _window->m_scene->m_instances.PushBack();
-				instance.m_modelIdx = i;
-				instance.m_transform.m_pos = kt::Vec3(0.0f);
-				instance.m_transform.m_mtx = kt::Mat3::Identity();
-				_window->m_selectedInstanceIdx = _window->m_scene->m_instances.Size() - 1;
+				gfx::Scene::ModelInstance& instance = _window->m_scene->m_modelInstances.PushBack();
+				instance.m_modelIdx = gfx::ResourceManager::ModelIdx(uint16_t(i));
+				instance.m_mtx = kt::Mat4::Identity();
+				_window->m_selectedInstanceIdx = _window->m_scene->m_modelInstances.Size() - 1;
 			}
 		}
 		ImGui::PopID();
@@ -54,7 +52,7 @@ static void DrawModelsTab(GFXSceneWindow* _window)
 
 static void DrawInstancesTab(GFXSceneWindow* _window)
 {
-	ImGui::Text("Total Instances: %u", _window->m_scene->m_instances.Size());
+	ImGui::Text("Total Model Instances: %u", _window->m_scene->m_modelInstances.Size());
 	static bool s_drawsSceneBounds = false;
 	ImGui::Checkbox("Draw Scene Bounds", &s_drawsSceneBounds); 
 
@@ -66,11 +64,12 @@ static void DrawInstancesTab(GFXSceneWindow* _window)
 	ImGui::Separator();
 	ImGui::Columns(2);
 
-	kt::Array<gfx::Scene::InstanceData>& instanceArray = _window->m_scene->m_instances;
+	kt::Array<gfx::Scene::ModelInstance>& instanceArray = _window->m_scene->m_modelInstances;
 	for (uint32_t i = 0; i < instanceArray.Size(); ++i)
 	{
 		ImGui::PushID(i);
-		char const* modelName = gfx::Scene::s_modelNames[instanceArray[i].m_modelIdx].Data();
+		gfx::Model const& model = *gfx::ResourceManager::GetModel(instanceArray[i].m_modelIdx);
+		char const* modelName = model.m_name.c_str();
 		if (ImGui::Selectable(modelName, i == _window->m_selectedInstanceIdx))
 		{
 			_window->m_selectedInstanceIdx = i;
@@ -80,25 +79,13 @@ static void DrawInstancesTab(GFXSceneWindow* _window)
 
 	ImGui::NextColumn();
 
-	if (_window->m_selectedInstanceIdx < _window->m_scene->m_instances.Size())
+	if (_window->m_selectedInstanceIdx < _window->m_scene->m_modelInstances.Size())
 	{
-		gfx::Scene::InstanceData& instance = instanceArray[_window->m_selectedInstanceIdx];
-		gfx::Model const& model = *gfx::Scene::s_models[instance.m_modelIdx];
-		gfx::DebugRender::LineBox(model.m_boundingBox, instance.m_transform.m_mtx, instance.m_transform.m_pos, kt::Vec4(0.0f, 0.0f, 1.0f, 1.0f));
+		gfx::Scene::ModelInstance& instance = instanceArray[_window->m_selectedInstanceIdx];
+		gfx::Model const& model = *gfx::ResourceManager::GetModel(instance.m_modelIdx);
+		gfx::DebugRender::LineBox(model.m_boundingBox, instance.m_mtx, kt::Vec4(0.0f, 0.0f, 1.0f, 1.0f));
 
-		kt::Mat4 mtx;
-
-		mtx.m_cols[0] = kt::Vec4(instance.m_transform.m_mtx[0], 0.0f);
-		mtx.m_cols[1] = kt::Vec4(instance.m_transform.m_mtx[1], 0.0f);
-		mtx.m_cols[2] = kt::Vec4(instance.m_transform.m_mtx[2], 0.0f);
-		mtx.m_cols[3] = kt::Vec4(instance.m_transform.m_pos, 1.0f);
-
-		ImGuizmo::Manipulate(_window->m_cam->GetView().Data(), _window->m_cam->GetProjection().Data(), _window->m_gizmoOp, _window->m_gizmoMode, mtx.Data(), false);
-
-		instance.m_transform.m_mtx[0] = kt::Vec3(mtx.m_cols[0]);
-		instance.m_transform.m_mtx[1] = kt::Vec3(mtx.m_cols[1]);
-		instance.m_transform.m_mtx[2] = kt::Vec3(mtx.m_cols[2]);
-		instance.m_transform.m_pos = kt::Vec3(mtx.m_cols[3]);
+		ImGuizmo::Manipulate(_window->m_cam->GetView().Data(), _window->m_cam->GetProjection().Data(), _window->m_gizmoOp, _window->m_gizmoMode, instance.m_mtx.Data(), false);
 	}
 
 	ImGui::Columns();
