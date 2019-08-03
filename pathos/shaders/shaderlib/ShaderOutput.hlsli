@@ -72,7 +72,7 @@ struct VSOut_ObjectFull
 
 float3 ReconstructBitangent(in float3 _normal, in float4 _tangent)
 {
-    return cross(_normal, _tangent.xyz) * _tangent.w;
+    return normalize(cross(_normal, _tangent.xyz) * _tangent.w);
 }
 
 #endif // SHADER_OUTPUT_INCLUDED
