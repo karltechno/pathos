@@ -190,7 +190,7 @@ static void GenMikktTangents(Mesh* _model, uint32_t _idxBegin, uint32_t _idxEnd)
 	KT_ASSERT(mikktOk);
 }
 
-static void LoadInstances(Model& io_model, cgltf_data* _data)
+static void LoadNodes(Model& io_model, cgltf_data* _data)
 {
 	for (uint32_t i = 0; i < _data->nodes_count; ++i)
 	{
@@ -211,8 +211,6 @@ static void LoadInstances(Model& io_model, cgltf_data* _data)
 
 static bool LoadMeshes(Model* _model, cgltf_data* _data, kt::Slice<ResourceManager::MaterialIdx> const& _materialIndicies)
 {
-	_model->m_boundingBox = kt::AABB::FloatMax();
-
 	for (cgltf_size gltfMeshIdx = 0; gltfMeshIdx < _data->meshes_count; ++gltfMeshIdx)
 	{
 		_model->m_meshes.PushBack(gfx::ResourceManager::CreateMesh());
@@ -389,8 +387,6 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data, kt::Slice<ResourceManag
 		{
 			mesh.m_boundingBox = kt::Union(_model->m_boundingBox, aabb);
 		}
-
-		_model->m_boundingBox = kt::Union(_model->m_boundingBox, mesh.m_boundingBox);
 	}
 
 	return true;
@@ -583,12 +579,10 @@ void SerializeMaterial(kt::ISerializer* _s, Material& _mat)
 	serializeTex(_mat.m_textures[Material::Occlusion], c_occlusionTexLoadFlags);
 }
 
-uint32_t constexpr c_modelCacheVersion = 9;
+uint32_t constexpr c_modelCacheVersion = 10;
 
 static void SerializeMesh(kt::ISerializer* _s, Mesh& _mesh)
 {
-	kt::AABB m_boundingBox;
-
 	kt::Serialize(_s, _mesh.m_posStream);
 	kt::Serialize(_s, _mesh.m_tangentStream);
 	kt::Serialize(_s, _mesh.m_uvStream0);
@@ -761,7 +755,15 @@ bool Model::LoadFromGLTF(char const* _path)
 		return false;
 	}
 
-	LoadInstances(*this, data);
+	LoadNodes(*this, data);
+
+	m_boundingBox = kt::AABB::FloatMax();
+
+	for (Model::Node const& node : m_nodes)
+	{
+		gfx::Mesh const& mesh = *gfx::ResourceManager::GetMesh(m_meshes[node.m_internalMeshIdx]);
+		m_boundingBox = kt::Union(mesh.m_boundingBox.Transformed(node.m_mtx), m_boundingBox);
+	}
 
 	// Serialize to cache
 
