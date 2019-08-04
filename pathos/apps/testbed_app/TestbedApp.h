@@ -12,8 +12,6 @@
 #include <gfx/Primitive.h>
 
 #include <editor/Windows/GFXSceneWindow.h>
-#include <shaderlib/LightingStructs.h>
-
 
 struct TestbedApp : app::GraphicsApp
 {
@@ -22,13 +20,6 @@ struct TestbedApp : app::GraphicsApp
 	void Shutdown() override;
 
 	void HandleInputEvent(input::Event const& _ev) override;
-
-	struct DummyCbuffer
-	{
-		kt::Mat4 mvp;
-	};
-
-	DummyCbuffer m_myCbuffer;
 
 	editor::GFXSceneWindow m_sceneWindow;
 	gfx::Scene m_scene;
