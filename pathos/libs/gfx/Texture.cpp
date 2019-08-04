@@ -144,7 +144,7 @@ bool Texture::LoadFromFile(char const* _fileName, TextureLoadFlags _flags)
 	return false;
 }
 
-bool Texture::LoadFromRGBA8(uint8_t* _texels, uint32_t _width, uint32_t _height, TextureLoadFlags _flags, char const* _debugName)
+bool Texture::LoadFromRGBA8(uint8_t const* _texels, uint32_t _width, uint32_t _height, TextureLoadFlags _flags, char const* _debugName)
 {
 	gpu::Format const gpuFmt = !!(_flags & TextureLoadFlags::sRGB) ? gpu::Format::R8G8B8A8_UNorm_SRGB : gpu::Format::R8G8B8A8_UNorm;
 
@@ -247,7 +247,7 @@ bool Texture::LoadFromRGBA8(uint8_t* _texels, uint32_t _width, uint32_t _height,
 	return true;
 }
 
-bool Texture::LoadFromMemory(uint8_t* _textureData, uint32_t const _size, TextureLoadFlags _flags /*= TextureLoadFlags::None*/, char const* _debugName /* = nullptr */)
+bool Texture::LoadFromMemory(uint8_t const* _textureData, uint32_t const _size, TextureLoadFlags _flags /*= TextureLoadFlags::None*/, char const* _debugName /* = nullptr */)
 {
 	int x, y, comp;
 	uint8_t* texels = stbi_load_from_memory(_textureData, _size, &x, &y, &comp, 4);

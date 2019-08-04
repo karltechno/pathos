@@ -32,8 +32,8 @@ struct Texture
 	Texture& operator=(Texture&&) = default;
 
 	bool LoadFromFile(char const* _fileName, TextureLoadFlags _flags = TextureLoadFlags::None);
-	bool LoadFromRGBA8(uint8_t* _texels, uint32_t _width, uint32_t _height, TextureLoadFlags _flags = TextureLoadFlags::None, char const* _debugName = nullptr);
-	bool LoadFromMemory(uint8_t* _textureData, uint32_t const _size, TextureLoadFlags _flags = TextureLoadFlags::None, char const* _debugName = nullptr);
+	bool LoadFromRGBA8(uint8_t const* _texels, uint32_t _width, uint32_t _height, TextureLoadFlags _flags = TextureLoadFlags::None, char const* _debugName = nullptr);
+	bool LoadFromMemory(uint8_t const* _textureData, uint32_t const _size, TextureLoadFlags _flags = TextureLoadFlags::None, char const* _debugName = nullptr);
 
 	std::string m_path;
 
