@@ -214,6 +214,11 @@ void Update()
 		gpu::cmd::FlushBarriers(ctx);
 		shaderlib::MaterialData* materialGpuPtr = (shaderlib::MaterialData*)gpu::cmd::BeginUpdateDynamicBuffer(ctx, s_state.m_materialGpuBuf, updateSize).Data();
 
+		auto textureIdxOrDefault = [](gfx::ResourceManager::TextureIdx _myTexIdx, gfx::ResourceManager::TextureIdx _defaultTexIdx) -> uint32_t
+		{
+			return _myTexIdx.IsValid() ? uint32_t(_myTexIdx.idx) : uint32_t(_defaultTexIdx.idx);
+		};
+
 		for (gfx::Material const& mat : s_state.m_materials)
 		{
 			uint32_t constexpr memcpySize = sizeof(shaderlib::MaterialData::baseColour)
@@ -221,12 +226,23 @@ void Update()
 				+ sizeof(shaderlib::MaterialData::metalness)
 				+ sizeof(shaderlib::MaterialData::alphaCutoff);
 
-			static_assert(offsetof(gfx::Material::Params, m_baseColour)			==	offsetof(shaderlib::MaterialData, baseColour), "Material mismatch.");
-			static_assert(offsetof(gfx::Material::Params, m_roughnessFactor)	==	offsetof(shaderlib::MaterialData, roughness), "Material mismatch.");
-			static_assert(offsetof(gfx::Material::Params, m_metallicFactor)		==	offsetof(shaderlib::MaterialData, metalness), "Material mismatch.");
-			static_assert(offsetof(gfx::Material::Params, m_alphaCutoff)		==	offsetof(shaderlib::MaterialData, alphaCutoff), "Material mismatch.");
+
+			gfx::Material::Params const& params = mat.m_params;
+
+			gfx::ResourceManager::SharedResources const& sharedRes = gfx::ResourceManager::GetSharedResources();
+
+			static_assert(sizeof(materialGpuPtr->baseColour) == sizeof(mat.m_params.m_baseColour), "Mismatched colour size.");
+			memcpy(&materialGpuPtr->baseColour, &params.m_baseColour, sizeof(kt::Vec4));
+			materialGpuPtr->metalness = params.m_metallicFactor;
+			materialGpuPtr->roughness = params.m_roughnessFactor;
+			materialGpuPtr->alphaCutoff = params.m_alphaCutoff;
+			materialGpuPtr->albedoTexIdx = textureIdxOrDefault(mat.m_textures[gfx::Material::TextureType::Albedo], sharedRes.m_texWhiteIdx);
 			
-			memcpy((void*)materialGpuPtr, &mat.m_params, memcpySize);
+			// TODO: Not a good default, need to handle in material shader anyway really.
+			materialGpuPtr->normalMapTexIdx = textureIdxOrDefault(mat.m_textures[gfx::Material::TextureType::Normal], sharedRes.m_texWhiteIdx);
+			materialGpuPtr->metalRoughTexIdx = textureIdxOrDefault(mat.m_textures[gfx::Material::TextureType::MetallicRoughness], sharedRes.m_texBlackIdx);
+			materialGpuPtr->occlusionTexIdx = textureIdxOrDefault(mat.m_textures[gfx::Material::TextureType::Occlusion], sharedRes.m_texWhiteIdx);
+
 			++materialGpuPtr;
 		}
 
@@ -334,6 +350,11 @@ gfx::Texture* GetTexture(TextureIdx _idx)
 
 	KT_ASSERT(_idx.idx < s_state.m_textures.Size());
 	return &s_state.m_textures[_idx.idx];
+}
+
+gpu::PersistentDescriptorTableHandle GetTextureDescriptorTable()
+{
+	return s_state.m_bindlessTextureHandle;
 }
 
 MaterialIdx CreateMaterial()

@@ -1,7 +1,8 @@
 #include "shaderlib/CommonShared.h"
 #include "shaderlib/ShaderOutput.hlsli"
+#include "shaderlib/DefinesShared.h"
 
-ConstantBuffer<FrameConstants> g_frame : register(b0, space1);
+ConstantBuffer<FrameConstants> g_frame : register(b0, PATHOS_PER_FRAME_SPACE);
 
 float3 TransformInstanceData_Point(VSIn_ObjectFullInstanced _input, float3 _p)
 {
@@ -11,7 +12,6 @@ float3 TransformInstanceData_Point(VSIn_ObjectFullInstanced _input, float3 _p)
     ret += _input.instanceCol2 * _p.z;    
     return ret;
 }
-
 
 float3 TransformInstanceData_Dir(VSIn_ObjectFullInstanced _input, float3 _p)
 {

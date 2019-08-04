@@ -250,7 +250,6 @@ struct Device_D3D12
 	D3D12_CPU_DESCRIPTOR_HANDLE m_nullUav;
 
 	D3D12_GPU_DESCRIPTOR_HANDLE m_nullCbvTable;
-	D3D12_GPU_DESCRIPTOR_HANDLE m_nullSrvTable;
 	D3D12_GPU_DESCRIPTOR_HANDLE m_nullUavTable;
 
 	FrameUploadPagePool_D3D12 m_uploadPagePool;

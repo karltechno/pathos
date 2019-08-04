@@ -2,6 +2,12 @@
 #define CPP_INTEROP
 
 #ifdef __cplusplus
+
+#define PATHOS_SHADER_SPACE(x) x
+#define PATHOS_SRV_SLOT(x) x
+#define PATHOS_UAV_SLOT(x) x
+#define PATHOS_CBV_SLOT(x) x
+
 #include <stdint.h>
 #include <kt/Vec2.h>
 #include <kt/Vec3.h>
@@ -21,6 +27,11 @@ using float3x3 = kt::Mat3;
 using uint = uint32_t;
 
 #else
+
+#define PATHOS_SHADER_SPACE(x) space##x
+#define PATHOS_SRV_SLOT(x) t##x
+#define PATHOS_UAV_SLOT(x) u##x
+#define PATHOS_CBV_SLOT(x) b##x
 
 #define SHADERLIB_NAMESPACE_BEGIN
 #define SHADERLIB_NAMESPACE_END

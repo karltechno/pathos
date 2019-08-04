@@ -89,6 +89,8 @@ TextureIdx CreateTextureFromFile(char const* _fileName, TextureLoadFlags _flags 
 TextureIdx CreateTextureFromRGBA8(uint8_t const* _texels, uint32_t _width, uint32_t _height, TextureLoadFlags _flags = TextureLoadFlags::None, char const* _debugName = nullptr);
 gfx::Texture* GetTexture(TextureIdx _idx);
 
+gpu::PersistentDescriptorTableHandle GetTextureDescriptorTable();
+
 MaterialIdx CreateMaterial();
 Material* GetMaterial(MaterialIdx _idx);
 void SetMaterialsDirty();

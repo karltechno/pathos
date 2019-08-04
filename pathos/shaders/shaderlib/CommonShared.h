@@ -50,7 +50,10 @@ struct MaterialData
     float roughness;
     float metalness;
     float alphaCutoff;
-    float _pad_;
+    uint albedoTexIdx;
+    uint normalMapTexIdx;
+    uint metalRoughTexIdx;
+    uint occlusionTexIdx;
 };
 
 struct BatchConstants

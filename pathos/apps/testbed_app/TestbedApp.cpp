@@ -13,6 +13,7 @@
 #include <gfx/ShadowUtils.h>
 #include <gpu/GPUDevice.h>
 #include <input/Input.h>
+#include <shaderlib/DefinesShared.h>
 
 #include <kt/Macros.h>
 #include <kt/Timer.h>
@@ -78,7 +79,7 @@ void TestbedApp::Setup()
 		
 		m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/DamagedHelmet/DamagedHelmet.gltf");
 		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/sponza/Sponza.gltf");
-		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/rainier_ak/Scene.gltf");
+		m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/rainier_ak/Scene.gltf");
 		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/MetalRoughSpheres/MetalRoughSpheres.gltf");
 	}
 
@@ -131,7 +132,7 @@ void ShadowTest(gpu::cmd::Context* _ctx, TestbedApp& _app)
 		gpu::DescriptorData cbv;
 		cbv.Set(_app.m_scene.m_shadowCascades[cascadeIdx].GetViewProj().Data(), sizeof(kt::Mat4));
 
-		gpu::cmd::SetGraphicsCBVTable(_ctx, cbv, 0);
+		gpu::cmd::SetGraphicsCBVTable(_ctx, cbv, PATHOS_PER_BATCH_SPACE);
 		gpu::cmd::SetPSO(_ctx, _app.m_shadowMapPso);
 
 		_app.m_scene.RenderInstances(_ctx, true);
@@ -169,25 +170,26 @@ void TestbedApp::Tick(float _dt)
 	gpu::DescriptorData cbvs;
 	cbvs.Set(m_scene.m_frameConstantsGpuBuf);
 
-	gpu::cmd::SetGraphicsCBVTable(ctx, cbvs, 1);
+	gpu::cmd::SetGraphicsCBVTable(ctx, cbvs, PATHOS_PER_FRAME_SPACE);
 
 	gpu::cmd::SetRenderTarget(ctx, 0, backbuffer);
 	gpu::cmd::SetDepthBuffer(ctx, depth);
-
 
 	float const col[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 	gpu::cmd::ClearRenderTarget(ctx, backbuffer, col);
 	gpu::cmd::ClearDepth(ctx, depth, 1.0f);
 
-	gpu::DescriptorData space1srv[6];
-	space1srv[0].Set(m_irradMap);
-	space1srv[1].Set(m_ggxMap);
-	space1srv[2].Set(gfx::ResourceManager::GetSharedResources().m_ggxLut);
-	space1srv[3].Set(m_scene.m_lightGpuBuf);
-	space1srv[4].Set(m_scene.m_shadowCascadeTex);
-	space1srv[5].Set(gfx::ResourceManager::GetMaterialGpuBuffer());
+	gpu::DescriptorData frameSrvs[6];
+	frameSrvs[0].Set(m_irradMap);
+	frameSrvs[1].Set(m_ggxMap);
+	frameSrvs[2].Set(gfx::ResourceManager::GetSharedResources().m_ggxLut);
+	frameSrvs[3].Set(m_scene.m_lightGpuBuf);
+	frameSrvs[4].Set(m_scene.m_shadowCascadeTex);
+	frameSrvs[5].Set(gfx::ResourceManager::GetMaterialGpuBuffer());
 
-	gpu::cmd::SetGraphicsSRVTable(ctx, space1srv, 1);
+	gpu::cmd::SetGraphicsSRVTable(ctx, gfx::ResourceManager::GetTextureDescriptorTable(), PATHOS_CUSTOM_SPACE);
+
+	gpu::cmd::SetGraphicsSRVTable(ctx, frameSrvs, PATHOS_PER_FRAME_SPACE);
 	m_scene.RenderInstances(ctx, false);
 
 	m_skyboxRenderer.Render(ctx, m_cam);

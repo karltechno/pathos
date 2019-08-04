@@ -1234,8 +1234,7 @@ static void CreateRootSigs(ID3D12Device* _dev, ID3D12RootSignature*& o_gfx, ID3D
 		samplers[5].ComparisonFunc = D3D12_COMPARISON_FUNC_LESS;
 	}
 
-	D3D12_ROOT_PARAMETER tables[3 * c_numShaderSpaces + 1];
-	D3D12_DESCRIPTOR_RANGE bindlessSrvRange;
+	D3D12_ROOT_PARAMETER tables[3 * c_numShaderSpaces];
 	D3D12_DESCRIPTOR_RANGE ranges[3 * c_numShaderSpaces];
 
 	graphicsDesc.pParameters = tables;
@@ -1249,21 +1248,6 @@ static void CreateRootSigs(ID3D12Device* _dev, ID3D12RootSignature*& o_gfx, ID3D
 	// SRV Table (t0 - t16) space0
 	// UAV Table (u0 - u16) space0
 	// Repeat to space n.
-	// Then bindless (t0) space16, very arbitrary for now.
-
-	tables[3 * c_numShaderSpaces].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	tables[3 * c_numShaderSpaces].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	tables[3 * c_numShaderSpaces].DescriptorTable.pDescriptorRanges = &bindlessSrvRange;
-	tables[3 * c_numShaderSpaces].DescriptorTable.NumDescriptorRanges = 1;
-
-	uint32_t constexpr c_bindlessSrvSpace = 16;
-
-	bindlessSrvRange.BaseShaderRegister = 0;
-	bindlessSrvRange.NumDescriptors = ~UINT(0);
-	bindlessSrvRange.OffsetInDescriptorsFromTableStart = 0;
-	bindlessSrvRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-	bindlessSrvRange.RegisterSpace = c_bindlessSrvSpace;
-
 
 	for (uint32_t i = 0; i < c_numShaderSpaces; ++i)
 	{
@@ -1274,7 +1258,7 @@ static void CreateRootSigs(ID3D12Device* _dev, ID3D12RootSignature*& o_gfx, ID3D
 		ranges[i * 3].RegisterSpace = i;
 
 		ranges[i * 3 + 1].BaseShaderRegister = 0;
-		ranges[i * 3 + 1].NumDescriptors = c_srvTableSize;
+		ranges[i * 3 + 1].NumDescriptors = ~UINT(0); // unbounded for bindless SRV.
 		ranges[i * 3 + 1].OffsetInDescriptorsFromTableStart = 0;
 		ranges[i * 3 + 1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 		ranges[i * 3 + 1].RegisterSpace = i;
@@ -1372,7 +1356,7 @@ void Device_D3D12::InitDescriptorHeaps()
 	// Create null tables
 	uint32_t currentTableOffset = 0;
 
-	uint32_t const totalNullDescriptors = gpu::c_uavTableSize + gpu::c_srvTableSize + gpu::c_cbvTableSize;
+	uint32_t const totalNullDescriptors = gpu::c_uavTableSize + gpu::c_cbvTableSize;
 	D3D12_CPU_DESCRIPTOR_HANDLE nullTableBeginCpu = m_cbvsrvuavHeap.HandleBeginCPU();
 	D3D12_GPU_DESCRIPTOR_HANDLE nullTableBeginGpu = m_cbvsrvuavHeap.HandleBeginGPU();
 
@@ -1380,14 +1364,6 @@ void Device_D3D12::InitDescriptorHeaps()
 	for (uint32_t i = 0; i < gpu::c_cbvTableSize; ++i)
 	{
 		m_d3dDev->CopyDescriptorsSimple(1, nullTableBeginCpu, m_nullCbv, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-		nullTableBeginCpu.ptr += m_cbvsrvuavHeap.m_descriptorIncrementSize;
-		nullTableBeginGpu.ptr += m_cbvsrvuavHeap.m_descriptorIncrementSize;
-	}
-
-	m_nullSrvTable = nullTableBeginGpu;
-	for (uint32_t i = 0; i < gpu::c_srvTableSize; ++i)
-	{
-		m_d3dDev->CopyDescriptorsSimple(1, nullTableBeginCpu, m_nullSrv, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 		nullTableBeginCpu.ptr += m_cbvsrvuavHeap.m_descriptorIncrementSize;
 		nullTableBeginGpu.ptr += m_cbvsrvuavHeap.m_descriptorIncrementSize;
 	}
@@ -1431,6 +1407,18 @@ static void InitMipPsos(Device_D3D12* _dev)
 	MAKE_PSO("GenMips_Cube_Linear", cubeLinear, _dev->m_mipPsos.m_cube[0]);
 	MAKE_PSO("GenMips_Cube_SRGB", cubeSrgb, _dev->m_mipPsos.m_cube[1]);
 #undef MAKE_PSO
+}
+
+static void ValidateCaps(ID3D12Device* _dev)
+{
+	D3D12_FEATURE_DATA_D3D12_OPTIONS featureSupport{};
+	D3D_CHECK(_dev->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &featureSupport, sizeof(featureSupport)));
+
+	if (featureSupport.ResourceBindingTier == D3D12_RESOURCE_BINDING_TIER_1)
+	{
+		KT_ASSERT(!"Resource binding tier 2 required for unbounded SRV tables (bindless textures).");
+		::exit(1);
+	}
 }
 
 void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
@@ -1501,6 +1489,8 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		KT_LOG_ERROR("D3D12CreateDevice failed! (HRESULT: %#x)", hr);
 		return;
 	}
+	
+	ValidateCaps(m_d3dDev);
 
 	if (_useDebugLayer)
 	{
@@ -1933,7 +1923,7 @@ bool Init(void* _nwh)
 	// TODO: Toggle debug layer
 	g_device = new Device_D3D12();
 	// TODO
-	g_device->Init(_nwh, true);
+	g_device->Init(_nwh, false);
 	return true;
 }
 

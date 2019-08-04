@@ -1,5 +1,7 @@
 #include <string>
+
 #include <gpu/Types.h>
+#include <shaderlib/DefinesShared.h>
 
 #include <kt/Sort.h>
 #include <kt/Hash.h>
@@ -13,6 +15,7 @@
 #include "DebugRender.h"
 #include "ShadowUtils.h"
 #include "Material.h"
+
 
 
 namespace gfx
@@ -136,12 +139,6 @@ void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera cons
 	gpu::cmd::ResourceBarrier(_ctx, m_frameConstantsGpuBuf, gpu::ResourceState::ConstantBuffer);
 }
 
-static gpu::TextureHandle GetTextureHandleOrNull(ResourceManager::TextureIdx _tex)
-{
-	return _tex.IsValid() ? ResourceManager::GetTexture(_tex)->m_gpuTex : gpu::TextureHandle{};
-}
-
-
 struct KT_ALIGNAS(16) InstanceData
 {
 	InstanceData()
@@ -260,8 +257,6 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 		uint32_t lastMaterialIdx = UINT32_MAX;
 		for (gfx::Mesh::SubMesh const& subMesh : mesh.m_subMeshes)
 		{
-			gfx::Material const& mat = *ResourceManager::GetMaterial(subMesh.m_materialIdx);
-
 			if (!_shadowMap)
 			{
 				if (subMesh.m_materialIdx.idx != lastMaterialIdx)
@@ -269,15 +264,8 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 					lastMaterialIdx = subMesh.m_materialIdx.idx;
 					gpu::DescriptorData cbvBatch;
 					cbvBatch.Set(&lastMaterialIdx, sizeof(lastMaterialIdx));
-					gpu::cmd::SetGraphicsCBVTable(_ctx, cbvBatch, 0);
+					gpu::cmd::SetGraphicsCBVTable(_ctx, cbvBatch, PATHOS_PER_BATCH_SPACE);
 				}
-
-				gpu::DescriptorData descriptors[4];
-				descriptors[0].Set(GetTextureHandleOrNull(mat.m_textures[gfx::Material::Albedo]));
-				descriptors[1].Set(GetTextureHandleOrNull(mat.m_textures[gfx::Material::Normal]));
-				descriptors[2].Set(GetTextureHandleOrNull(mat.m_textures[gfx::Material::MetallicRoughness]));
-				descriptors[3].Set(GetTextureHandleOrNull(mat.m_textures[gfx::Material::Occlusion]));
-				gpu::cmd::SetGraphicsSRVTable(_ctx, descriptors, 0);
 			}
 
 			gpu::cmd::DrawIndexedInstanced(_ctx, subMesh.m_numIndices, numInstances, subMesh.m_indexBufferStartOffset, 0, batchInstanceBegin);
