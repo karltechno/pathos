@@ -399,7 +399,7 @@ kt::Slice<uint8_t> BeginUpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _ha
 #if KT_DEBUG
 	for (CommandContext_D3D12::PendingDynamicUpload const& oldUpdate : _ctx->m_state.m_pendingUploads)
 	{
-		KT_ASSERT(oldUpdate.m_resource.Handle() != _handle && !"Already updating this buffer!");
+		KT_ASSERT(oldUpdate.m_resource.Handle() != _handle && "Already updating this buffer!");
 	}
 #endif
 
