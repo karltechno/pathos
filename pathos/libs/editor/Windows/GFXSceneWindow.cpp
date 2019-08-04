@@ -211,7 +211,8 @@ void GFXSceneWindow::Draw(float _dt)
 		gfx::DebugRender::LineFrustum(m_lockedCam, kt::Vec4(0.0f, 1.0f, 1.0f, 1.0f));
 	}
 
-	ImGui::ColorEdit3("Sun Color", &m_scene->m_frameConstants.sunColor[0]);
+	ImGui::ColorEdit3("Sun Color", &m_scene->m_sunColor[0]);
+	ImGui::DragFloat("Sun Intensity", &m_scene->m_sunIntensity, 1.0f, 0.0f, 1000.0f, "%.3f", 6.0f);
 	ImGui::SliderFloat3("Sun Dir", &m_scene->m_frameConstants.sunDir[0], -1.0f, 1.0f);
 	m_scene->m_frameConstants.sunDir = kt::Normalize(m_scene->m_frameConstants.sunDir);
 

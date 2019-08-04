@@ -98,6 +98,8 @@ void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera cons
 	m_frameConstants.time.y += _dt*0.1f;
 	m_frameConstants.time.z = _dt;
 
+	m_frameConstants.sunColor = m_sunColor * m_sunIntensity;
+
 	{
 	// calculate cascades
 		gpu::TextureDesc desc;
