@@ -13,7 +13,7 @@ uint32_t constexpr c_cbvTableSize = 16;
 uint32_t constexpr c_srvTableSize = 16;
 uint32_t constexpr c_uavTableSize = 16;
 
-uint32_t constexpr c_numShaderSpaces = 4;
+uint32_t constexpr c_numShaderSpaces = 3;
 
 uint32_t constexpr c_maxBufferedFrames = 3;
 
@@ -43,10 +43,12 @@ bool operator!=(TaggedHandle<T> const& _lhs, TaggedHandle<T> const& _rhs)
 struct ShaderTag;
 struct PSOTag;
 struct ResourceTag;
+struct PersistentDescriptorTableTag;
 
-using PSOHandle			= TaggedHandle<PSOTag>;
-using ShaderHandle		= TaggedHandle<ShaderTag>;
-using ResourceHandle	= TaggedHandle<ResourceTag>;
+using PSOHandle							= TaggedHandle<PSOTag>;
+using ShaderHandle						= TaggedHandle<ShaderTag>;
+using ResourceHandle					= TaggedHandle<ResourceTag>;
+using PersistentDescriptorTableHandle	= TaggedHandle<PersistentDescriptorTableTag>;
 
 struct BufferHandle : ResourceHandle
 {

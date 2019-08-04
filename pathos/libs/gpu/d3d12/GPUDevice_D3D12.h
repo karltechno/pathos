@@ -134,6 +134,19 @@ struct AllocatedPSO_D3D12 : AllocatedObjectBase_D3D12
 	ID3D12PipelineState* m_pso = nullptr;
 };
 
+// TODO: This doesn't handle any kind of synchronization - it could overwrite descriptors that are in use by the GPU.
+// For now that isn't a problem due to the very simple use case but this should potentially be revisited.
+struct AllocatedPersistentDescriptorTable_D3D12 : AllocatedObjectBase_D3D12
+{
+	bool Init(uint32_t _numDescriptors);
+	void Destroy();
+
+	uint32_t m_idx;
+	uint32_t m_numDescriptors;
+	D3D12_CPU_DESCRIPTOR_HANDLE m_cpuDescriptor;
+	D3D12_GPU_DESCRIPTOR_HANDLE m_gpuDescriptor;
+};
+
 struct FrameUploadPage_D3D12
 {
 	uint32_t SizeLeft() const { KT_ASSERT(m_size >= m_curOffset); return m_size - m_curOffset; }
@@ -246,10 +259,12 @@ struct Device_D3D12
 
 	DescriptorHeap_D3D12 m_cbvsrvuavHeap;
 	RingBufferDescriptorHeap_D3D12 m_descriptorcbvsrvuavRingBuffer;
+	PersistentDescriptorHeap_D3D12 m_persistentCbvSrvUavAllocator;
 
 	kt::VersionedHandlePool<AllocatedResource_D3D12>	m_resourceHandles;
 	kt::VersionedHandlePool<AllocatedShader_D3D12>		m_shaderHandles;
 	kt::VersionedHandlePool<AllocatedPSO_D3D12>			m_psoHandles;
+	kt::VersionedHandlePool<AllocatedPersistentDescriptorTable_D3D12> m_persistentTableHandles;
 
 	cmd::CommandContext_D3D12* m_mainThreadCtx = nullptr;
 

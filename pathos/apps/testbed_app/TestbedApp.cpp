@@ -5,7 +5,7 @@
 #include <core/CVar.h>
 #include <editor/Editor.h>
 #include <gfx/DebugRender.h>
-#include <gfx/SharedResources.h>
+#include <gfx/ResourceManager.h>
 #include <gfx/Primitive.h>
 #include <gfx/Model.h>
 #include <gfx/EnvMap.h>
@@ -76,8 +76,8 @@ void TestbedApp::Setup()
 
 		m_pso = gpu::CreateGraphicsPSO(psoDesc, "Object PSO Test");
 		
-		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/DamagedHelmet/DamagedHelmet.gltf");
-		m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/sponza/Sponza.gltf");
+		m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/DamagedHelmet/DamagedHelmet.gltf");
+		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/sponza/Sponza.gltf");
 		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/rainier_ak/Scene.gltf");
 		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/MetalRoughSpheres/MetalRoughSpheres.gltf");
 	}
@@ -94,7 +94,7 @@ void TestbedApp::Setup()
 	gfx::BakeEnvMapGGX(ctx, m_cubeMap, m_ggxMap);
 
 	{
-		gpu::cmd::SetPSO(ctx, gfx::GetSharedResources().m_bakeIrradPso);
+		gpu::cmd::SetPSO(ctx, gfx::ResourceManager::GetSharedResources().m_bakeIrradPso);
 		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::UnorderedAccess);
 
 		gpu::DescriptorData srv;
@@ -182,7 +182,7 @@ void TestbedApp::Tick(float _dt)
 	gpu::DescriptorData space1srv[6];
 	space1srv[0].Set(m_irradMap);
 	space1srv[1].Set(m_ggxMap);
-	space1srv[2].Set(gfx::GetSharedResources().m_ggxLut);
+	space1srv[2].Set(gfx::ResourceManager::GetSharedResources().m_ggxLut);
 	space1srv[3].Set(m_scene.m_lightGpuBuf);
 	space1srv[4].Set(m_scene.m_shadowCascadeTex);
 	space1srv[5].Set(gfx::ResourceManager::GetMaterialGpuBuffer());

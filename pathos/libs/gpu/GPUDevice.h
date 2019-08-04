@@ -24,6 +24,9 @@ void GetSwapchainDimensions(uint32_t& o_width, uint32_t& o_height);
 gpu::PSOHandle CreateGraphicsPSO(gpu::GraphicsPSODesc const& _desc, char const* _debugName = nullptr);
 gpu::PSOHandle CreateComputePSO(gpu::ShaderHandle _shader, char const* _debugName = nullptr);
 
+gpu::PersistentDescriptorTableHandle CreatePersistentDescriptorTable(uint32_t _descriptorCount);
+void SetPersistentTableSRV(gpu::PersistentDescriptorTableHandle _table, gpu::ResourceHandle _resource, uint32_t _idx);
+
 gpu::ShaderHandle CreateShader(gpu::ShaderType _type, gpu::ShaderBytecode const& _byteCode, char const* _debugName = nullptr);
 void ReloadShader(gpu::ShaderHandle _handle, gpu::ShaderBytecode const& _newBytecode);
 
@@ -42,10 +45,13 @@ bool GetShaderInfo(gpu::ShaderHandle _handle, gpu::ShaderType& o_type, char cons
 void AddRef(gpu::ResourceHandle _handle);
 void AddRef(gpu::ShaderHandle _handle);
 void AddRef(gpu::PSOHandle _handle);
+void AddRef(gpu::PersistentDescriptorTableHandle _handle);
 
 void Release(gpu::ResourceHandle _handle);
 void Release(gpu::ShaderHandle _handle);
 void Release(gpu::PSOHandle _handle);
+void Release(gpu::PersistentDescriptorTableHandle _handle);
+
 
 // Debugging:
 void EnumResourceHandles(kt::StaticFunction<void(gpu::ResourceHandle), 32> const& _ftor);

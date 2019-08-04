@@ -40,10 +40,12 @@ void SetDepthBuffer(Context* _ctx, gpu::TextureHandle _handle, uint32_t _arrayId
 void SetComputeCBVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
 void SetComputeUAVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
 void SetComputeSRVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
+void SetComputeSRVTable(Context* _ctx, gpu::PersistentDescriptorTableHandle _table, uint32_t _space);
 
 void SetGraphicsCBVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
 void SetGraphicsUAVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
 void SetGraphicsSRVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space);
+void SetGraphicsSRVTable(Context* _ctx, gpu::PersistentDescriptorTableHandle _table, uint32_t _space);
 
 void ResourceBarrier(Context* _ctx, gpu::ResourceHandle _handle, gpu::ResourceState _newState);
 void UAVBarrier(Context* _ctx, gpu::ResourceHandle _handle);

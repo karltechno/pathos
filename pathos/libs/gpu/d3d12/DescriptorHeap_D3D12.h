@@ -15,8 +15,8 @@ struct DescriptorHeap_D3D12
 	void Init(ID3D12Device* _dev, D3D12_DESCRIPTOR_HEAP_TYPE _ty, uint32_t _maxDescriptors, bool _shaderVisible, char const* _debugName);
 	void Shutdown();
 
-	D3D12_CPU_DESCRIPTOR_HANDLE HandleBeginCPU() { return m_heapStartCPU; }
-	D3D12_GPU_DESCRIPTOR_HANDLE HandleBeginGPU() { return m_heapStartGPU; }
+	D3D12_CPU_DESCRIPTOR_HANDLE HandleBeginCPU() const { return m_heapStartCPU; }
+	D3D12_GPU_DESCRIPTOR_HANDLE HandleBeginGPU() const { return m_heapStartGPU; }
 
 	uint32_t MaxDescriptors() const { return m_maxDescriptors; }
 
@@ -66,6 +66,24 @@ private:
 	uint64_t m_handleIncrement = 0;
 	gpu::RingBuffer m_ringBuffer;
 	uint64_t m_endOfFrameHeads[gpu::c_maxBufferedFrames];
+};
+
+// TODO: This is just linear alloc until OOM, free is no-op. Improve me if/when this is a problem! (Buddy block allocator perhaps?)
+struct PersistentDescriptorHeap_D3D12
+{
+	void Init(DescriptorHeap_D3D12* _baseHeap, uint64_t _beginOffsetInDescriptors, uint64_t _numDescriptors);
+
+	bool Alloc(uint32_t _numDescriptors, uint32_t& o_idx);
+
+	void Free(uint32_t _idx);
+
+	DescriptorHeap_D3D12 const& BaseHeap() const { return *m_baseHeap; }
+
+private:
+	DescriptorHeap_D3D12* m_baseHeap = nullptr;
+	uint64_t m_maxDescriptors = 0;
+	uint64_t m_numAllocatedDescriptors = 0;
+	uint64_t m_beginOffsetInDescriptors = 0;
 };
 
 }

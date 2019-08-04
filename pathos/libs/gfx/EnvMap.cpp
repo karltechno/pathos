@@ -1,6 +1,6 @@
 #include "EnvMap.h"
 #include "Texture.h"
-#include "SharedResources.h"
+#include "ResourceManager.h"
 #include "Primitive.h"
 #include "Camera.h"
 
@@ -30,7 +30,7 @@ void CreateCubemapFromEquirect(gpu::cmd::Context* _cmd, gpu::ResourceHandle _inE
 	gpu::GetResourceInfo(_outCubemap, resType, nullptr, &cubeMapDesc);
 	KT_ASSERT(resType == gpu::ResourceType::TextureCube);
 
-	gpu::cmd::SetPSO(_cmd, gfx::GetSharedResources().m_equiRectToCubePso);
+	gpu::cmd::SetPSO(_cmd, gfx::ResourceManager::GetSharedResources().m_equiRectToCubePso);
 	gpu::cmd::ResourceBarrier(_cmd, _outCubemap, gpu::ResourceState::UnorderedAccess);
 	gpu::cmd::ResourceBarrier(_cmd, _inEquirect, gpu::ResourceState::ShaderResource);
 
@@ -62,7 +62,7 @@ void BakeEnvMapGGX(gpu::cmd::Context* _cmd, gpu::ResourceHandle _inCubeMap, gpu:
 
 	// Copy top mip, todo: should probably make function for this pso.
 	{
-		gpu::cmd::SetPSO(_cmd, gfx::GetSharedResources().m_copyTextureArrayPso);
+		gpu::cmd::SetPSO(_cmd, gfx::ResourceManager::GetSharedResources().m_copyTextureArrayPso);
 
 
 		gpu::DescriptorData srv;
@@ -86,7 +86,7 @@ void BakeEnvMapGGX(gpu::cmd::Context* _cmd, gpu::ResourceHandle _inCubeMap, gpu:
 		gpu::cmd::Dispatch(_cmd, ggxDesc.m_width / 8, ggxDesc.m_height / 8, 6);
 	}
 
-	gpu::cmd::SetPSO(_cmd, gfx::GetSharedResources().m_bakeGgxPso);
+	gpu::cmd::SetPSO(_cmd, gfx::ResourceManager::GetSharedResources().m_bakeGgxPso);
 
 	struct  
 	{

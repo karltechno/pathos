@@ -306,41 +306,65 @@ static D3D12_GPU_DESCRIPTOR_HANDLE MakeSRVTable(Context* _ctx, kt::Slice<Descrip
 }
 
 
+// These are due to the currently hardcoded root signature.
+static uint32_t CBVTableIndex(uint32_t _space)
+{
+	return 3 * _space;
+}
+
+static uint32_t SRVTableIndex(uint32_t _space)
+{
+	return 1 + 3 * _space;
+}
+
+static uint32_t UAVTableIndex(uint32_t _space)
+{
+	return 2 + 3 * _space;
+}
+
+
+void SetComputeSRVTable(Context* _ctx, gpu::PersistentDescriptorTableHandle _table, uint32_t _space)
+{
+	AllocatedPersistentDescriptorTable_D3D12* table = _ctx->m_device->m_persistentTableHandles.Lookup(_table);
+	KT_ASSERT(table);
+	_ctx->m_cmdList->SetComputeRootDescriptorTable(SRVTableIndex(_space), table->m_gpuDescriptor);
+}
+
 void SetComputeCBVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space)
 {
-	// TODO: Magic numbers
-	_ctx->m_cmdList->SetComputeRootDescriptorTable(3 * _space, MakeCBVTable(_ctx, _descriptors));
+	_ctx->m_cmdList->SetComputeRootDescriptorTable(CBVTableIndex(_space), MakeCBVTable(_ctx, _descriptors));
 }
 
 void SetComputeSRVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space)
 {
-	// TODO: Magic numbers
-	_ctx->m_cmdList->SetComputeRootDescriptorTable(1 + 3 * _space, MakeSRVTable(_ctx, _descriptors));
+	_ctx->m_cmdList->SetComputeRootDescriptorTable(SRVTableIndex(_space), MakeSRVTable(_ctx, _descriptors));
 }
 
 void SetComputeUAVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space)
 {
-	// TODO: Magic numbers
-	_ctx->m_cmdList->SetComputeRootDescriptorTable(2 + 3 * _space, MakeUAVTable(_ctx, _descriptors));
+	_ctx->m_cmdList->SetComputeRootDescriptorTable(UAVTableIndex(_space), MakeUAVTable(_ctx, _descriptors));
 }
-
 
 void SetGraphicsCBVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space)
 {
-	// TODO: Magic numbers
-	_ctx->m_cmdList->SetGraphicsRootDescriptorTable(3 * _space, MakeCBVTable(_ctx, _descriptors));
+	_ctx->m_cmdList->SetGraphicsRootDescriptorTable(CBVTableIndex(_space), MakeCBVTable(_ctx, _descriptors));
 }
 
 void SetGraphicsUAVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space)
 {
-	// TODO: Magic numbers
-	_ctx->m_cmdList->SetGraphicsRootDescriptorTable(2 + 3 * _space, MakeUAVTable(_ctx, _descriptors));
+	_ctx->m_cmdList->SetGraphicsRootDescriptorTable(UAVTableIndex(_space), MakeUAVTable(_ctx, _descriptors));
 }
 
 void SetGraphicsSRVTable(Context* _ctx, kt::Slice<DescriptorData> const& _descriptors, uint32_t _space)
 {
-	// TODO: Magic numbers
-	_ctx->m_cmdList->SetGraphicsRootDescriptorTable(1 + 3 * _space, MakeSRVTable(_ctx, _descriptors));
+	_ctx->m_cmdList->SetGraphicsRootDescriptorTable(SRVTableIndex(_space), MakeSRVTable(_ctx, _descriptors));
+}
+
+void SetGraphicsSRVTable(Context* _ctx, gpu::PersistentDescriptorTableHandle _table, uint32_t _space)
+{
+	AllocatedPersistentDescriptorTable_D3D12* table = _ctx->m_device->m_persistentTableHandles.Lookup(_table);
+	KT_ASSERT(table);
+	_ctx->m_cmdList->SetGraphicsRootDescriptorTable(SRVTableIndex(_space), table->m_gpuDescriptor);
 }
 
 void DrawIndexedInstanced(Context* _ctx, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startIndex, uint32_t _baseVertex, uint32_t _startInstance)

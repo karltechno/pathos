@@ -52,6 +52,23 @@ using TextureIdx = Index<Texture>;
 using MeshIdx = Index<Mesh>;
 using ModelIdx = Index<Model>;
 
+struct SharedResources
+{
+	gpu::PSORef m_bakeIrradPso;
+	gpu::PSORef m_bakeGgxPso;
+	gpu::PSORef m_equiRectToCubePso;
+
+	gpu::PSORef m_copyTexturePso;
+	gpu::PSORef m_copyTextureArrayPso;
+
+	TextureIdx m_texBlackIdx;
+	TextureIdx m_texWhiteIdx;
+
+	gpu::TextureRef m_ggxLut;
+};
+
+SharedResources const& GetSharedResources();
+
 void Init();
 void Shutdown();
 
@@ -69,6 +86,7 @@ kt::Slice<gfx::Mesh> GetAllMeshes();
 kt::Slice<gfx::Material> GetAllMaterials();
 
 TextureIdx CreateTextureFromFile(char const* _fileName, TextureLoadFlags _flags = TextureLoadFlags::None);
+TextureIdx CreateTextureFromRGBA8(uint8_t const* _texels, uint32_t _width, uint32_t _height, TextureLoadFlags _flags = TextureLoadFlags::None, char const* _debugName = nullptr);
 gfx::Texture* GetTexture(TextureIdx _idx);
 
 MaterialIdx CreateMaterial();

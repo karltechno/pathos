@@ -39,6 +39,8 @@ struct StdStringHashI
 
 struct State
 {
+	static uint32_t constexpr c_maxBindlessTextures = 1024;
+
 	using TextureCache = kt::HashMap<std::string, TextureIdx, StdStringHashI>;
 	using ShaderCache = kt::HashMap<std::string, gpu::ShaderRef, StdStringHashI>;
 
@@ -46,6 +48,10 @@ struct State
 	kt::Array<gfx::Model> m_models;
 	kt::Array<gfx::Texture> m_textures;
 	kt::Array<gfx::Material> m_materials;
+
+	gpu::PersistentDescriptorTableRef m_bindlessTextureHandle;
+
+	SharedResources m_sharedResources;
 
 	// TODO: Doesn't handle different texture load flags (unlikely to be an issue for now).
 	TextureCache m_loadedTextureCache;
@@ -67,16 +73,71 @@ static void CreateMaterialGpuBuffer(uint32_t _maxElems)
 	s_state.m_materialGpuBuf = gpu::CreateBuffer(materialBufferDesc, nullptr, "Material Buffer");
 }
 
+static void InitSharedResources()
+{
+	gpu::ShaderRef irradCs = ResourceManager::LoadShader("shaders/BakeIrradianceMap.cs.cso", gpu::ShaderType::Compute);
+	s_state.m_sharedResources.m_bakeIrradPso = gpu::CreateComputePSO(irradCs, "Bake_Irradiance");
+
+	gpu::ShaderRef ggxMapCs = ResourceManager::LoadShader("shaders/BakeEnvMapGGX.cs.cso", gpu::ShaderType::Compute);
+	s_state.m_sharedResources.m_bakeGgxPso = gpu::CreateComputePSO(ggxMapCs, "Bake_GGX");
+
+	gpu::ShaderRef equics = ResourceManager::LoadShader("shaders/EquirectToCubemap.cs.cso", gpu::ShaderType::Compute);
+	s_state.m_sharedResources.m_equiRectToCubePso = gpu::CreateComputePSO(equics, "Equirect_To_CubeMap");
+
+	gpu::ShaderRef copyTexCs = ResourceManager::LoadShader("shaders/CopyTexture.cs.cso", gpu::ShaderType::Compute);
+	s_state.m_sharedResources.m_copyTexturePso = gpu::CreateComputePSO(copyTexCs, "Copy_Texture");
+
+	gpu::ShaderRef copyTexArrayCs = ResourceManager::LoadShader("shaders/CopyTextureArray.cs.cso", gpu::ShaderType::Compute);
+	s_state.m_sharedResources.m_copyTextureArrayPso = gpu::CreateComputePSO(copyTexArrayCs, "Copy_Texture_Array");
+
+	{
+		uint32_t const c_blackWhiteDim = 4;
+		uint32_t texels[c_blackWhiteDim * c_blackWhiteDim];
+
+		for (uint32_t& t : texels) { t = 0xFFFFFFFF; }
+		s_state.m_sharedResources.m_texWhiteIdx = CreateTextureFromRGBA8((uint8_t const*)texels, c_blackWhiteDim, c_blackWhiteDim, TextureLoadFlags::None, "White_Tex");
+
+		for (uint32_t& t : texels) { t = 0xFF000000; }
+		s_state.m_sharedResources.m_texBlackIdx = CreateTextureFromRGBA8((uint8_t const*)texels, c_blackWhiteDim, c_blackWhiteDim, TextureLoadFlags::None, "Black_Tex");
+	}
+
+	{
+		gpu::cmd::Context* cmdList = gpu::GetMainThreadCommandCtx();
+		gpu::TextureDesc const desc = gpu::TextureDesc::Desc2D(256, 256, gpu::TextureUsageFlags::UnorderedAccess | gpu::TextureUsageFlags::ShaderResource, gpu::Format::R16B16_Float);
+		s_state.m_sharedResources.m_ggxLut = gpu::CreateTexture(desc, nullptr, "GGX_BRDF_LUT");
+		gpu::cmd::ResourceBarrier(cmdList, s_state.m_sharedResources.m_ggxLut, gpu::ResourceState::UnorderedAccess);
+
+		gpu::ShaderRef ggxLutCs = ResourceManager::LoadShader("shaders/BakeGGXLut.cs.cso", gpu::ShaderType::Compute);
+		gpu::PSORef ggxLutPso = gpu::CreateComputePSO(ggxLutCs, "GGX_Lut_Bake");
+
+		gpu::cmd::SetPSO(cmdList, ggxLutPso);
+		gpu::DescriptorData uav;
+		uav.Set(s_state.m_sharedResources.m_ggxLut);
+		gpu::cmd::SetComputeUAVTable(cmdList, uav, 0);
+		gpu::cmd::Dispatch(cmdList, 256 / 8, 256 / 8, 1);
+		gpu::cmd::ResourceBarrier(cmdList, s_state.m_sharedResources.m_ggxLut, gpu::ResourceState::ShaderResource);
+	}
+}
+
+gfx::ResourceManager::SharedResources const& GetSharedResources()
+{
+	return s_state.m_sharedResources;
+}
+
 void Init()
 {
 	s_state.m_meshes.Reserve(1024);
-	s_state.m_textures.Reserve(1024);
+	s_state.m_textures.Reserve(State::c_maxBindlessTextures);
 	s_state.m_materials.Reserve(1024);
 	s_state.m_loadedTextureCache.Reserve(512);
+
+	s_state.m_bindlessTextureHandle = gpu::CreatePersistentDescriptorTable(State::c_maxBindlessTextures);
 
 	CreateMaterialGpuBuffer(s_state.m_materials.Capacity());
 
 	s_state.m_shaderWatcher = core::CreateFolderWatcher(kt::FilePath("shaders/"));
+
+	InitSharedResources();
 }
 
 void Shutdown()
@@ -248,8 +309,19 @@ TextureIdx CreateTextureFromFile(char const* _fileName, TextureLoadFlags _flags 
 	Texture& tex = s_state.m_textures.PushBack();
 	tex.LoadFromFile(_fileName, _flags);
 
+	gpu::SetPersistentTableSRV(s_state.m_bindlessTextureHandle, tex.m_gpuTex, idx.idx);
+
 	kt::FilePath fp(_fileName);
 	s_state.m_loadedTextureCache.Insert(std::string(fp.Data()), idx);
+	return idx;
+}
+
+gfx::ResourceManager::TextureIdx CreateTextureFromRGBA8(uint8_t const* _texels, uint32_t _width, uint32_t _height, TextureLoadFlags _flags, char const* _debugName)
+{
+	TextureIdx const idx = TextureIdx(uint16_t(s_state.m_textures.Size()));
+	Texture& tex = s_state.m_textures.PushBack();
+	tex.LoadFromRGBA8(_texels, _width, _height, _flags, _debugName);
+	gpu::SetPersistentTableSRV(s_state.m_bindlessTextureHandle, tex.m_gpuTex, idx.idx);
 	return idx;
 }
 

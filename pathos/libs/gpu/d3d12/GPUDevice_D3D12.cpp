@@ -401,6 +401,44 @@ struct AllocatedShader_D3D12 : AllocatedObjectBase_D3D12
 	kt::InplaceArray<PSOHandle, 4> m_linkedPsos;
 };
 
+bool AllocatedPersistentDescriptorTable_D3D12::Init(uint32_t _numDescriptors)
+{
+	bool const ok = g_device->m_persistentCbvSrvUavAllocator.Alloc(_numDescriptors, m_idx);
+	if (!ok)
+	{
+		KT_ASSERT(!"Not enough descriptor handles left!");
+		return false;
+	}
+
+	m_numDescriptors = _numDescriptors;
+	m_gpuDescriptor = g_device->m_persistentCbvSrvUavAllocator.BaseHeap().IndexToGPUPtr(m_idx);
+	m_cpuDescriptor = g_device->m_persistentCbvSrvUavAllocator.BaseHeap().IndexToCPUPtr(m_idx);
+
+	AllocatedObjectBase_D3D12::Init();
+	return true;
+}
+
+void AllocatedPersistentDescriptorTable_D3D12::Destroy()
+{
+	g_device->m_persistentCbvSrvUavAllocator.Free(m_idx);
+	m_idx = UINT32_MAX;
+}
+
+void SetPersistentTableSRV(gpu::PersistentDescriptorTableHandle _table, gpu::ResourceHandle _resource, uint32_t _idx)
+{
+	AllocatedPersistentDescriptorTable_D3D12* table = g_device->m_persistentTableHandles.Lookup(_table);
+	AllocatedResource_D3D12* res = g_device->m_resourceHandles.Lookup(_resource);
+
+	KT_ASSERT(table);
+	KT_ASSERT(res);
+	KT_ASSERT(res->m_srv.ptr);
+
+	KT_ASSERT(_idx < table->m_numDescriptors);
+
+	uint64_t const increment = g_device->m_persistentCbvSrvUavAllocator.BaseHeap().m_descriptorIncrementSize;
+	g_device->m_d3dDev->CopyDescriptorsSimple(1, D3D12_CPU_DESCRIPTOR_HANDLE{ table->m_cpuDescriptor.ptr + _idx * increment }, res->m_srv, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+}
+
 static ID3D12PipelineState* CreateD3DComputePSO(ID3D12Device* _device, gpu::ShaderBytecode const& _cs)
 {
 	D3D12_COMPUTE_PIPELINE_STATE_DESC desc{};
@@ -1196,7 +1234,8 @@ static void CreateRootSigs(ID3D12Device* _dev, ID3D12RootSignature*& o_gfx, ID3D
 		samplers[5].ComparisonFunc = D3D12_COMPARISON_FUNC_LESS;
 	}
 
-	D3D12_ROOT_PARAMETER tables[3 * c_numShaderSpaces];
+	D3D12_ROOT_PARAMETER tables[3 * c_numShaderSpaces + 1];
+	D3D12_DESCRIPTOR_RANGE bindlessSrvRange;
 	D3D12_DESCRIPTOR_RANGE ranges[3 * c_numShaderSpaces];
 
 	graphicsDesc.pParameters = tables;
@@ -1210,6 +1249,21 @@ static void CreateRootSigs(ID3D12Device* _dev, ID3D12RootSignature*& o_gfx, ID3D
 	// SRV Table (t0 - t16) space0
 	// UAV Table (u0 - u16) space0
 	// Repeat to space n.
+	// Then bindless (t0) space16, very arbitrary for now.
+
+	tables[3 * c_numShaderSpaces].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	tables[3 * c_numShaderSpaces].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	tables[3 * c_numShaderSpaces].DescriptorTable.pDescriptorRanges = &bindlessSrvRange;
+	tables[3 * c_numShaderSpaces].DescriptorTable.NumDescriptorRanges = 1;
+
+	uint32_t constexpr c_bindlessSrvSpace = 16;
+
+	bindlessSrvRange.BaseShaderRegister = 0;
+	bindlessSrvRange.NumDescriptors = ~UINT(0);
+	bindlessSrvRange.OffsetInDescriptorsFromTableStart = 0;
+	bindlessSrvRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	bindlessSrvRange.RegisterSpace = c_bindlessSrvSpace;
+
 
 	for (uint32_t i = 0; i < c_numShaderSpaces; ++i)
 	{
@@ -1290,7 +1344,9 @@ void Device_D3D12::InitDescriptorHeaps()
 		m_stagingHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 2048, false, "CBV/SRV/UAV Staging Heap");
 	}
 
-	uint32_t constexpr c_totalCbvSrvUavDescriptors = 4096 * 4;
+	uint32_t constexpr c_numPersistentCbvSrvUavDescriptors = 4096;
+
+	uint32_t constexpr c_totalCbvSrvUavDescriptors = 4096 * 4 + c_numPersistentCbvSrvUavDescriptors;
 
 	m_cbvsrvuavHeap.Init(m_d3dDev, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, c_totalCbvSrvUavDescriptors, true, "CBV/SRV/UAV GPU Heap");
 
@@ -1314,6 +1370,8 @@ void Device_D3D12::InitDescriptorHeaps()
 	m_d3dDev->CreateShaderResourceView(nullptr, &srvDesc, m_nullSrv);
 
 	// Create null tables
+	uint32_t currentTableOffset = 0;
+
 	uint32_t const totalNullDescriptors = gpu::c_uavTableSize + gpu::c_srvTableSize + gpu::c_cbvTableSize;
 	D3D12_CPU_DESCRIPTOR_HANDLE nullTableBeginCpu = m_cbvsrvuavHeap.HandleBeginCPU();
 	D3D12_GPU_DESCRIPTOR_HANDLE nullTableBeginGpu = m_cbvsrvuavHeap.HandleBeginGPU();
@@ -1342,7 +1400,13 @@ void Device_D3D12::InitDescriptorHeaps()
 		nullTableBeginGpu.ptr += m_cbvsrvuavHeap.m_descriptorIncrementSize;
 	}
 
-	m_descriptorcbvsrvuavRingBuffer.Init(&m_cbvsrvuavHeap, totalNullDescriptors, c_totalCbvSrvUavDescriptors - totalNullDescriptors);
+	currentTableOffset += totalNullDescriptors;
+
+	m_persistentCbvSrvUavAllocator.Init(&m_cbvsrvuavHeap, currentTableOffset, c_numPersistentCbvSrvUavDescriptors);
+	currentTableOffset += c_numPersistentCbvSrvUavDescriptors;
+
+	// Give ring buffer the rest.
+	m_descriptorcbvsrvuavRingBuffer.Init(&m_cbvsrvuavHeap, currentTableOffset, c_totalCbvSrvUavDescriptors - currentTableOffset);
 }
 
 static void InitMipPsos(Device_D3D12* _dev)
@@ -1374,6 +1438,7 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 	m_resourceHandles.Init(kt::GetDefaultAllocator(), 1024 * 8);
 	m_shaderHandles.Init(kt::GetDefaultAllocator(), 1024);
 	m_psoHandles.Init(kt::GetDefaultAllocator(), 1024);
+	m_persistentTableHandles.Init(kt::GetDefaultAllocator(), 256);
 
 	m_withDebugLayer = _useDebugLayer;
 
@@ -1699,6 +1764,25 @@ gpu::PSOHandle CreateComputePSO(gpu::ShaderHandle _shader, char const* _name)
 	}
 }
 
+gpu::PersistentDescriptorTableHandle CreatePersistentDescriptorTable(uint32_t _descriptorCount)
+{
+	AllocatedPersistentDescriptorTable_D3D12* table;
+	gpu::PersistentDescriptorTableHandle handle = PersistentDescriptorTableHandle{ g_device->m_persistentTableHandles.Alloc(table) };
+
+	if(!handle.IsValid())
+	{
+		return handle;
+	}
+
+	if (!table->Init(_descriptorCount))
+	{
+		g_device->m_persistentTableHandles.Free(handle);
+		return gpu::PersistentDescriptorTableHandle{};
+	}
+
+	return handle;
+}
+
 void SetVsyncEnabled(bool _vsync)
 {
 	g_device->m_vsync = _vsync;
@@ -1813,6 +1897,11 @@ void AddRef(gpu::ShaderHandle _handle)
 	AddRefImpl(_handle, g_device->m_shaderHandles);
 }
 
+void AddRef(gpu::PersistentDescriptorTableHandle _handle)
+{
+	AddRefImpl(_handle, g_device->m_persistentTableHandles);
+}
+
 void AddRef(gpu::PSOHandle _handle)
 {
 	AddRefImpl(_handle, g_device->m_psoHandles);
@@ -1831,6 +1920,11 @@ void Release(gpu::ShaderHandle _handle)
 void Release(gpu::PSOHandle _handle)
 {
 	ReleaseRefImpl(_handle, g_device->m_psoHandles);
+}
+
+void Release(gpu::PersistentDescriptorTableHandle _handle)
+{
+	ReleaseRefImpl(_handle, g_device->m_persistentTableHandles);
 }
 
 bool Init(void* _nwh)
@@ -2112,7 +2206,6 @@ bool GetShaderInfo(ShaderHandle _handle, ShaderType& o_type, char const*& o_name
 
 	return false;
 }
-
 
 
 }

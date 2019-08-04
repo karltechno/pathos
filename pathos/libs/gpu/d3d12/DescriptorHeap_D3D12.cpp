@@ -90,7 +90,6 @@ void FreeListDescriptorHeap_D3D12::Free(D3D12_CPU_DESCRIPTOR_HANDLE _ptr)
 	m_freeList.PushBack(m_heap.CPUPtrToIndex(_ptr));
 }
 
-
 void RingBufferDescriptorHeap_D3D12::Init(DescriptorHeap_D3D12* _baseHeap, uint64_t _beginOffsetInDescriptors, uint64_t _numDescriptors)
 {
 	uint64_t const byteBeginOffset = _beginOffsetInDescriptors * _baseHeap->m_descriptorIncrementSize;
@@ -129,6 +128,33 @@ void RingBufferDescriptorHeap_D3D12::OnBeginFrame(uint32_t _frameIdx)
 void RingBufferDescriptorHeap_D3D12::OnEndOfFrame(uint32_t _frameIdx)
 {
 	m_endOfFrameHeads[_frameIdx] = m_ringBuffer.CurrentHead();
+}
+
+void PersistentDescriptorHeap_D3D12::Init(DescriptorHeap_D3D12* _baseHeap, uint64_t _beginOffsetInDescriptors, uint64_t _numDescriptors)
+{
+	m_baseHeap = _baseHeap;
+	m_beginOffsetInDescriptors = _beginOffsetInDescriptors;
+	m_numAllocatedDescriptors = 0;
+	m_maxDescriptors = _numDescriptors;
+}
+
+bool PersistentDescriptorHeap_D3D12::Alloc(uint32_t _numDescriptors, uint32_t& o_idx)
+{
+	if (m_maxDescriptors - m_numAllocatedDescriptors < _numDescriptors)
+	{
+		o_idx = UINT32_MAX;
+		KT_ASSERT(false);
+		return false;
+	}
+
+	o_idx = uint32_t(m_beginOffsetInDescriptors + m_numAllocatedDescriptors);
+	m_numAllocatedDescriptors += _numDescriptors;
+	return true;
+}
+
+void PersistentDescriptorHeap_D3D12::Free(uint32_t _idx)
+{
+	KT_UNUSED(_idx);
 }
 
 }

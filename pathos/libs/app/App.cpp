@@ -8,7 +8,7 @@
 #include <input/Input.h>
 #include <gfx/DebugRender.h>
 #include <gfx/Scene.h>
-#include <gfx/SharedResources.h>
+#include <gfx/ResourceManager.h>
 #include <gpu/GPUDevice.h>
 
 #include <kt/Macros.h>
@@ -57,7 +57,6 @@ void PATHOS_SHUTDOWN()
 	std::quick_exit(0);
 #else
 	gfx::DebugRender::Shutdown();
-	gfx::ShutdownSharedResources();
 	core::ShutdownCVars();
 	editor::Shutdown();
 	gpu::Shutdown();
@@ -71,8 +70,6 @@ void GraphicsApp::SubsystemPreable(int _argc, char** _argv)
 {
 	KT_UNUSED2(_argc, _argv);
 
-	gfx::ResourceManager::Init();
-
 	input::Init(m_window.nwh, [this](input::Event const& _ev)
 	{
 		if (!editor::HandleInputEvent(_ev))
@@ -85,7 +82,6 @@ void GraphicsApp::SubsystemPreable(int _argc, char** _argv)
 void GraphicsApp::SubsystemPostable()
 {
 	input::Shutdown();
-	gfx::ResourceManager::Shutdown();
 }
 
 
@@ -105,7 +101,7 @@ void GraphicsApp::Go(WindowHandle _wh, int _argc, char** _argv)
 
 	// Setup derived.
 	gpu::BeginFrame();
-	gfx::InitSharedResources();
+	gfx::ResourceManager::Init();
 	Setup();
 	gpu::EndFrame();
 
@@ -136,6 +132,7 @@ void GraphicsApp::Go(WindowHandle _wh, int _argc, char** _argv)
 	} while (m_keepAlive);
 
 	Shutdown();
+	gfx::ResourceManager::Shutdown();
 
 	m_gpuDebugWindow.Unregister();
 
