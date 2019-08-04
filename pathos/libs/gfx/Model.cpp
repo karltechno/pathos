@@ -218,6 +218,15 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data, kt::Slice<ResourceManag
 		_model->m_meshes.PushBack(gfx::ResourceManager::CreateMesh());
 		gfx::Mesh& mesh = *gfx::ResourceManager::GetMesh(_model->m_meshes.Back());
 		cgltf_mesh& gltfMesh = _data->meshes[gltfMeshIdx];
+		
+		if (gltfMesh.name)
+		{
+			mesh.m_name = gltfMesh.name;
+		}
+		else
+		{
+			mesh.m_name.AppendFmt("%s_mesh%u", _model->m_name.c_str(), uint32_t(gltfMeshIdx));
+		}
 
 		for (cgltf_size primIdx = 0; primIdx < gltfMesh.primitives_count; ++primIdx)
 		{
@@ -387,9 +396,9 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data, kt::Slice<ResourceManag
 	return true;
 }
 
-void Mesh::CreateGPUBuffers(bool _keepDataOnCpu, kt::StringView _debugNamePrefix)
+void Mesh::CreateGPUBuffers(bool _keepDataOnCpu)
 {
-	kt::StringView const baseDebugName = _debugNamePrefix.Empty() ? kt::StringView("UNKNOWN") : _debugNamePrefix;
+	char const* const baseDebugName = m_name.Empty() ? "UNKNOWN" : m_name.Data();
 	kt::String64 name;
 	name.Append(baseDebugName);
 
@@ -563,7 +572,7 @@ void SerializeMaterial(kt::ISerializer* _s, Material& _mat)
 	serializeTex(_mat.m_textures[Material::Occlusion], c_occlusionTexLoadFlags);
 }
 
-uint32_t constexpr c_modelCacheVersion = 7;
+uint32_t constexpr c_modelCacheVersion = 8;
 
 static void SerializeMesh(kt::ISerializer* _s, Mesh& _mesh)
 {

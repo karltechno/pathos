@@ -26,7 +26,7 @@ struct TangentSpace
 
 struct Mesh
 {
-	void CreateGPUBuffers(bool _keepDataOnCpu = false, kt::StringView _debugNamePrefix = kt::StringView{});
+	void CreateGPUBuffers(bool _keepDataOnCpu = false);
 
 	struct SubMesh
 	{
@@ -37,6 +37,7 @@ struct Mesh
 	};
 
 	kt::AABB m_boundingBox;
+	kt::String64 m_name;
 
 	kt::Array<kt::Vec3> m_posStream;
 	kt::Array<TangentSpace> m_tangentStream;
