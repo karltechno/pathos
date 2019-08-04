@@ -478,12 +478,22 @@ static ResourceManager::TextureIdx LoadTexture(char const* _gltfPath, char const
 	return LoadTexture(path.Data(), _loadFlags);
 }
 
-static void LoadMaterials(cgltf_data* _data, char const* _basePath, kt::Slice<ResourceManager::MaterialIdx> const& _materialIndicies)
+static void LoadMaterials(Model* io_model, cgltf_data* _data, char const* _basePath, kt::Slice<ResourceManager::MaterialIdx> const& _materialIndicies)
 {
 	for (uint32_t materialIdx = 0; materialIdx < _data->materials_count; ++materialIdx)
 	{
 		gfx::Material& modelMat = *ResourceManager::GetMaterial(_materialIndicies[materialIdx]);
 		cgltf_material const& gltfMat = _data->materials[materialIdx];
+
+		if (gltfMat.name)
+		{
+			modelMat.m_name = gltfMat.name;
+		}
+		else
+		{
+			modelMat.m_name.AppendFmt("%s_mat%u", io_model->m_name.c_str(), materialIdx);
+		}
+
 		if (gltfMat.has_pbr_metallic_roughness)
 		{
 			cgltf_pbr_metallic_roughness const& pbrMetalRough = gltfMat.pbr_metallic_roughness;
@@ -537,6 +547,7 @@ static void LoadMaterials(cgltf_data* _data, char const* _basePath, kt::Slice<Re
 void SerializeMaterial(kt::ISerializer* _s, Material& _mat)
 {
 	kt::Serialize(_s, _mat.m_params);
+	kt::Serialize(_s, _mat.m_name);
 
 	auto serializeTex = [&_s, &_mat](ResourceManager::TextureIdx& _handle, TextureLoadFlags _flags)
 	{
@@ -572,7 +583,7 @@ void SerializeMaterial(kt::ISerializer* _s, Material& _mat)
 	serializeTex(_mat.m_textures[Material::Occlusion], c_occlusionTexLoadFlags);
 }
 
-uint32_t constexpr c_modelCacheVersion = 8;
+uint32_t constexpr c_modelCacheVersion = 9;
 
 static void SerializeMesh(kt::ISerializer* _s, Mesh& _mesh)
 {
@@ -743,7 +754,7 @@ bool Model::LoadFromGLTF(char const* _path)
 		materialIdx = ResourceManager::CreateMaterial();
 	}
 
-	LoadMaterials(data, _path, materialSlice);
+	LoadMaterials(this, data, _path, materialSlice);
 
 	if (!LoadMeshes(this, data, materialSlice))
 	{

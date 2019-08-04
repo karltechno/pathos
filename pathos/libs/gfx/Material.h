@@ -2,6 +2,7 @@
 #include <kt/Vec4.h>
 
 #include <gfx/Texture.h>
+#include <kt/Strings.h>
 
 namespace gfx
 {
@@ -41,6 +42,8 @@ struct Material
 	Params m_params;
 
 	ResourceManager::TextureIdx m_textures[TextureType::Num_TextureType];
+
+	kt::String64 m_name;
 };
 
 

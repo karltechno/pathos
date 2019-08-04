@@ -229,6 +229,11 @@ kt::Slice<gfx::Mesh> GetAllMeshes()
 	return kt::MakeSlice(s_state.m_meshes.Begin(), s_state.m_meshes.End());
 }
 
+kt::Slice<gfx::Material> GetAllMaterials()
+{
+	return kt::MakeSlice(s_state.m_materials.Begin(), s_state.m_materials.End());
+}
+
 TextureIdx CreateTextureFromFile(char const* _fileName, TextureLoadFlags _flags /*= TextureLoadFlags::None*/)
 {
 	// TODO: Unecessary string alloc/hash map lookup.

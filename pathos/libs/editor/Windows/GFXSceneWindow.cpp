@@ -2,6 +2,7 @@
 
 #include <gfx/Scene.h>
 #include <gfx/Camera.h>
+#include <gfx/Material.h>
 #include <gfx/Model.h>
 #include <gfx/DebugRender.h>
 #include <gfx/ResourceManager.h>
@@ -152,6 +153,45 @@ static void DrawLightsTab(GFXSceneWindow* _window)
 	ImGui::Columns();
 }
 
+static void DrawMaterialsTab(GFXSceneWindow* _window)
+{
+	ImGui::Columns(2);
+
+	kt::Slice<gfx::Material> materials = gfx::ResourceManager::GetAllMaterials();
+
+	for (uint32_t i = 0; i < materials.Size(); ++i)
+	{
+		ImGui::PushID(i);
+		if (ImGui::Selectable(materials[i].m_name.Data(), _window->m_selectedMaterialidx == i))
+		{
+			_window->m_selectedMaterialidx = i;
+		}
+		ImGui::PopID();
+	}
+
+	ImGui::NextColumn();
+
+	if (_window->m_selectedMaterialidx < materials.Size())
+	{
+		bool edited = false;
+		gfx::Material& mat = materials[_window->m_selectedMaterialidx];
+		edited |= ImGui::ColorEdit4("Base Colour", (float*)&mat.m_params.m_baseColour);
+		edited |= ImGui::SliderFloat("Roughness", &mat.m_params.m_roughnessFactor, 0.0f, 1.0f);
+		edited |= ImGui::SliderFloat("Metallic", &mat.m_params.m_metallicFactor, 0.0f, 1.0f);
+		edited |= ImGui::SliderFloat("Alpha Cutoff", &mat.m_params.m_alphaCutoff, 0.0f, 1.0f);
+		if (edited)
+		{
+			gfx::ResourceManager::SetMaterialsDirty();
+		}
+	}
+	else
+	{
+		ImGui::Text("No material selected");
+	}
+
+	ImGui::Columns();
+}
+
 void GFXSceneWindow::Draw(float _dt)
 {
 	KT_UNUSED(_dt);
@@ -203,6 +243,12 @@ void GFXSceneWindow::Draw(float _dt)
 		if (ImGui::BeginTabItem("Lights"))
 		{
 			DrawLightsTab(this);
+			ImGui::EndTabItem();
+		}
+
+		if (ImGui::BeginTabItem("Materials"))
+		{
+			DrawMaterialsTab(this);
 			ImGui::EndTabItem();
 		}
 

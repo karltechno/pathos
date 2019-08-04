@@ -27,6 +27,7 @@ struct GFXSceneWindow
 
 	uint32_t m_selectedLightIdx = 0xFFFFFFFF;
 	uint32_t m_selectedInstanceIdx = 0xFFFFFFFF;
+	uint32_t m_selectedMaterialidx = 0xFFFFFFFF;
 
 	editor::ImGuiWindowHandle m_windowHandle;
 

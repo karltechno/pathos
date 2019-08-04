@@ -66,6 +66,7 @@ gfx::Model* GetModel(ModelIdx _idx);
 
 kt::Slice<gfx::Model> GetAllModels();
 kt::Slice<gfx::Mesh> GetAllMeshes();
+kt::Slice<gfx::Material> GetAllMaterials();
 
 TextureIdx CreateTextureFromFile(char const* _fileName, TextureLoadFlags _flags = TextureLoadFlags::None);
 gfx::Texture* GetTexture(TextureIdx _idx);
