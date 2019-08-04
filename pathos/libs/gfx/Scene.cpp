@@ -107,7 +107,7 @@ void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera cons
 
 		for (uint32_t cascadeIdx = 0; cascadeIdx < c_numShadowCascades; ++cascadeIdx)
 		{
-			m_frameConstants.cascadeMatricies[cascadeIdx] = kt::Mul(gfx::NDC_To_UV_Matrix(), m_shadowCascades[cascadeIdx].GetViewProj());
+			m_frameConstants.cascadeMatrices[cascadeIdx] = kt::Mul(gfx::NDC_To_UV_Matrix(), m_shadowCascades[cascadeIdx].GetViewProj());
 		}
 	}
 
@@ -255,13 +255,21 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 			gpu::cmd::SetVertexBuffer(_ctx, 1, mesh.m_tangentGpuBuf);
 			gpu::cmd::SetVertexBuffer(_ctx, 2, mesh.m_uv0GpuBuf);
 		}
-
+		uint32_t lastMaterialIdx = UINT32_MAX;
 		for (gfx::Mesh::SubMesh const& subMesh : mesh.m_subMeshes)
 		{
 			gfx::Material const& mat = *ResourceManager::GetMaterial(subMesh.m_materialIdx);
 
 			if (!_shadowMap)
 			{
+				if (subMesh.m_materialIdx.idx != lastMaterialIdx)
+				{
+					lastMaterialIdx = subMesh.m_materialIdx.idx;
+					gpu::DescriptorData cbvBatch;
+					cbvBatch.Set(&lastMaterialIdx, sizeof(lastMaterialIdx));
+					gpu::cmd::SetGraphicsCBVTable(_ctx, cbvBatch, 0);
+				}
+
 				gpu::DescriptorData descriptors[4];
 				descriptors[0].Set(GetTextureHandleOrNull(mat.m_textures[gfx::Material::Albedo]));
 				descriptors[1].Set(GetTextureHandleOrNull(mat.m_textures[gfx::Material::Normal]));
@@ -269,7 +277,6 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 				descriptors[3].Set(GetTextureHandleOrNull(mat.m_textures[gfx::Material::Occlusion]));
 				gpu::cmd::SetGraphicsSRVTable(_ctx, descriptors, 0);
 			}
-
 
 			gpu::cmd::DrawIndexedInstanced(_ctx, subMesh.m_numIndices, numInstances, subMesh.m_indexBufferStartOffset, 0, batchInstanceBegin);
 		}

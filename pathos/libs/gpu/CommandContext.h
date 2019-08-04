@@ -61,6 +61,8 @@ void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth, uint32_
 
 // Merge functions?
 void UpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem, uint32_t _size, uint32_t _destOffset = 0);
+kt::Slice<uint8_t> BeginUpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _size, uint32_t _destOffset = 0);
+void EndUpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _handle);
 
 void UpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _mem, uint32_t _size);
 kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _size);

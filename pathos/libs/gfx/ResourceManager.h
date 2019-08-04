@@ -55,7 +55,7 @@ using ModelIdx = Index<Model>;
 void Init();
 void Shutdown();
 
-void UpdateHotReload();
+void Update();
 
 MeshIdx CreateMesh();
 gfx::Mesh* GetMesh(MeshIdx _idx);
@@ -72,6 +72,9 @@ gfx::Texture* GetTexture(TextureIdx _idx);
 
 MaterialIdx CreateMaterial();
 Material* GetMaterial(MaterialIdx _idx);
+void SetMaterialsDirty();
+
+gpu::BufferRef GetMaterialGpuBuffer();
 
 gpu::ShaderHandle LoadShader(char const* _path, gpu::ShaderType _type);
 }

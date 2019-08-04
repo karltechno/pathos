@@ -1,8 +1,6 @@
 #include "shaderlib/CommonShared.h"
 #include "shaderlib/ShaderOutput.hlsli"
 
-
-ConstantBuffer<BatchConstants> g_batch : register(b0, space0);
 ConstantBuffer<FrameConstants> g_frame : register(b0, space1);
 
 float3 TransformInstanceData_Point(VSIn_ObjectFullInstanced _input, float3 _p)

@@ -1,8 +1,10 @@
 #include "ResourceManager.h"
 
 #include <string>
+#include <stddef.h>
 
 #include <core/FolderWatcher.h>
+#include <shaderlib/CommonShared.h>
 
 #include <kt/Strings.h>
 #include <kt/HashMap.h>
@@ -47,11 +49,23 @@ struct State
 
 	// TODO: Doesn't handle different texture load flags (unlikely to be an issue for now).
 	TextureCache m_loadedTextureCache;
-
 	ShaderCache m_shaderCache;
 
+	gpu::BufferRef m_materialGpuBuf;
+
 	core::FolderWatcher* m_shaderWatcher;
+
+	bool m_materialsDirty = false;
 } s_state;
+
+static void CreateMaterialGpuBuffer(uint32_t _maxElems)
+{
+	gpu::BufferDesc materialBufferDesc;
+	materialBufferDesc.m_strideInBytes = sizeof(shaderlib::MaterialData);
+	materialBufferDesc.m_sizeInBytes = _maxElems * sizeof(shaderlib::MaterialData);
+	materialBufferDesc.m_flags = gpu::BufferFlags::ShaderResource | gpu::BufferFlags::Dynamic;
+	s_state.m_materialGpuBuf = gpu::CreateBuffer(materialBufferDesc, nullptr, "Material Buffer");
+}
 
 void Init()
 {
@@ -59,6 +73,8 @@ void Init()
 	s_state.m_textures.Reserve(1024);
 	s_state.m_materials.Reserve(1024);
 	s_state.m_loadedTextureCache.Reserve(512);
+
+	CreateMaterialGpuBuffer(s_state.m_materials.Capacity());
 
 	s_state.m_shaderWatcher = core::CreateFolderWatcher(kt::FilePath("shaders/"));
 }
@@ -87,7 +103,7 @@ static kt::Array<uint8_t> ReadEntireFile(char const* _path)
 	return ret;
 }
 
-void UpdateHotReload()
+void Update()
 {
 	core::UpdateFolderWatcher(s_state.m_shaderWatcher, [](char const* _changedPath)
 	{
@@ -113,6 +129,51 @@ void UpdateHotReload()
 			gpu::ReloadShader(it->m_val, bytecode);
 		}
 	});
+
+	if (s_state.m_materialsDirty)
+	{
+		gpu::ResourceType ty;
+		gpu::BufferDesc desc;
+		gpu::GetResourceInfo(s_state.m_materialGpuBuf, ty, &desc);
+
+		// ensure we have enough space.
+		uint32_t const gpuElementMax = desc.m_sizeInBytes / sizeof(shaderlib::MaterialData);
+		if (gpuElementMax < s_state.m_materials.Size())
+		{
+			CreateMaterialGpuBuffer(s_state.m_materials.Size() + s_state.m_materials.Size() / 4);
+		}
+
+		gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
+
+		// TODO: We don't need to update everything if we just appended some materials, but whatever.
+
+		uint32_t const updateSize = s_state.m_materials.Size() * sizeof(shaderlib::MaterialData);
+		
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_materialGpuBuf, gpu::ResourceState::CopyDest);
+		gpu::cmd::FlushBarriers(ctx);
+		shaderlib::MaterialData* materialGpuPtr = (shaderlib::MaterialData*)gpu::cmd::BeginUpdateDynamicBuffer(ctx, s_state.m_materialGpuBuf, updateSize).Data();
+
+		for (gfx::Material const& mat : s_state.m_materials)
+		{
+			uint32_t constexpr memcpySize = sizeof(shaderlib::MaterialData::baseColour)
+				+ sizeof(shaderlib::MaterialData::roughness)
+				+ sizeof(shaderlib::MaterialData::metalness)
+				+ sizeof(shaderlib::MaterialData::alphaCutoff);
+
+			static_assert(offsetof(gfx::Material::Params, m_baseColour)			==	offsetof(shaderlib::MaterialData, baseColour), "Material mismatch.");
+			static_assert(offsetof(gfx::Material::Params, m_roughnessFactor)	==	offsetof(shaderlib::MaterialData, roughness), "Material mismatch.");
+			static_assert(offsetof(gfx::Material::Params, m_metallicFactor)		==	offsetof(shaderlib::MaterialData, metalness), "Material mismatch.");
+			static_assert(offsetof(gfx::Material::Params, m_alphaCutoff)		==	offsetof(shaderlib::MaterialData, alphaCutoff), "Material mismatch.");
+			
+			memcpy((void*)materialGpuPtr, &mat.m_params, memcpySize);
+			++materialGpuPtr;
+		}
+
+		gpu::cmd::EndUpdateDynamicBuffer(ctx, s_state.m_materialGpuBuf);
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_materialGpuBuf, gpu::ResourceState::ShaderResource);
+
+		s_state.m_materialsDirty = false;
+	}
 }
 
 MeshIdx CreateMesh()
@@ -202,6 +263,7 @@ MaterialIdx CreateMaterial()
 {
 	MaterialIdx const idx = MaterialIdx(uint16_t(s_state.m_materials.Size()));
 	s_state.m_materials.PushBack();
+	SetMaterialsDirty();
 	return idx;
 }
 
@@ -214,6 +276,16 @@ gfx::Material* GetMaterial(MaterialIdx _idx)
 
 	KT_ASSERT(_idx.idx < s_state.m_materials.Size());
 	return &s_state.m_materials[_idx.idx];
+}
+
+void SetMaterialsDirty()
+{
+	s_state.m_materialsDirty = true;
+}
+
+gpu::BufferRef GetMaterialGpuBuffer()
+{
+	return s_state.m_materialGpuBuf;
 }
 
 gpu::ShaderHandle LoadShader(char const* _path, gpu::ShaderType _type)

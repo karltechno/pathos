@@ -1,6 +1,6 @@
 #ifndef LIGHTING_COMMON_H
 #define LIGHTING_COMMON_H
-#include "LightingStructs.h"
+#include "CommonShared.h"
 #include "Constants.hlsli"
 #include "GlobalSamplers.hlsli"
 

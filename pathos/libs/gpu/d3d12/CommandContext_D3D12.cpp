@@ -102,6 +102,7 @@ CommandContext_D3D12::CommandContext_D3D12(ContextType _type, Device_D3D12* _dev
 CommandContext_D3D12::~CommandContext_D3D12()
 {
 	// Todo: reclaim?
+	KT_ASSERT(m_state.m_pendingUploads.Size() == 0);
 	SafeReleaseDX(m_cmdList);
 }
 
@@ -387,6 +388,51 @@ void UpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _handle, void const* _
 	_ctx->m_cmdList->CopyBufferRegion(res->m_res, _destOffset, scratch.m_res, scratch.m_offset, _size);
 }
 
+kt::Slice<uint8_t> BeginUpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _size, uint32_t _offset)
+{
+	// Should this be done on the copy queue and synchronized?
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Copy);
+	KT_ASSERT(_ctx->m_device->m_resourceHandles.IsValid(_handle));
+	AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
+	KT_ASSERT(!!(res->m_bufferDesc.m_flags & BufferFlags::Dynamic));
+
+#if KT_DEBUG
+	for (CommandContext_D3D12::PendingDynamicUpload const& oldUpdate : _ctx->m_state.m_pendingUploads)
+	{
+		KT_ASSERT(oldUpdate.m_resource.Handle() != _handle && !"Already updating this buffer!");
+	}
+#endif
+
+	ScratchAlloc_D3D12 scratch = _ctx->m_device->GetFrameResources()->m_uploadAllocator.Alloc(_size, 16);
+
+	CommandContext_D3D12::PendingDynamicUpload& pendingUpload = _ctx->m_state.m_pendingUploads.PushBack();
+	pendingUpload.m_scratch = scratch;
+	pendingUpload.m_resource = _handle;
+	pendingUpload.m_destOffset = _offset;
+	pendingUpload.m_copySize = _size;
+
+	return kt::MakeSlice((uint8_t*)scratch.m_cpuData, _size);
+}
+
+void EndUpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _handle)
+{
+	KT_ASSERT(_ctx->m_device->m_resourceHandles.IsValid(_handle));
+
+	for (CommandContext_D3D12::PendingDynamicUpload* it = _ctx->m_state.m_pendingUploads.Begin();
+		 it != _ctx->m_state.m_pendingUploads.End();
+		 ++it)
+	{
+		if (it->m_resource.Handle() == _handle)
+		{
+			AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
+			_ctx->m_cmdList->CopyBufferRegion(res->m_res, it->m_destOffset, it->m_scratch.m_res, it->m_scratch.m_offset, it->m_copySize);
+			_ctx->m_state.m_pendingUploads.EraseSwap(it);
+			return;
+		}
+	}
+
+	KT_ASSERT(!"BeginUpdateDynamicBuffer was not called with this resource.")
+}
 
 kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _size)
 {
@@ -403,8 +449,6 @@ kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _
 	KT_ASSERT(res->m_mappedCpuData);
 	res->m_lastFrameTouched = _ctx->m_device->m_frameCounter;
 	res->UpdateViews();
-	//_ctx->MarkDirtyIfBound(_handle);
-	// TODO: Need to keep track of descriptor tables.
 
 	return kt::MakeSlice((uint8_t*)res->m_mappedCpuData, res->m_bufferDesc.m_sizeInBytes);
 }

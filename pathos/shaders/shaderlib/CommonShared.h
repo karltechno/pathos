@@ -13,7 +13,7 @@ struct FrameConstants
     float4x4 mainView;
     float4x4 mainInvView;
 
-	float4x4 cascadeMatricies[PATHOS_MAX_SHADOW_CASCADES];
+	float4x4 cascadeMatrices[PATHOS_MAX_SHADOW_CASCADES];
 	float4 cascadeSplits;
 
     float3 camPos;
@@ -31,12 +31,32 @@ struct FrameConstants
 	float4 time;
 };
 
-// TODO: Temp - testing 
-struct BatchConstants
+struct LightData
 {
-    float4x4 modelMtx;
+    float3 posWS;
+    float rcpRadius;
+    float3 color;
+    float spotInnerCos;
+    float3 direction;
+    float spotOuterCos;
+    
+	float intensity;
+	float3 _pad0_;
 };
 
+struct MaterialData
+{
+    float4 baseColour;
+    float roughness;
+    float metalness;
+    float alphaCutoff;
+    float _pad_;
+};
+
+struct BatchConstants
+{
+    uint materialIdx;
+};
 
 SHADERLIB_NAMESPACE_END
 

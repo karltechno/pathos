@@ -117,7 +117,7 @@ void GraphicsApp::Go(WindowHandle _wh, int _argc, char** _argv)
 		gpu::BeginFrame();
 
 		float const dt = float(tickTime.Seconds());
-		gfx::ResourceManager::UpdateHotReload();
+		gfx::ResourceManager::Update();
 
 		PumpMessageLoop(m_window);
 		input::Tick(dt);

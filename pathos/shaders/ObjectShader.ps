@@ -1,7 +1,6 @@
 #include "shaderlib/ShaderOutput.hlsli"
 #include "shaderlib/GlobalSamplers.hlsli"
 #include "shaderlib/LightingCommon.hlsli"
-#include "shaderlib/LightingStructs.h"
 #include "shaderlib/CommonShared.h"
 
 Texture2D<float4> g_albedo : register(t0, space0);
@@ -14,8 +13,9 @@ TextureCube<float4> g_ggxEnv : register(t1, space1);
 Texture2D<float4> g_ggxLut : register(t2, space1);
 StructuredBuffer<LightData> g_lights : register(t3, space1);
 Texture2DArray<float> g_shadowCascades : register(t4, space1);
+StructuredBuffer<MaterialData> g_materials : register(t5, space1);
 
-ConstantBuffer<BatchConstants> g_batch : register(b0, space0);
+ConstantBuffer<BatchConstants> g_batch : register(b0, space0); 
 ConstantBuffer<FrameConstants> g_frame : register(b0, space1);
 
 static const float3 c_cascadeCols[4] = 
@@ -33,7 +33,7 @@ void SelectCascade(float3 _world, float _viewZ, out float _cascade, out float3 _
     float4 weights = _viewZ < g_frame.cascadeSplits;
     weights.yzw -= weights.xyz;
     _cascade = dot(weights, float4(0, 1, 2, 3));
-    float4 coord = mul(float4(_world, 1.), g_frame.cascadeMatricies[_cascade]);
+    float4 coord = mul(float4(_world, 1.), g_frame.cascadeMatrices[_cascade]);
 
     _lightSpace = coord.xyz / coord.w;
 }
@@ -57,15 +57,16 @@ float4 main(in VSOut_ObjectFull _input) : SV_Target
 
     float3 view = normalize(g_frame.camPos - _input.posWS); 
 
+    MaterialData materialData = g_materials[g_batch.materialIdx];
+
     float3 metalRough = g_metalRoughness.Sample(g_samplerAnisoWrap, _input.uv).xyz;
     float3 normalTex = normalize(g_normal.Sample(g_samplerAnisoWrap, _input.uv).xyz * 2.0 - 1.0);
     normalTex = mul(normalTex, tbn);
 
-    float roughness = metalRough.g;
 
-    float metallic = metalRough.b;
-    float3 baseCol = g_albedo.Sample(g_samplerAnisoWrap, _input.uv).xyz;
-
+    float roughness = metalRough.g * materialData.roughness;
+    float metallic = metalRough.b * materialData.metalness;
+    float3 baseCol = g_albedo.Sample(g_samplerAnisoWrap, _input.uv).xyz * materialData.baseColour.xyz;
 
     SurfaceData surf = CreateSurfaceData(normalTex, _input.posWS, metallic, roughness, baseCol);
 
@@ -86,5 +87,5 @@ float4 main(in VSOut_ObjectFull _input) : SV_Target
     
 
     // float3 ao = g_ao.Sample(g_samplerLinearWrap, _input.uv).xyz;
-    return float4(color, 1.0);
+    return float4(color, 1);
 }   

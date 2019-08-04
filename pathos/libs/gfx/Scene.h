@@ -4,7 +4,6 @@
 #include <kt/Slice.h>
 
 #include <shaderlib/CommonShared.h>
-#include <shaderlib/LightingStructs.h>
 
 #include <gpu/CommandContext.h>
 #include <gpu/Types.h>

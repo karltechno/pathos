@@ -7,6 +7,8 @@
 
 #include <d3d12.h>
 
+#include "GPUDevice_D3D12.h"
+
 struct ID3D12GraphicsCommandList;
 struct ID3D12CommandAllocator;
 
@@ -87,6 +89,14 @@ struct CommandContext_D3D12
 		uint32_t m_mipIdx;
 	};
 
+	struct PendingDynamicUpload
+	{
+		ScratchAlloc_D3D12 m_scratch;
+		uint32_t m_destOffset;
+		uint32_t m_copySize;
+		gpu::ResourceRef m_resource;
+	};
+
 	struct State
 	{
 		gpu::PrimitiveType m_primitive = gpu::PrimitiveType::Num_PrimitiveType;
@@ -109,7 +119,10 @@ struct CommandContext_D3D12
 		} m_viewport;
 
 		kt::InplaceArray<D3D12_RESOURCE_BARRIER, 16u> m_batchedBarriers;
+
+		kt::InplaceArray<PendingDynamicUpload, 16u> m_pendingUploads;
 	} m_state;
+
 
 private:
 	void ApplyGraphicsStateChanges();
