@@ -16,8 +16,6 @@
 #include "ShadowUtils.h"
 #include "Material.h"
 
-
-
 namespace gfx
 {
 
@@ -62,7 +60,6 @@ Scene::Scene()
 
 	m_frameConstants.time = kt::Vec4(0.0f);
 	m_frameConstants.sunColor = kt::Vec3(1.0f);
-	m_frameConstants.sunDir = kt::Normalize(kt::Vec3(0.4f, -1.0f, 0.15f));
 
 	gpu::BufferDesc instanceBufferDesc;
 	instanceBufferDesc.m_flags = gpu::BufferFlags::Vertex | gpu::BufferFlags::Transient; // TODO: Should instance data be copied out of upload heap?
@@ -89,6 +86,15 @@ void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera cons
 
 	m_frameConstants.camPos = _mainView.GetInverseView().GetPos();
 	m_frameConstants.camDist = kt::Length(m_frameConstants.camPos);
+
+	float thetaC = kt::Cos(m_sunThetaPhi.x);
+	float thetaS = kt::Sin(m_sunThetaPhi.x);
+	float phiC = kt::Cos(m_sunThetaPhi.y);
+	float phiS = kt::Sin(m_sunThetaPhi.y);
+
+	m_frameConstants.sunDir.x = thetaC * phiS;
+	m_frameConstants.sunDir.y = thetaS * phiS;
+	m_frameConstants.sunDir.z = phiC;
 	
 	uint32_t swapchainX, swapchainY;
 	gpu::GetSwapchainDimensions(swapchainX, swapchainY);

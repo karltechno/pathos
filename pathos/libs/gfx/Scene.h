@@ -60,7 +60,7 @@ public:
 
 	kt::Vec3 m_sunColor = kt::Vec3(1.0f);
 	float m_sunIntensity = 1.0f;
-	kt::Vec2 m_sunThetaPhi;
+	kt::Vec2 m_sunThetaPhi = kt::Vec2(0.5f, 0.5f);
 };
 
 }

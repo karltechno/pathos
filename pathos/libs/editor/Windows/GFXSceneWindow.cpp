@@ -212,9 +212,10 @@ void GFXSceneWindow::Draw(float _dt)
 	}
 
 	ImGui::ColorEdit3("Sun Color", &m_scene->m_sunColor[0]);
-	ImGui::DragFloat("Sun Intensity", &m_scene->m_sunIntensity, 1.0f, 0.0f, 1000.0f, "%.3f", 6.0f);
-	ImGui::SliderFloat3("Sun Dir", &m_scene->m_frameConstants.sunDir[0], -1.0f, 1.0f);
-	m_scene->m_frameConstants.sunDir = kt::Normalize(m_scene->m_frameConstants.sunDir);
+	ImGui::DragFloat("Sun Intensity", &m_scene->m_sunIntensity, 1.0f, 0.05f, 1000.0f, "%.3f", 7.0f);
+
+	ImGui::SliderFloat("Sun Theta", &m_scene->m_sunThetaPhi.x, 0.0f, kt::kPi * 2.0f);
+	ImGui::SliderFloat("Sun Phi", &m_scene->m_sunThetaPhi.y, -kt::kPiOverTwo, kt::kPiOverTwo);
 
 	char const* const modes[] = { "Local", "World" };
 	char const* const ops[] = { "Translate", "Rotate", "Scale" };
