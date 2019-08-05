@@ -1,4 +1,5 @@
 #include <kt/Strings.h>
+#include <kt/Random.h>
 
 #include <gfx/Scene.h>
 #include <gfx/Camera.h>
@@ -92,16 +93,87 @@ static void DrawInstancesTab(GFXSceneWindow* _window)
 	ImGui::Columns();
 }
 
+static void SpawnLoadsOfLights(GFXSceneWindow* _window, kt::Vec3 const& _boundsScale, uint32_t _numLights)
+{
+	kt::XorShift32 rng;
+	
+	kt::AABB const& sceneBounds = _window->m_scene->m_sceneBounds;
+
+	gfx::Light* lights = _window->m_scene->m_lights.PushBack_Raw(_numLights);
+
+	kt::Vec3 const& sceneCenter = sceneBounds.Center();
+	kt::Vec3 const halfSize = sceneBounds.HalfSize() * _boundsScale;
+	float const halfLen = kt::Length(halfSize);
+
+	float const minRadius = halfLen * 0.05f; 
+	float const maxRadius = halfLen * 0.3f;
+
+	for (uint32_t i = 0; i < _numLights; ++i)
+	{
+		gfx::Light& light = lights[i];
+	
+		light.m_type = i & 1 ? gfx::Light::Type::Point : gfx::Light::Type::Spot;
+		light.m_radius = kt::Lerp(minRadius, maxRadius, kt::RandomUnitFloat(rng));
+		light.m_colour = kt::Vec3(kt::RandomUnitFloat(rng), kt::RandomUnitFloat(rng), kt::RandomUnitFloat(rng));
+		light.m_intensity = kt::Lerp(50.0f, 900.0f, kt::RandomUnitFloat(rng));
+
+		kt::Vec3 const randomUnitVec(kt::RandomUnitFloat(rng)*2.0f - 1.0f, kt::RandomUnitFloat(rng)*2.0f - 1.0f, kt::RandomUnitFloat(rng)*2.0f - 1.0f);
+	
+		kt::Vec3 const pos(kt::Lerp(-halfSize.x, halfSize.x, kt::RandomUnitFloat(rng)),
+						   kt::Lerp(-halfSize.y, halfSize.y, kt::RandomUnitFloat(rng)),
+						   kt::Lerp(-halfSize.z, halfSize.z, kt::RandomUnitFloat(rng)));
+
+		light.m_transform = kt::Mat4::Rot(kt::Normalize(randomUnitVec), kt::kPi*2.0f * kt::RandomUnitFloat(rng));
+		light.m_transform.SetPos(pos + sceneCenter);
+
+		light.m_spotOuterAngle = kt::Lerp(kt::kPiOverFour, kt::kPi * 0.8f, kt::RandomUnitFloat(rng));
+		light.m_spotInnerAngle = kt::Lerp(0.0f, light.m_spotOuterAngle, kt::RandomUnitFloat(rng));
+	}
+}
+
 static void DrawLightsTab(GFXSceneWindow* _window)
 {
 	ImGui::Columns(2);
+
+	char const* c_spawnLightPopupStr = "spawn_light_popup";
+
+	if (ImGui::Button("Spawn Lights"))
+	{
+		ImGui::OpenPopup(c_spawnLightPopupStr);
+	}
+
+	if (ImGui::BeginPopup(c_spawnLightPopupStr))
+	{
+		static kt::Vec3 s_sceneBoundScale = kt::Vec3(1.0f);
+		static int s_numLights = 1024;
+		static float s_minIntensity = 100.0f;
+		static float s_maxIntensity = 1000.0f;
+
+		ImGui::DragInt("Num Lights", &s_numLights, 1.0f, 0, 4096 * 4);
+		ImGui::SliderFloat3("Scene Bounds Scale", &s_sceneBoundScale.x, 0.0f, 1.0f);
+		ImGui::DragFloatRange2("Intensity Range", &s_minIntensity, &s_maxIntensity, 1.0f, 0.0f, 25000.0f);
+
+		if (ImGui::Button("Spawn"))
+		{
+			SpawnLoadsOfLights(_window, s_sceneBoundScale, s_numLights);
+		}
+		ImGui::EndPopup();
+	}
+	ImGui::SameLine();
 	if (ImGui::Button("Add Light"))
 	{
 		_window->m_scene->m_lights.PushBack();
 		_window->m_selectedLightIdx = _window->m_scene->m_lights.Size() - 1;
 	}
 
+	ImGui::SameLine();
+	if (ImGui::Button("Reset Lights"))
+	{
+		_window->m_scene->m_lights.Clear();
+	}
+
 	ImGui::Separator();
+	ImGui::BeginChild("Light List");
 	for (uint32_t i = 0; i < _window->m_scene->m_lights.Size(); ++i)
 	{
 		ImGui::PushID(i);
@@ -113,7 +185,7 @@ static void DrawLightsTab(GFXSceneWindow* _window)
 		}
 		ImGui::PopID();
 	}
-
+	ImGui::EndChild();
 	ImGui::NextColumn();
 
 	if (_window->m_selectedLightIdx < _window->m_scene->m_lights.Size())
