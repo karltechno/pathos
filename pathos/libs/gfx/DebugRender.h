@@ -31,6 +31,8 @@ void LineBox(kt::AABB const& _aabb, kt::Mat4 const& _mtx, kt::Vec4 const& _color
 void LineBox(kt::AABB const& _aabb, kt::Mat3 const& _mtx, kt::Vec3 const& _pos, kt::Vec4 const& _color, bool _depth = true);
 
 void LineFrustum(gfx::Camera const& _cam, kt::Vec4 const& _color, bool _depth = true);
+
+void LineCone(kt::Vec3 const& _coneBase, kt::Vec3 const& _apex, float _coneAngle, kt::Vec4 const& _color, uint32_t _tess = 16, bool _depth = true);
 }
 
 }

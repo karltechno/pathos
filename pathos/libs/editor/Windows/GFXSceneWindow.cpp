@@ -97,11 +97,7 @@ static void DrawLightsTab(GFXSceneWindow* _window)
 	ImGui::Columns(2);
 	if (ImGui::Button("Add Light"))
 	{
-		shaderlib::LightData& light = _window->m_scene->m_lights.PushBack();
-		light.color = kt::Vec3(1.0f, 0.0f, 0.0f);
-		light.direction = kt::Vec3(1.0f, 0.0f, 0.0f);
-		light.posWS = kt::Vec3(0.0f);
-		light.rcpRadius = 1.0f / 20.0f;
+		_window->m_scene->m_lights.PushBack();
 		_window->m_selectedLightIdx = _window->m_scene->m_lights.Size() - 1;
 	}
 
@@ -122,15 +118,39 @@ static void DrawLightsTab(GFXSceneWindow* _window)
 
 	if (_window->m_selectedLightIdx < _window->m_scene->m_lights.Size())
 	{
-		shaderlib::LightData& light = _window->m_scene->m_lights[_window->m_selectedLightIdx];
-		ImGui::ColorEdit3("Color", &light.color[0]);
-		ImGui::SliderFloat3("Direction", &light.direction[0], -1.0f, 1.0f);
-		light.direction = kt::Normalize(light.direction);
-		ImGui::DragFloat3("Pos", &light.posWS[0]);
-		float rad = 1.0f / light.rcpRadius;
-		ImGui::SliderFloat("Radius", &rad, 1.0f, 1000.0f);
-		ImGui::SliderFloat("Intensity", &light.intensity, 1.0f, 10000.0f, "%.3f", 2.0f);
-		light.rcpRadius = 1.0f / rad;
+		gfx::Light& light = _window->m_scene->m_lights[_window->m_selectedLightIdx];
+
+		static char const* c_lightTypes[] = { "Point", "Spot" };
+		static_assert(KT_ARRAY_COUNT(c_lightTypes) == uint32_t(gfx::Light::Type::Count), "Light type mismatch");
+
+		if (ImGui::BeginCombo("Type", c_lightTypes[uint32_t(light.m_type)]))
+		{
+			for (uint32_t i = 0; i < KT_ARRAY_COUNT(c_lightTypes); ++i)
+			{
+				if (ImGui::Selectable(c_lightTypes[i], uint32_t(light.m_type) == i))
+				{
+					light.m_type = gfx::Light::Type(i);
+				}
+			}
+			ImGui::EndCombo();
+		}
+
+		ImGui::ColorEdit3("Color", &light.m_colour[0]);
+		ImGui::DragFloat3("Pos", &light.m_transform.m_cols[3][0]);
+		ImGui::SliderFloat("Radius", &light.m_radius, 1.0f, 1000.0f);
+		ImGui::SliderFloat("Intensity", &light.m_intensity, 1.0f, 10000.0f, "%.3f", 2.0f);
+		
+		if (light.m_type == gfx::Light::Type::Spot)
+		{
+			ImGui::SliderAngle("Inner Angle", &light.m_spotInnerAngle, 0.0f, 180.0f);
+			ImGui::SliderAngle("Outer Angle", &light.m_spotOuterAngle, 0.0f, 180.0f);
+			light.m_spotInnerAngle = kt::Min(light.m_spotInnerAngle, light.m_spotOuterAngle);
+
+			kt::Vec3 const pos = light.m_transform.GetPos();
+			kt::Vec3 dir;
+			memcpy(&dir, &light.m_transform.m_cols[2], sizeof(float[3]));
+			gfx::DebugRender::LineCone(pos + dir * light.m_radius, pos, light.m_spotOuterAngle, kt::Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+		}
 
 		if (ImGui::Button("Remove"))
 		{
@@ -139,10 +159,12 @@ static void DrawLightsTab(GFXSceneWindow* _window)
 
 		if (_window->m_cam)
 		{
-			kt::Mat4 mtx = kt::Mat4::Identity();
-			mtx.SetPos(light.posWS);
-			ImGuizmo::Manipulate(_window->m_cam->GetView().Data(), _window->m_cam->GetProjection().Data(), ImGuizmo::OPERATION::TRANSLATE, ImGuizmo::LOCAL, mtx.Data());
-			light.posWS = kt::Vec3(mtx.m_cols[3].x, mtx.m_cols[3].y, mtx.m_cols[3].z);
+			if (_window->m_gizmoOp == ImGuizmo::SCALE)
+			{
+				ImGuizmo::Enable(false);
+			}
+
+			ImGuizmo::Manipulate(_window->m_cam->GetView().Data(), _window->m_cam->GetProjection().Data(), _window->m_gizmoOp, _window->m_gizmoMode, light.m_transform.Data());
 		}
 	}
 	else

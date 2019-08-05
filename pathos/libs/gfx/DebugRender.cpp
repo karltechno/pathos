@@ -246,6 +246,58 @@ void LineFrustum(gfx::Camera const& _cam, kt::Vec4 const& _color, bool _depth /*
 	doCorner(Camera::FrustumCorner::NearUpperLeft);
 }
 
+static kt::Vec3 PerpVec(kt::Vec3 const& _v)
+{
+	return fabsf(_v.x) > fabsf(_v.y) ? float3(-_v.y, _v.x, 0.) : float3(0., -_v.z, _v.y);
+}
+
+void LineCone(kt::Vec3 const& _coneBase, kt::Vec3 const& _apex, float _coneAngle, kt::Vec4 const& _color, uint32_t _tess /*= 16*/, bool _depth /*= true*/)
+{
+	kt::Vec3 const apexToBase = _coneBase - _apex;
+	float const apexToBaseLen = kt::Length(apexToBase);
+	kt::Vec3 const apexToBaseNormalized = (_coneBase - _apex) / apexToBaseLen;
+
+	kt::Vec3 const perpV = kt::Normalize(PerpVec(apexToBaseNormalized));
+
+	float const perpLen = tanf(_coneAngle) * apexToBaseLen;
+
+	kt::Mat3 const mtx = kt::Mat3::Rot(apexToBaseNormalized, kt::kPi * 2.0f / float(_tess));
+
+	kt::Vec3 basePoint = perpV * perpLen;
+
+	kt::Vec3* capPoints = (kt::Vec3*)KT_ALLOCA(sizeof(kt::Vec3) * _tess);
+
+	for (uint32_t i = 0; i < _tess; ++i)
+	{
+		capPoints[i] = _coneBase + basePoint;
+		basePoint = kt::Mul(mtx, basePoint);
+	}
+
+	uint32_t const col = PackColor(_color);
+	LineVertex* vtx = s_state.FetchLineVertices(_tess * 4, _depth);
+
+	for (uint32_t i = 0; i < _tess; ++i)
+	{
+		// Base
+		vtx->m_col = col;
+		vtx->m_pos = capPoints[i];
+		++vtx;
+		vtx->m_col = col;
+		vtx->m_pos = capPoints[(i + 1) % _tess];
+		++vtx;
+
+		// Apex to base
+		vtx->m_col = col;
+		vtx->m_pos = _apex;
+		++vtx;
+		vtx->m_col = col;
+		vtx->m_pos = capPoints[i];
+		++vtx;
+	}
+
+	
+	// Apex to base
+}
 
 }
 

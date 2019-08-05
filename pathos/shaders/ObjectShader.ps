@@ -69,10 +69,16 @@ float4 main(in VSOut_ObjectFull _input) : SV_Target
 
     SurfaceData surf = CreateSurfaceData(normalTex, _input.posWS, metallic, roughness, baseCol);
 
-    for(uint i = 0; i < g_frame.numLights; ++i)
+    for(uint pointLightIdx = 0; pointLightIdx < g_frame.numPointLights; ++pointLightIdx)
     {
-        LightData light = g_lights[i];
+        LightData light = g_lights[pointLightIdx];
         color += ComputeLighting_Point(light, surf, view);
+    }
+
+    for(uint spotLightIdx = g_frame.numPointLights; spotLightIdx < g_frame.numSpotLights + g_frame.numPointLights; ++spotLightIdx)
+    {
+        LightData light = g_lights[spotLightIdx];
+        color += ComputeLighting_Spot(light, surf, view);
     }
 
     float ao = g_bindlessTexArray[materialData.occlusionTexIdx].Sample(g_samplerLinearWrap, _input.uv).x;

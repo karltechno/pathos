@@ -20,6 +20,25 @@ namespace gfx
 struct Model;
 struct Camera;
 
+struct Light
+{
+	enum class Type : uint8_t
+	{
+		Point,
+		Spot,
+
+		Count
+	};
+
+	Type m_type = Type::Point;
+	kt::Vec3 m_colour = kt::Vec3(1.0f);
+	float m_intensity = 1.0f;
+	float m_radius = 1.0f;
+	float m_spotInnerAngle = 0.0f;
+	float m_spotOuterAngle = 0.0f;
+	kt::Mat4 m_transform = kt::Mat4::Identity();
+};
+
 class Scene
 {
 public:
@@ -46,7 +65,7 @@ public:
 
 	gfx::Camera m_shadowCascades[c_numShadowCascades];
 
-	kt::Array<shaderlib::LightData> m_lights;
+	kt::Array<Light> m_lights;
 	gpu::BufferRef m_lightGpuBuf;
 
 	shaderlib::FrameConstants m_frameConstants;

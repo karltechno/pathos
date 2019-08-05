@@ -389,8 +389,8 @@ gpu::BufferRef GetMaterialGpuBuffer()
 gpu::ShaderHandle LoadShader(char const* _path, gpu::ShaderType _type)
 {
 	// TODO: Unecessary string alloc/hash map lookup.
-	kt::FilePath pathSantize(_path);
-	State::ShaderCache::Iterator it = s_state.m_shaderCache.Find(std::string(pathSantize.Data()));
+	kt::FilePath sanitizedPath(_path);
+	State::ShaderCache::Iterator it = s_state.m_shaderCache.Find(std::string(sanitizedPath.Data()));
 	if (it != s_state.m_shaderCache.End())
 	{
 		return it->m_val;
@@ -410,7 +410,7 @@ gpu::ShaderHandle LoadShader(char const* _path, gpu::ShaderType _type)
 
 	gpu::ShaderHandle const handle = gpu::CreateShader(_type, bytecode, _path);
 
-	s_state.m_shaderCache.Insert(std::string(pathSantize.Data()), gpu::ShaderRef(handle));
+	s_state.m_shaderCache.Insert(std::string(sanitizedPath.Data()), gpu::ShaderRef(handle));
 	return handle;
 }
 

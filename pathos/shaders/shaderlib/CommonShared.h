@@ -6,6 +6,9 @@
 
 SHADERLIB_NAMESPACE_BEGIN
 
+#define PATHOS_LIGHT_TYPE_POINT (0)
+#define PATHOS_LIGHT_TYPE_SPOT  (1)
+
 struct FrameConstants
 {
     float4x4 mainViewProj;
@@ -23,9 +26,13 @@ struct FrameConstants
     float2 screenDimsRcp;
 
     float3 sunDir; float __pad0__;
+    
     float3 sunColor; 
-	
 	uint numLights;
+
+    uint numPointLights; // point lights sorted first
+    uint numSpotLights; // spot lights sorted second
+    float2 __pad1__; 
 
 	// x = time, y = time/10, z = dt, w = ? 
 	float4 time;
@@ -35,13 +42,15 @@ struct LightData
 {
     float3 posWS;
     float rcpRadius;
+
     float3 color;
-    float spotInnerCos;
+	uint type;
+
     float3 direction;
-    float spotOuterCos;
-    
 	float intensity;
-	float3 _pad0_;
+    
+    // Scale and offset as described in https://google.github.io/filament/Filament.md.html
+    float2 spotParams; float2 __pad0__;
 };
 
 struct MaterialData

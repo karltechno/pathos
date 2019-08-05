@@ -75,6 +75,72 @@ void Scene::Init(uint32_t _shadowMapResolution /*= 2048*/)
 	m_shadowCascadeTex = gpu::CreateTexture(desc, nullptr, "Shadow Cascades");
 }
 
+static void UpdateLights(Scene* _scene)
+{
+	uint32_t const numLights = _scene->m_lights.Size();
+
+	if (numLights == 0)
+	{
+		_scene->m_frameConstants.numLights = 0;
+		_scene->m_frameConstants.numPointLights = 0;
+		_scene->m_frameConstants.numSpotLights = 0;
+		return;
+	}
+
+	Light* sortedLights = (Light*)KT_ALLOCA(numLights * sizeof(Light));
+	memcpy(sortedLights, _scene->m_lights.Data(), _scene->m_lights.Size() * sizeof(Light));
+
+	{
+		// TODO: Could partition if light types == 2. 
+		Light* radixTemp = (Light*)KT_ALLOCA(_scene->m_lights.Size() * sizeof(Light));
+		kt::RadixSort(sortedLights, sortedLights + _scene->m_lights.Size(), radixTemp, [](Light const& _light) { return uint8_t(_light.m_type); });
+	}
+
+	// resize light buffer if necessary
+	{
+		uint32_t const reqLightSize = numLights;
+		gpu::BufferDesc oldDesc;
+		gpu::ResourceType ty;
+		gpu::GetResourceInfo(_scene->m_lightGpuBuf, ty, &oldDesc);
+		uint32_t const oldLightSize = oldDesc.m_sizeInBytes / sizeof(shaderlib::LightData);
+		if (oldLightSize < reqLightSize)
+		{
+			uint32_t const newLightSize = kt::Max<uint32_t>(oldLightSize * 2, reqLightSize);
+			_scene->m_lightGpuBuf = CreateLightStructuredBuffer(newLightSize);
+		}
+	}
+
+	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
+	shaderlib::LightData* gpuLightData = (shaderlib::LightData*)gpu::cmd::BeginUpdateDynamicBuffer(ctx, _scene->m_lightGpuBuf, numLights * sizeof(shaderlib::LightData), 0).Data();
+	
+	uint32_t lightCounts[uint32_t(Light::Type::Count)] = {};
+
+	for (uint32_t i = 0; i < numLights; ++i)
+	{
+		Light const& cpuLight = sortedLights[i];
+		static_assert(sizeof(gpuLightData->color) == sizeof(cpuLight.m_colour), "Colour size mismatch");
+		memcpy(&gpuLightData->color, &cpuLight.m_colour, sizeof(gpuLightData->color));
+		memcpy(&gpuLightData->direction, &cpuLight.m_transform.m_cols[2], sizeof(float[3]));
+		gpuLightData->intensity = cpuLight.m_intensity;
+		gpuLightData->posWS = cpuLight.m_transform.GetPos();
+		gpuLightData->rcpRadius = 1.0f / cpuLight.m_radius;
+
+		float const cosOuter = kt::Cos(cpuLight.m_spotOuterAngle);
+		gpuLightData->spotParams.x = cosOuter;
+		gpuLightData->spotParams.y = 1.0f / (kt::Cos(cpuLight.m_spotInnerAngle) - cosOuter);
+		gpuLightData->type = uint32_t(cpuLight.m_type);
+		++gpuLightData;
+
+		++lightCounts[uint32_t(cpuLight.m_type)];
+	}
+
+	_scene->m_frameConstants.numPointLights = lightCounts[uint32_t(Light::Type::Point)];
+	_scene->m_frameConstants.numSpotLights = lightCounts[uint32_t(Light::Type::Spot)];
+	_scene->m_frameConstants.numLights = numLights;
+
+	gpu::cmd::EndUpdateDynamicBuffer(ctx, _scene->m_lightGpuBuf);
+}
+
 void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera const& _mainView, float _dt)
 {
 	m_sceneBounds = CalcSceneBounds(*this);
@@ -122,23 +188,12 @@ void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera cons
 		}
 	}
 
-	// resize light buffer if necessary
-	uint32_t const reqLightSize = sizeof(shaderlib::LightData) * m_lights.Size();
-	gpu::BufferDesc oldDesc;
-	gpu::ResourceType ty;
-	gpu::GetResourceInfo(m_lightGpuBuf, ty, &oldDesc);
-	uint32_t const oldLightSize = oldDesc.m_sizeInBytes / sizeof(shaderlib::LightData);
-	if (oldLightSize < reqLightSize)
-	{
-		uint32_t const newLightSize = kt::Max<uint32_t>(oldLightSize * 2, reqLightSize);
-		m_lightGpuBuf = CreateLightStructuredBuffer(newLightSize);
-	}
+	UpdateLights(this);
 
 	gpu::cmd::ResourceBarrier(_ctx, m_lightGpuBuf, gpu::ResourceState::CopyDest);
 	gpu::cmd::ResourceBarrier(_ctx, m_frameConstantsGpuBuf, gpu::ResourceState::CopyDest);
 	gpu::cmd::FlushBarriers(_ctx);
 
-	gpu::cmd::UpdateDynamicBuffer(_ctx, m_lightGpuBuf, m_lights.Data(), m_lights.Size() * sizeof(shaderlib::LightData));
 	gpu::cmd::UpdateDynamicBuffer(_ctx, m_frameConstantsGpuBuf, &m_frameConstants, sizeof(m_frameConstants));
 
 	gpu::cmd::ResourceBarrier(_ctx, m_lightGpuBuf, gpu::ResourceState::ShaderResource);
@@ -260,6 +315,7 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 			gpu::cmd::SetVertexBuffer(_ctx, 1, mesh.m_tangentGpuBuf);
 			gpu::cmd::SetVertexBuffer(_ctx, 2, mesh.m_uv0GpuBuf);
 		}
+
 		uint32_t lastMaterialIdx = UINT32_MAX;
 		for (gfx::Mesh::SubMesh const& subMesh : mesh.m_subMeshes)
 		{

@@ -124,10 +124,17 @@ float3 ComputeLighting_Common(in float3 lightColor, in SurfaceData surface, in f
     return 0.;
 }
 
-float PointLightAtten(float lightDist, float lightDistSq, float lightRadiusRcp)
+float PunctualLightDistanceAtten(float lightDist, float lightDistSq, float lightRadiusRcp)
 {
     float numerator = saturate(1.0 - pow(lightDist * lightRadiusRcp, 4.0));
     return (numerator * numerator) * rcp(lightDistSq + 1.0);
+}
+
+float SpotLightAtten(in LightData light, in SurfaceData surface, float3 L)
+{
+    float l_dot_dir = dot(-L, light.direction);
+    float atten = saturate((l_dot_dir - light.spotParams.x) * light.spotParams.y);
+    return atten * atten;
 }
 
 float3 ComputeLighting_Point(in LightData light, in SurfaceData surface, in float3 V)
@@ -137,7 +144,21 @@ float3 ComputeLighting_Point(in LightData light, in SurfaceData surface, in floa
     float L_len = sqrt(L_lenSq);  
     L *= rcp(L_len);
 
-    return light.intensity * PointLightAtten(L_len, L_lenSq, light.rcpRadius) * ComputeLighting_Common(light.color, surface, L, V); 
+    float atten = PunctualLightDistanceAtten(L_len, L_lenSq, light.rcpRadius);
+    return light.intensity * atten * ComputeLighting_Common(light.color, surface, L, V); 
+}
+
+float3 ComputeLighting_Spot(in LightData light, in SurfaceData surface, in float3 V)
+{
+    float3 L = light.posWS - surface.posWS;
+    float L_lenSq = dot(L, L);
+    float L_len = sqrt(L_lenSq);  
+    L *= rcp(L_len);
+
+    float atten = PunctualLightDistanceAtten(L_len, L_lenSq, light.rcpRadius);
+    atten *= SpotLightAtten(light, surface, L);
+
+    return light.intensity * atten * ComputeLighting_Common(light.color, surface, L, V); 
 }
 
 float3 ComputeLighting_IBL
