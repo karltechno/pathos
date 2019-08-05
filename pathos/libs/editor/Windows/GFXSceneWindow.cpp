@@ -93,7 +93,7 @@ static void DrawInstancesTab(GFXSceneWindow* _window)
 	ImGui::Columns();
 }
 
-static void SpawnLoadsOfLights(GFXSceneWindow* _window, kt::Vec3 const& _boundsScale, uint32_t _numLights)
+static void SpawnLoadsOfLights(GFXSceneWindow* _window, kt::Vec3 const& _boundsScale, uint32_t _numLights, float _minIntensity, float _maxIntensity)
 {
 	kt::XorShift32 rng;
 	
@@ -115,7 +115,7 @@ static void SpawnLoadsOfLights(GFXSceneWindow* _window, kt::Vec3 const& _boundsS
 		light.m_type = i & 1 ? gfx::Light::Type::Point : gfx::Light::Type::Spot;
 		light.m_radius = kt::Lerp(minRadius, maxRadius, kt::RandomUnitFloat(rng));
 		light.m_colour = kt::Vec3(kt::RandomUnitFloat(rng), kt::RandomUnitFloat(rng), kt::RandomUnitFloat(rng));
-		light.m_intensity = kt::Lerp(50.0f, 900.0f, kt::RandomUnitFloat(rng));
+		light.m_intensity = kt::Lerp(_minIntensity, _maxIntensity, kt::RandomUnitFloat(rng));
 
 		kt::Vec3 const randomUnitVec(kt::RandomUnitFloat(rng)*2.0f - 1.0f, kt::RandomUnitFloat(rng)*2.0f - 1.0f, kt::RandomUnitFloat(rng)*2.0f - 1.0f);
 	
@@ -126,7 +126,7 @@ static void SpawnLoadsOfLights(GFXSceneWindow* _window, kt::Vec3 const& _boundsS
 		light.m_transform = kt::Mat4::Rot(kt::Normalize(randomUnitVec), kt::kPi*2.0f * kt::RandomUnitFloat(rng));
 		light.m_transform.SetPos(pos + sceneCenter);
 
-		light.m_spotOuterAngle = kt::Lerp(kt::kPiOverFour, kt::kPi * 0.8f, kt::RandomUnitFloat(rng));
+		light.m_spotOuterAngle = kt::Lerp(kt::kPi * 0.1f, kt::kPiOverTwo, kt::RandomUnitFloat(rng));
 		light.m_spotInnerAngle = kt::Lerp(0.0f, light.m_spotOuterAngle, kt::RandomUnitFloat(rng));
 	}
 }
@@ -155,7 +155,7 @@ static void DrawLightsTab(GFXSceneWindow* _window)
 
 		if (ImGui::Button("Spawn"))
 		{
-			SpawnLoadsOfLights(_window, s_sceneBoundScale, s_numLights);
+			SpawnLoadsOfLights(_window, s_sceneBoundScale, s_numLights, s_minIntensity, s_maxIntensity);
 		}
 		ImGui::EndPopup();
 	}
