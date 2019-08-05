@@ -59,9 +59,12 @@ struct State
 
 	gpu::BufferRef m_materialGpuBuf;
 
+	UnifiedBuffers m_unifiedBuffers;
+
 	core::FolderWatcher* m_shaderWatcher;
 
 	bool m_materialsDirty = false;
+	bool m_usingUnifiedBuffers = false;
 } s_state;
 
 static void CreateMaterialGpuBuffer(uint32_t _maxElems)
@@ -143,6 +146,97 @@ void Init()
 void Shutdown()
 {
 	s_state = State{};
+}
+
+void EnableUnifiedBuffers(uint32_t _vertexCapacity /*= 2500000*/, uint32_t _indexCapacity /*= 2000000*/)
+{
+	KT_ASSERT(!s_state.m_usingUnifiedBuffers);
+	s_state.m_usingUnifiedBuffers = true;
+	s_state.m_unifiedBuffers.m_vertexCapacity = _vertexCapacity;
+	s_state.m_unifiedBuffers.m_indexCapacity = _indexCapacity;
+	s_state.m_unifiedBuffers.m_indexUsed = 0;
+	s_state.m_unifiedBuffers.m_vertexUsed = 0;
+
+	{
+		gpu::BufferDesc indexDesc;
+		indexDesc.m_flags = gpu::BufferFlags::Index | gpu::BufferFlags::Dynamic;
+		indexDesc.m_format = gpu::Format::R32_Uint; // TODO: 16 bit
+		indexDesc.m_sizeInBytes = sizeof(uint32_t) * _indexCapacity;
+		indexDesc.m_strideInBytes = sizeof(uint32_t);
+		s_state.m_unifiedBuffers.m_indexBufferRef = gpu::CreateBuffer(indexDesc, nullptr, "Unified Index Buffer");
+	}
+
+	{
+		gpu::BufferDesc posDesc;
+		posDesc.m_flags = gpu::BufferFlags::Vertex | gpu::BufferFlags::Dynamic;
+		posDesc.m_sizeInBytes = sizeof(float[3]) * _vertexCapacity;
+		posDesc.m_strideInBytes = sizeof(float[3]);
+		s_state.m_unifiedBuffers.m_posVertexBuf = gpu::CreateBuffer(posDesc, nullptr, "Unified Vertex Buffer (Pos)");
+	}
+
+	{
+		gpu::BufferDesc tangentSpaceDesc;
+		tangentSpaceDesc.m_flags = gpu::BufferFlags::Vertex | gpu::BufferFlags::Dynamic;
+		tangentSpaceDesc.m_sizeInBytes = sizeof(gfx::TangentSpace) * _vertexCapacity;
+		tangentSpaceDesc.m_strideInBytes = sizeof(gfx::TangentSpace);
+		s_state.m_unifiedBuffers.m_tangentSpaceVertexBuf = gpu::CreateBuffer(tangentSpaceDesc, nullptr, "Unified Vertex Buffer (Tangent Space)");
+	}
+
+	{
+		gpu::BufferDesc uvDesc;
+		uvDesc.m_flags = gpu::BufferFlags::Vertex | gpu::BufferFlags::Dynamic;
+		uvDesc.m_format = gpu::Format::R32G32_Float;
+		uvDesc.m_sizeInBytes = sizeof(float[2]) * _vertexCapacity;
+		uvDesc.m_strideInBytes = sizeof(float[2]);
+		s_state.m_unifiedBuffers.m_uv0VertexBuf = gpu::CreateBuffer(uvDesc, nullptr, "Unified Vertex Buffer (UV0)");
+	}
+}
+
+void SetUseUnifiedVertexAndIndexBuffers(bool _enabled)
+{
+	s_state.m_usingUnifiedBuffers = _enabled;
+}
+
+bool IsUsingUnifiedBuffers()
+{
+	return s_state.m_usingUnifiedBuffers;
+}
+
+UnifiedBuffers const& GetUnifiedBuffers()
+{
+	return s_state.m_unifiedBuffers;
+}
+
+void WriteIntoUnifiedBuffers
+(
+	float const* _positions, 
+	float const* _uvs, 
+	gfx::TangentSpace const* _tangentSpace, 
+	uint32_t const* _indices, 
+	uint32_t _numVertices,
+	uint32_t _numIndices, 
+	uint32_t& o_idxOffset, 
+	uint32_t& o_vtxOffset
+)
+{
+	KT_ASSERT(IsUsingUnifiedBuffers());
+
+	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
+
+	UnifiedBuffers& buffers = s_state.m_unifiedBuffers;
+
+	KT_ASSERT(buffers.m_indexUsed + _numIndices < buffers.m_indexCapacity);
+	KT_ASSERT(buffers.m_vertexUsed + _numVertices < buffers.m_vertexCapacity);
+	o_idxOffset = buffers.m_indexUsed;
+	o_vtxOffset = buffers.m_vertexUsed;
+
+	gpu::cmd::UpdateDynamicBuffer(ctx, buffers.m_posVertexBuf, _positions, sizeof(float[3]) * _numVertices, buffers.m_vertexUsed * sizeof(float[3]));
+	gpu::cmd::UpdateDynamicBuffer(ctx, buffers.m_uv0VertexBuf, _uvs, sizeof(float[2]) * _numVertices, buffers.m_vertexUsed * sizeof(float[2]));
+	gpu::cmd::UpdateDynamicBuffer(ctx, buffers.m_tangentSpaceVertexBuf, _tangentSpace, sizeof(gfx::TangentSpace) * _numVertices, buffers.m_vertexUsed * sizeof(gfx::TangentSpace));
+	gpu::cmd::UpdateDynamicBuffer(ctx, buffers.m_indexBufferRef, _indices, sizeof(uint32_t) * _numIndices, sizeof(uint32_t) * buffers.m_indexUsed); // TODO: 16 bit
+
+	buffers.m_indexUsed += _numIndices;
+	buffers.m_vertexUsed += _numVertices;
 }
 
 static kt::Array<uint8_t> ReadEntireFile(char const* _path)
@@ -280,8 +374,30 @@ ModelIdx CreateModel()
 
 ModelIdx CreateModelFromGLTF(char const* _path)
 {
+	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
+	if (IsUsingUnifiedBuffers())
+	{
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_indexBufferRef, gpu::ResourceState::CopyDest);
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_posVertexBuf, gpu::ResourceState::CopyDest);
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_uv0VertexBuf, gpu::ResourceState::CopyDest);
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_tangentSpaceVertexBuf, gpu::ResourceState::CopyDest);
+		gpu::cmd::FlushBarriers(ctx);
+	}
+
 	ModelIdx const idx = ModelIdx(uint16_t(s_state.m_meshes.Size()));
 	s_state.m_models.PushBack().LoadFromGLTF(_path);
+	
+	if (IsUsingUnifiedBuffers())
+	{
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_indexBufferRef, gpu::ResourceState::IndexBuffer);
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_posVertexBuf, gpu::ResourceState::VertexBuffer);
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_uv0VertexBuf, gpu::ResourceState::VertexBuffer);
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_tangentSpaceVertexBuf, gpu::ResourceState::VertexBuffer);
+		
+		// TODO: Unecessary barriers if we load multiple models, unecessary flush. Barrier batching needs fixing.
+		gpu::cmd::FlushBarriers(ctx);
+	}
+
 	return idx;
 }
 

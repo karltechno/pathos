@@ -32,6 +32,7 @@ static const float c_shadowMapRes = 2048.0f;
 
 void TestbedApp::Setup()
 {
+	gfx::ResourceManager::EnableUnifiedBuffers();
 	m_scene.Init(uint32_t(c_shadowMapRes));
 
 	m_sceneWindow.SetScene(&m_scene);

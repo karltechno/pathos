@@ -12,6 +12,7 @@ struct Mesh;
 struct Model;
 struct Texture;
 struct Material;
+struct TangentSpace;
 
 namespace ResourceManager
 {
@@ -71,6 +72,39 @@ SharedResources const& GetSharedResources();
 
 void Init();
 void Shutdown();
+
+struct UnifiedBuffers
+{
+	gpu::BufferRef m_posVertexBuf;
+	gpu::BufferRef m_tangentSpaceVertexBuf;
+	gpu::BufferRef m_uv0VertexBuf;
+	gpu::BufferRef m_indexBufferRef;
+
+	uint32_t m_vertexCapacity;
+	uint32_t m_indexCapacity;
+
+	uint32_t m_vertexUsed;
+	uint32_t m_indexUsed;
+};
+
+// If enabled all models will load vertex/index data into unified buffers. This is mainly for easy experimenting with GPU culling. 
+// (Eg. ExecuteIndirect without needing to rebind separate vertex/index buffers).
+// An alternative approach may be to allocate buffers with CreatedPlacedResource and alias them with one larger buffer.
+void EnableUnifiedBuffers(uint32_t _vertexCapacity = 2500000, uint32_t _indexCapacity = 2000000);
+bool IsUsingUnifiedBuffers();
+UnifiedBuffers const& GetUnifiedBuffers();
+
+void WriteIntoUnifiedBuffers
+(
+	float const* _positions,
+	float const* _uvs,
+	gfx::TangentSpace const* _tangentSpace,
+	uint32_t const* _indices,
+	uint32_t _numVertices,
+	uint32_t _numIndices,
+	uint32_t& o_idxOffset,
+	uint32_t& o_vtxOffset
+);
 
 void Update();
 

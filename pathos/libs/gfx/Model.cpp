@@ -392,38 +392,37 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data, kt::Slice<ResourceManag
 	return true;
 }
 
-void Mesh::CreateGPUBuffers(bool _keepDataOnCpu)
+static void CreateStandaloneBuffers(Mesh* _m)
 {
-	char const* const baseDebugName = m_name.Empty() ? "UNKNOWN" : m_name.Data();
+	char const* const baseDebugName = _m->m_name.Empty() ? "UNKNOWN" : _m->m_name.Data();
 	kt::String64 name;
 	name.Append(baseDebugName);
 
-	if (m_posStream.Size() > 0)
+	if (_m->m_posStream.Size() > 0)
 	{
 		gpu::BufferDesc posBufferDesc{};
 		posBufferDesc.m_flags = gpu::BufferFlags::Vertex;
 		posBufferDesc.m_strideInBytes = sizeof(kt::Vec3);
-		posBufferDesc.m_sizeInBytes = m_posStream.Size() * sizeof(kt::Vec3);
+		posBufferDesc.m_sizeInBytes = _m->m_posStream.Size() * sizeof(kt::Vec3);
 		name.Append("_pos_stream");
-		m_posGpuBuf = gpu::CreateBuffer(posBufferDesc, m_posStream.Data(), name.Data());
-		
+		_m->m_posGpuBuf = gpu::CreateBuffer(posBufferDesc, _m->m_posStream.Data(), name.Data());
 	}
 
-	if (m_indices.Size() > 0)
+	if (_m->m_indices.Size() > 0)
 	{
 		gpu::BufferDesc indexBufferDesc{};
 		indexBufferDesc.m_flags = gpu::BufferFlags::Index;
 		// TODO: fix index buffer size, also add gpu api to create buffer and get back upload pointer, so we don't need to make a temp array to convert to r16.
 		indexBufferDesc.m_format = gpu::Format::R32_Uint;
-		indexBufferDesc.m_sizeInBytes = sizeof(uint32_t) * m_indices.Size();
+		indexBufferDesc.m_sizeInBytes = sizeof(uint32_t) * _m->m_indices.Size();
 		indexBufferDesc.m_strideInBytes = sizeof(uint32_t);
 		name.Clear();
 		name.Append(baseDebugName);
 		name.Append("_index");
-		m_indexGpuBuf = gpu::CreateBuffer(indexBufferDesc, m_indices.Data(), name.Data());
+		_m->m_indexGpuBuf = gpu::CreateBuffer(indexBufferDesc, _m->m_indices.Data(), name.Data());
 	}
 
-	if (m_uvStream0.Size() > 0)
+	if (_m->m_uvStream0.Size() > 0)
 	{
 		name.Clear();
 		name.Append(baseDebugName);
@@ -431,12 +430,12 @@ void Mesh::CreateGPUBuffers(bool _keepDataOnCpu)
 		gpu::BufferDesc uv0Desc;
 		uv0Desc.m_flags = gpu::BufferFlags::Vertex;
 		uv0Desc.m_format = gpu::Format::R32G32_Float;
-		uv0Desc.m_sizeInBytes = m_uvStream0.Size() * sizeof(kt::Vec2);
+		uv0Desc.m_sizeInBytes = _m->m_uvStream0.Size() * sizeof(kt::Vec2);
 		uv0Desc.m_strideInBytes = sizeof(kt::Vec2);
-		m_uv0GpuBuf = gpu::CreateBuffer(uv0Desc, m_uvStream0.Data(), name.Data());
+		_m->m_uv0GpuBuf = gpu::CreateBuffer(uv0Desc, _m->m_uvStream0.Data(), name.Data());
 	}
 
-	if (m_tangentStream.Size() > 0)
+	if (_m->m_tangentStream.Size() > 0)
 	{
 		name.Clear();
 		name.Append(baseDebugName);
@@ -444,9 +443,31 @@ void Mesh::CreateGPUBuffers(bool _keepDataOnCpu)
 		gpu::BufferDesc tangentDesc;
 		tangentDesc.m_flags = gpu::BufferFlags::Vertex;
 		tangentDesc.m_format = gpu::Format::Unknown;
-		tangentDesc.m_sizeInBytes = m_tangentStream.Size() * sizeof(TangentSpace);
+		tangentDesc.m_sizeInBytes = _m->m_tangentStream.Size() * sizeof(TangentSpace);
 		tangentDesc.m_strideInBytes = sizeof(TangentSpace);
-		m_tangentGpuBuf = gpu::CreateBuffer(tangentDesc, m_tangentStream.Data(), name.Data());
+		_m->m_tangentGpuBuf = gpu::CreateBuffer(tangentDesc, _m->m_tangentStream.Data(), name.Data());
+	}
+}
+
+void Mesh::CreateGPUBuffers(bool _keepDataOnCpu)
+{
+	if (ResourceManager::IsUsingUnifiedBuffers())
+	{
+		ResourceManager::WriteIntoUnifiedBuffers
+		(
+			(float const*)m_posStream.Data(),
+			(float const*)m_uvStream0.Data(),
+			m_tangentStream.Data(),
+			m_indices.Data(),
+			m_posStream.Size(),
+			m_indices.Size(),
+			m_unifiedBufferIndexOffset,
+			m_unifiedBufferVertexOffset
+		);
+	}
+	else
+	{
+		CreateStandaloneBuffers(this);
 	}
 
 	if (!_keepDataOnCpu)

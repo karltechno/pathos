@@ -52,6 +52,9 @@ struct Mesh
 	gpu::BufferRef m_indexGpuBuf;
 	gpu::BufferRef m_tangentGpuBuf;
 	gpu::BufferRef m_uv0GpuBuf;
+
+	uint32_t m_unifiedBufferIndexOffset;
+	uint32_t m_unifiedBufferVertexOffset;
 };
 
 struct Model
