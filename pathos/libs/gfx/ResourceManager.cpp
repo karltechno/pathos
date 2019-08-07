@@ -315,12 +315,6 @@ void Update()
 
 		for (gfx::Material const& mat : s_state.m_materials)
 		{
-			uint32_t constexpr memcpySize = sizeof(shaderlib::MaterialData::baseColour)
-				+ sizeof(shaderlib::MaterialData::roughness)
-				+ sizeof(shaderlib::MaterialData::metalness)
-				+ sizeof(shaderlib::MaterialData::alphaCutoff);
-
-
 			gfx::Material::Params const& params = mat.m_params;
 
 			gfx::ResourceManager::SharedResources const& sharedRes = gfx::ResourceManager::GetSharedResources();
