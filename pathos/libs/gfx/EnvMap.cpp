@@ -169,16 +169,10 @@ void SkyBoxRenderer::Render(gpu::cmd::Context* _ctx, gfx::Camera const& _cam)
 
 	gpu::cmd::SetGraphicsCBVTable(_ctx, skyMtxDescriptor, 0);
 
-	uint32_t w, h;
-	gpu::GetSwapchainDimensions(w, h);
-	gpu::Rect rect{ float(w), float(h) };
-
-	gpu::cmd::SetViewport(_ctx, rect, 1.0f, 1.0f);
+	gpu::cmd::SetViewportAndScissorRectFromTexture(_ctx, gpu::CurrentBackbuffer(), 1.0f, 1.0f);
 	gpu::cmd::DrawIndexedInstanced(_ctx, m_primGpuBuf.m_numIndicies, 1, 0, 0, 0);
 
-	// Reset viewport
-	gpu::cmd::SetViewport(_ctx, rect, 0.0f, 1.0f);
-
+	gpu::cmd::ResetState(_ctx);
 }
 
 }

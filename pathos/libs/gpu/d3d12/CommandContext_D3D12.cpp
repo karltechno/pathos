@@ -30,6 +30,24 @@ Context* Begin(ContextType _type)
 	return new CommandContext_D3D12(_type, g_device);
 }
 
+void ResetState(Context* _ctx)
+{
+	SetDepthBuffer(_ctx, gpu::BackbufferDepth(), 0, 0);
+	SetRenderTarget(_ctx, 0, gpu::CurrentBackbuffer());
+
+	for (uint32_t i = 1; i < c_maxRenderTargets; ++i)
+	{
+		SetRenderTarget(_ctx, 0, gpu::TextureHandle{});
+	}
+
+	SetIndexBuffer(_ctx, gpu::BufferHandle{});
+
+	for (uint32_t i = 0; i < c_maxVertexStreams; ++i)
+	{
+		SetVertexBuffer(_ctx, 0, gpu::BufferHandle{});
+	}
+}
+
 ContextType GetContextType(Context* _ctx)
 {
 	return _ctx->m_ctxType;
@@ -797,9 +815,22 @@ void SetViewport(Context* _ctx, gpu::Rect const& _rect, float _minDepth, float _
 	{
 		_ctx->m_dirtyFlags |= DirtyStateFlags::ViewPort;
 		_ctx->m_state.m_viewport.m_rect = _rect;
+
 		_ctx->m_state.m_viewport.m_depthMin = _minDepth;
 		_ctx->m_state.m_viewport.m_depthMax = _maxDepth;
 	}
+}
+
+void SetViewportAndScissorRectFromTexture(Context* _ctx, gpu::TextureHandle _tex, float _minDepth, float _maxDepth)
+{
+	gpu::TextureDesc desc;
+	bool const ok = gpu::GetTextureInfo(_tex, desc);
+	KT_ASSERT(ok);
+
+	gpu::Rect const rect(float(desc.m_width), float(desc.m_height));
+
+	gpu::cmd::SetViewport(_ctx, rect, _minDepth, _maxDepth);
+	gpu::cmd::SetScissorRect(_ctx, rect);
 }
 
 }

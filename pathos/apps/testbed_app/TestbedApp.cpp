@@ -24,6 +24,9 @@
 #include "imgui.h"
 
 static core::CVar<float> s_camFov("cam.fov", "Camera field of view", 65.0f, 40.0f, 100.0f);
+static core::CVar<float> s_camNearPlane("cam.near_plane", "Camera near plane", 2.0f, 0.1f, 20.0f);
+static core::CVar<float> s_camFarPlane("cam.far_plane", "Camera far plane", 5000.0f, 100.0f, 10000.0f);
+
 static core::CVar<bool> s_vsync("app.vsync", "Vsync enabled", true);
 
 constexpr uint32_t c_numShadowCascades = 4;
@@ -33,6 +36,7 @@ static const float c_shadowMapRes = 2048.0f;
 void TestbedApp::Setup()
 {
 	gfx::ResourceManager::EnableUnifiedBuffers();
+
 	m_scene.Init(uint32_t(c_shadowMapRes));
 
 	m_sceneWindow.SetScene(&m_scene);
@@ -87,9 +91,11 @@ void TestbedApp::Setup()
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
 	//gfx::CreateCubemapFromEquirect(ctx, "textures/qwantani_2k.hdr", m_cubeMap);
-	gfx::CreateCubemapFromEquirect(ctx, "textures/Alexs_Apt_2k.hdr", m_cubeMap);
+	//gfx::CreateCubemapFromEquirect(ctx, "textures/Alexs_Apt_2k.hdr", m_cubeMap);
 	//gfx::CreateCubemapFromEquirect(ctx, "textures/environment.hdr", m_cubeMap);
 	//gfx::CreateCubemapFromEquirect(ctx, "textures/cayley_interior_2k.hdr", m_cubeMap);
+	gfx::CreateCubemapFromEquirect(ctx, "textures/syferfontein_1d_clear_2k.hdr", m_cubeMap);
+
 	
 	gpu::GenerateMips(ctx, m_cubeMap);
 
@@ -117,9 +123,7 @@ void ShadowTest(gpu::cmd::Context* _ctx, TestbedApp& _app)
 {
 	KT_UNUSED2(_ctx, _app);
 
-	// HACK
-	gpu::cmd::SetViewport(_ctx, gpu::Rect{ c_shadowMapRes, c_shadowMapRes }, 0.0f, 1.0f);
-	gpu::cmd::SetScissorRect(_ctx, gpu::Rect{ c_shadowMapRes, c_shadowMapRes });
+	gpu::cmd::SetViewportAndScissorRectFromTexture(_ctx, _app.m_scene.m_shadowCascadeTex, 0.0f, 1.0f);
 	gpu::cmd::ResourceBarrier(_ctx, _app.m_scene.m_shadowCascadeTex, gpu::ResourceState::DepthStencilTarget);
 	gpu::cmd::SetRenderTarget(_ctx, 0, gpu::TextureHandle{});
 
@@ -140,9 +144,6 @@ void ShadowTest(gpu::cmd::Context* _ctx, TestbedApp& _app)
 	}
 
 	gpu::cmd::ResourceBarrier(_ctx, _app.m_scene.m_shadowCascadeTex, gpu::ResourceState::ShaderResource);
-	// MASSIVE HACK
-	gpu::cmd::SetViewport(_ctx, gpu::Rect{ 1280.0f, 720.0f }, 0.0f, 1.0f);
-	gpu::cmd::SetScissorRect(_ctx, gpu::Rect{ 1280.0f, 720.0f });
 }
 
 void TestbedApp::Tick(float _dt)
@@ -153,7 +154,7 @@ void TestbedApp::Tick(float _dt)
 	gpu::GetSwapchainDimensions(swapchainW, swapchainH);
 
 	gfx::Camera::ProjectionParams params;
-	params.SetPerspective(5.0f, 5000.0f, kt::ToRadians(s_camFov), float(swapchainW) / float(swapchainH));
+	params.SetPerspective(s_camNearPlane, s_camFarPlane, kt::ToRadians(s_camFov), float(swapchainW) / float(swapchainH));
 	m_cam.SetProjection(params);
 
 	m_camController.UpdateCamera(_dt, m_cam);
@@ -161,7 +162,6 @@ void TestbedApp::Tick(float _dt)
 
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 	ShadowTest(ctx, *this);
-
 
 	gpu::TextureHandle backbuffer = gpu::CurrentBackbuffer();
 	gpu::TextureHandle depth = gpu::BackbufferDepth();
@@ -179,6 +179,8 @@ void TestbedApp::Tick(float _dt)
 	float const col[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 	gpu::cmd::ClearRenderTarget(ctx, backbuffer, col);
 	gpu::cmd::ClearDepth(ctx, depth, 1.0f);
+
+	gpu::cmd::SetViewportAndScissorRectFromTexture(ctx, backbuffer, 0.0f, 1.0f);
 
 	gpu::DescriptorData frameSrvs[6];
 	frameSrvs[0].Set(m_irradMap);

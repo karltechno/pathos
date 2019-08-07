@@ -1527,9 +1527,11 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 
 	m_commandQueueManager.Init(m_d3dDev);
 
+	gpu::Format constexpr c_backBufferFormat = gpu::Format::R10G10B10A2_UNorm;
 
 	// Swapchain
 	{
+
 		RECT r;
 		::GetClientRect(HWND(_nativeWindowHandle), &r);
 
@@ -1539,7 +1541,8 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
 		swapChainDesc.Height = m_swapChainHeight;
 		swapChainDesc.Width = m_swapChainWidth;
-		swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // TODO: HDR ?
+		swapChainDesc.Format = ToDXGIFormat(c_backBufferFormat); 
+		
 		swapChainDesc.Scaling = DXGI_SCALING_NONE;
 		swapChainDesc.SampleDesc.Quality = 0;
 		swapChainDesc.SampleDesc.Count = 1;
@@ -1565,7 +1568,7 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		m_backBuffers[i].AcquireNoRef(gpu::TextureHandle{ gpu::ResourceHandle{ m_resourceHandles.Alloc(backbufferData) } });
 		ID3D12Resource* backbufferRes;
 		D3D_CHECK(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&backbufferRes)));
-		backbufferData->InitFromBackbuffer(backbufferRes, i, Format::R8G8B8A8_UNorm, m_swapChainHeight, m_swapChainWidth);
+		backbufferData->InitFromBackbuffer(backbufferRes, i, c_backBufferFormat, m_swapChainHeight, m_swapChainWidth);
 
 		m_framesResources[i].m_uploadAllocator.Init(&m_uploadPagePool);
 	}
@@ -1604,6 +1607,7 @@ Device_D3D12::~Device_D3D12()
 	KT_ASSERT(m_psoHandles.NumAllocated() == 0);
 	KT_ASSERT(m_resourceHandles.NumAllocated() == 0);
 	KT_ASSERT(m_shaderHandles.NumAllocated() == 0);
+	KT_ASSERT(m_persistentTableHandles.NumAllocated() == 0);
 
 	// TODO: state check/clear handles if not unallocated.
 
@@ -1923,7 +1927,7 @@ bool Init(void* _nwh)
 	// TODO: Toggle debug layer
 	g_device = new Device_D3D12();
 	// TODO
-	g_device->Init(_nwh, false);
+	g_device->Init(_nwh, true);
 	return true;
 }
 
@@ -2183,6 +2187,18 @@ bool GetResourceInfo(gpu::ResourceHandle _handle, gpu::ResourceType& _type, gpu:
 	}
 
 	return false;
+}
+
+bool GetTextureInfo(gpu::TextureHandle _handle, gpu::TextureDesc& o_textureDesc)
+{
+	gpu::ResourceType type;
+	return GetResourceInfo(_handle, type, nullptr, &o_textureDesc) && gpu::IsTexture(type);
+}
+
+bool GetBufferInfo(gpu::BufferHandle _handle, gpu::BufferDesc& o_bufferDesc)
+{
+	gpu::ResourceType type;
+	return  GetResourceInfo(_handle, type, &o_bufferDesc) && type == ResourceType::Buffer;
 }
 
 bool GetShaderInfo(ShaderHandle _handle, ShaderType& o_type, char const*& o_name)

@@ -29,6 +29,9 @@ void End(Context* _ctx);
 
 ContextType GetContextType(Context* _ctx);
 
+// Reset bound buffers, viewport to default etc.
+void ResetState(Context* _ctx);
+
 void SetPSO(Context* _ctx, gpu::PSOHandle _pso);
 
 void SetVertexBuffer(Context* _ctx, uint32_t _streamIdx, gpu::BufferHandle _handle);
@@ -73,6 +76,7 @@ void EndUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle);
 void SetScissorRect(Context* _ctx, gpu::Rect const& _rect);
 void SetViewport(Context* _ctx, gpu::Rect const& _rect, float _minDepth, float _maxDepth);
 
+void SetViewportAndScissorRectFromTexture(Context* _ctx, gpu::TextureHandle _tex, float _minDepth, float _maxDepth);
 }
 
 }
