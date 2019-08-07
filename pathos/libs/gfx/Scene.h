@@ -72,6 +72,7 @@ public:
 	gpu::BufferRef m_frameConstantsGpuBuf;
 
 	gpu::BufferRef m_instanceGpuBuf;
+	gpu::BufferRef m_indirectArgsBuf;
 
 	gpu::TextureRef m_shadowCascadeTex;
 

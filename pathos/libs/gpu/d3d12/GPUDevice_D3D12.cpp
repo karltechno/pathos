@@ -1578,6 +1578,22 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 	gpu::TextureDesc const depthDesc = gpu::TextureDesc::Desc2D(m_swapChainWidth, m_swapChainHeight, TextureUsageFlags::DepthStencil, Format::D32_Float);
 	m_backbufferDepth.AcquireNoRef(gpu::CreateTexture(depthDesc, nullptr, "Backbuffer Depth"));
 
+	// Command signatures.
+	{
+		D3D12_COMMAND_SIGNATURE_DESC cmdSigDesc = {};
+		D3D12_INDIRECT_ARGUMENT_DESC arg;
+		arg.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
+		cmdSigDesc.ByteStride = sizeof(D3D12_DRAW_INDEXED_ARGUMENTS);
+		cmdSigDesc.NumArgumentDescs = 1;
+		cmdSigDesc.pArgumentDescs = &arg;
+		static_assert(sizeof(D3D12_DRAW_INDEXED_ARGUMENTS) == sizeof(gpu::IndexedDrawArguments), "Mismatch indexed draw args size.");
+
+		D3D_CHECK(m_d3dDev->CreateCommandSignature(&cmdSigDesc, nullptr, IID_PPV_ARGS(&m_multiDrawIndexedCommandSig)));
+
+		arg.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
+		D3D_CHECK(m_d3dDev->CreateCommandSignature(&cmdSigDesc, nullptr, IID_PPV_ARGS(&m_dispatchIndirectCommandSig)));
+	}
+
 	m_cpuFrameIdx = m_swapChain->GetCurrentBackBufferIndex();
 
 	InitMipPsos(g_device);
@@ -1634,6 +1650,9 @@ Device_D3D12::~Device_D3D12()
 
 	SafeReleaseDX(m_graphicsRootSig);
 	SafeReleaseDX(m_computeRootSig);
+
+	SafeReleaseDX(m_dispatchIndirectCommandSig);
+	SafeReleaseDX(m_multiDrawIndexedCommandSig);
 }
 
 gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initialData, char const* _debugName)

@@ -403,6 +403,43 @@ void DrawInstanced(Context* _ctx, uint32_t _vertexCount, uint32_t _instanceCount
 	_ctx->m_cmdList->DrawInstanced(_vertexCount, _instanceCount, _startVertex, _startInstance);
 }
 
+void DrawIndexedInstancedIndirect(Context* _ctx, gpu::ResourceHandle _argBuffer, uint32_t _argOffset, uint32_t _drawCount)
+{
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
+
+	FlushBarriers(_ctx);
+	_ctx->ApplyStateChanges(CommandListFlags_D3D12::Graphics);
+
+	AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_argBuffer);
+	KT_ASSERT(res);
+	KT_ASSERT(res->IsBuffer());
+	KT_ASSERT(_argOffset < res->m_bufferDesc.m_sizeInBytes);
+	uint64_t const argOffset = _argOffset + res->m_offset;
+	_ctx->m_cmdList->ExecuteIndirect(_ctx->m_device->m_multiDrawIndexedCommandSig, _drawCount, res->m_res, argOffset, nullptr, 0);
+}
+
+void DrawIndexedInstancedIndirect(Context* _ctx, gpu::ResourceHandle _argBuffer, uint32_t _argOffset, uint32_t _maxDrawCount, gpu::ResourceHandle _countBuffer, uint32_t _countOffset)
+{
+	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Graphics);
+
+	FlushBarriers(_ctx);
+	_ctx->ApplyStateChanges(CommandListFlags_D3D12::Graphics);
+
+	AllocatedResource_D3D12* argRes = _ctx->m_device->m_resourceHandles.Lookup(_argBuffer);
+	KT_ASSERT(argRes);
+	KT_ASSERT(argRes->IsBuffer());
+	KT_ASSERT(_argOffset < argRes->m_bufferDesc.m_sizeInBytes);
+
+	AllocatedResource_D3D12* countRes = _ctx->m_device->m_resourceHandles.Lookup(_countBuffer);
+	KT_ASSERT(countRes);
+	KT_ASSERT(countRes->IsBuffer());
+	KT_ASSERT(_countOffset < countRes->m_bufferDesc.m_sizeInBytes);
+	uint64_t const argOffset = _argOffset + argRes->m_offset;
+	uint64_t const countOffset = _countOffset + countRes->m_offset;
+
+	_ctx->m_cmdList->ExecuteIndirect(_ctx->m_device->m_multiDrawIndexedCommandSig, _maxDrawCount, argRes->m_res, argOffset, countRes->m_res, countOffset);
+}
+
 void Dispatch(Context* _ctx, uint32_t _x, uint32_t _y, uint32_t _z)
 {
 	FlushBarriers(_ctx);

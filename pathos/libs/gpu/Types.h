@@ -545,4 +545,13 @@ struct DescriptorData
 	} m_type;
 };
 
+struct IndexedDrawArguments
+{
+	uint32_t m_indicesPerInstance;
+	uint32_t m_instanceCount;
+	uint32_t m_indexStart;
+	int32_t m_baseVertex;
+	uint32_t m_startInstance;
+};
+
 }

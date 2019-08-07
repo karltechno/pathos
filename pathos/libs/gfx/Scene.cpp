@@ -65,6 +65,12 @@ Scene::Scene()
 	instanceBufferDesc.m_flags = gpu::BufferFlags::Vertex | gpu::BufferFlags::Transient; // TODO: Should instance data be copied out of upload heap?
 	instanceBufferDesc.m_strideInBytes = c_instanceDataSize;
 	m_instanceGpuBuf = gpu::CreateBuffer(instanceBufferDesc, nullptr, "gfx::Scene instance data");
+
+	gpu::BufferDesc indirectArgsDesc;
+	indirectArgsDesc.m_flags = gpu::BufferFlags::Transient;
+	instanceBufferDesc.m_strideInBytes = sizeof(gpu::IndexedDrawArguments);
+	instanceBufferDesc.m_sizeInBytes = 0;
+	m_indirectArgsBuf = gpu::CreateBuffer(instanceBufferDesc, nullptr, "gfx::Scene indirect args");
 }
 
 void Scene::Init(uint32_t _shadowMapResolution /*= 2048*/)
@@ -100,8 +106,7 @@ static void UpdateLights(Scene* _scene)
 	{
 		uint32_t const reqLightSize = numLights;
 		gpu::BufferDesc oldDesc;
-		gpu::ResourceType ty;
-		gpu::GetResourceInfo(_scene->m_lightGpuBuf, ty, &oldDesc);
+		gpu::GetBufferInfo(_scene->m_lightGpuBuf, oldDesc);
 		uint32_t const oldLightSize = oldDesc.m_sizeInBytes / sizeof(shaderlib::LightData);
 		if (oldLightSize < reqLightSize)
 		{
@@ -176,10 +181,9 @@ void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera cons
 	m_frameConstants.sunColor = m_sunColor * m_sunIntensity;
 
 	{
-	// calculate cascades
+		// calculate cascades
 		gpu::TextureDesc desc;
-		gpu::ResourceType f;
-		gpu::GetResourceInfo(m_shadowCascadeTex, f, nullptr, &desc);
+		gpu::GetTextureInfo(m_shadowCascadeTex, desc);
 		gfx::CalculateShadowCascades(_mainView, m_frameConstants.sunDir, desc.m_width, c_numShadowCascades, m_shadowCascades, &m_frameConstants.cascadeSplits[0]);
 
 		for (uint32_t cascadeIdx = 0; cascadeIdx < c_numShadowCascades; ++cascadeIdx)
@@ -261,6 +265,74 @@ void BuildMeshInstanceArray(kt::Slice<Scene::ModelInstance> const& _modelInstanc
 	}
 }
 
+static void RenderShadowInstances_MultiDraw(kt::Slice<InstanceData> const& _sortedInstances, Scene* _scene, gpu::cmd::Context* _ctx)
+{
+	KT_ASSERT(gfx::ResourceManager::IsUsingUnifiedBuffers());
+
+	uint8_t* instanceStream = gpu::cmd::BeginUpdateTransientBuffer(_ctx, _scene->m_instanceGpuBuf, c_instanceDataSize * _sortedInstances.Size()).Data();
+
+	InstanceData const* begin = _sortedInstances.Begin();
+	InstanceData const* end = _sortedInstances.End() - 1; // -1 for sentinel
+
+	gpu::cmd::SetVertexBuffer(_ctx, 1, _scene->m_instanceGpuBuf);
+
+	gfx::ResourceManager::UnifiedBuffers const& unifiedBuffers = gfx::ResourceManager::GetUnifiedBuffers();
+	gpu::cmd::SetVertexBuffer(_ctx, 0, unifiedBuffers.m_posVertexBuf);
+	gpu::cmd::SetIndexBuffer(_ctx, unifiedBuffers.m_indexBufferRef);
+
+	uint32_t batchInstanceBegin = 0;
+
+	// TODO: count max batches earlier?
+	gpu::IndexedDrawArguments* drawArgs = (gpu::IndexedDrawArguments*)gpu::cmd::BeginUpdateTransientBuffer
+	(
+		_ctx, _scene->m_indirectArgsBuf, sizeof(gpu::IndexedDrawArguments) * _sortedInstances.Size()
+	).Data();
+
+	uint32_t batches = 0;
+
+	for (;;)
+	{
+		ResourceManager::MeshIdx const curMeshIdx = begin->m_meshIdx;
+
+		uint32_t numInstances = 0;
+
+		do
+		{
+			memcpy(instanceStream, begin->m_mtx43, c_instanceDataSize);
+			instanceStream += c_instanceDataSize;
+
+			++numInstances;
+			++begin;
+		} while (begin->m_meshIdx == curMeshIdx);
+
+		// Write out draw calls
+		gfx::Mesh const& mesh = *ResourceManager::GetMesh(curMeshIdx);
+
+		batches += mesh.m_subMeshes.Size();
+		for (gfx::Mesh::SubMesh const& subMesh : mesh.m_subMeshes)
+		{
+			drawArgs->m_baseVertex = mesh.m_unifiedBufferVertexOffset;
+			drawArgs->m_indexStart = subMesh.m_indexBufferStartOffset + mesh.m_unifiedBufferIndexOffset;
+			drawArgs->m_indicesPerInstance = subMesh.m_numIndices;
+			drawArgs->m_instanceCount = numInstances;
+			drawArgs->m_startInstance = batchInstanceBegin;
+			++drawArgs;
+		}
+
+		batchInstanceBegin += numInstances;
+
+		if (begin == end)
+		{
+			break;
+		}
+	}
+
+	gpu::cmd::EndUpdateTransientBuffer(_ctx, _scene->m_instanceGpuBuf);
+	gpu::cmd::EndUpdateTransientBuffer(_ctx, _scene->m_indirectArgsBuf);
+
+	gpu::cmd::DrawIndexedInstancedIndirect(_ctx, _scene->m_indirectArgsBuf, 0, batches);
+}
+
 void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 {
 	if (m_modelInstances.Size() == 0)
@@ -280,6 +352,12 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 		InstanceData* tmp = (InstanceData*)KT_ALLOCA(sizeof(InstanceData) * instancesSorted.Size());
 		// -1, don't sort sentinel
 		kt::RadixSort(instancesSorted.Begin(), instancesSorted.End() - 1, tmp, [](InstanceData const& _inst) { return _inst.m_meshIdx.idx; });
+	}
+
+	if (_shadowMap)
+	{
+		RenderShadowInstances_MultiDraw(kt::MakeSlice(instancesSorted.Begin(), instancesSorted.End()), this, _ctx);
+		return;
 	}
 
 	uint8_t* instanceStream = gpu::cmd::BeginUpdateTransientBuffer(_ctx, m_instanceGpuBuf, c_instanceDataSize * instancesSorted.Size()).Data();

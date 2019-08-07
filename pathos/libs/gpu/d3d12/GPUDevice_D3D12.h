@@ -12,6 +12,7 @@
 #include "HandleRef.h"
 
 struct ID3D12Device2;
+struct ID3D12CommandSignature;
 struct IDXGISwapChain4;
 struct IDXGISwapChain3;
 struct IDXGISwapChain1;
@@ -266,6 +267,9 @@ struct Device_D3D12
 	kt::VersionedHandlePool<AllocatedPersistentDescriptorTable_D3D12> m_persistentTableHandles;
 
 	cmd::CommandContext_D3D12* m_mainThreadCtx = nullptr;
+
+	ID3D12CommandSignature* m_multiDrawIndexedCommandSig = nullptr;
+	ID3D12CommandSignature* m_dispatchIndirectCommandSig = nullptr;
 
 	PSOCache m_psoCache;
 

@@ -58,6 +58,8 @@ void CopyResource(Context* _ctx, gpu::ResourceHandle _src, gpu::ResourceHandle _
 
 void DrawIndexedInstanced(Context* _ctx, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startIndex, uint32_t _baseVertex, uint32_t _startInstance);
 void DrawInstanced(Context* _ctx, uint32_t _vertexCount, uint32_t _instanceCount, uint32_t _startVertex, uint32_t _startInstance);
+void DrawIndexedInstancedIndirect(Context* _ctx, gpu::ResourceHandle _argBuffer, uint32_t _argOffset, uint32_t _drawCount);
+void DrawIndexedInstancedIndirect(Context* _ctx, gpu::ResourceHandle _argBuffer, uint32_t _argOffset, uint32_t _maxDrawCount, gpu::ResourceHandle _countBuffer, uint32_t _countOffset);
 
 void Dispatch(Context* _ctx, uint32_t _x, uint32_t _y, uint32_t _z);
 
