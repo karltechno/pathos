@@ -392,6 +392,7 @@ static bool LoadMeshes(Model* _model, cgltf_data* _data, kt::Slice<ResourceManag
 	return true;
 }
 
+#if 0
 static void CreateStandaloneBuffers(Mesh* _m)
 {
 	char const* const baseDebugName = _m->m_name.Empty() ? "UNKNOWN" : _m->m_name.Data();
@@ -448,27 +449,21 @@ static void CreateStandaloneBuffers(Mesh* _m)
 		_m->m_tangentGpuBuf = gpu::CreateBuffer(tangentDesc, _m->m_tangentStream.Data(), name.Data());
 	}
 }
+#endif
 
 void Mesh::CreateGPUBuffers(bool _keepDataOnCpu)
 {
-	if (ResourceManager::IsUsingUnifiedBuffers())
-	{
-		ResourceManager::WriteIntoUnifiedBuffers
-		(
-			(float const*)m_posStream.Data(),
-			(float const*)m_uvStream0.Data(),
-			m_tangentStream.Data(),
-			m_indices.Data(),
-			m_posStream.Size(),
-			m_indices.Size(),
-			m_unifiedBufferIndexOffset,
-			m_unifiedBufferVertexOffset
-		);
-	}
-	else
-	{
-		CreateStandaloneBuffers(this);
-	}
+	ResourceManager::WriteIntoUnifiedBuffers
+	(
+		(float const*)m_posStream.Data(),
+		(float const*)m_uvStream0.Data(),
+		m_tangentStream.Data(),
+		m_indices.Data(),
+		m_posStream.Size(),
+		m_indices.Size(),
+		m_unifiedBufferIndexOffset,
+		m_unifiedBufferVertexOffset
+	);
 
 	if (!_keepDataOnCpu)
 	{

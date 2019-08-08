@@ -87,11 +87,10 @@ struct UnifiedBuffers
 	uint32_t m_indexUsed;
 };
 
-// If enabled all models will load vertex/index data into unified buffers. This is mainly for easy experimenting with GPU culling. 
+// All models load vertex/index data into unified buffers. This is mainly for easy experimenting with GPU culling. 
 // (Eg. ExecuteIndirect without needing to rebind separate vertex/index buffers).
 // An alternative approach may be to allocate buffers with CreatedPlacedResource and alias them with one larger buffer.
-void EnableUnifiedBuffers(uint32_t _vertexCapacity = 2500000, uint32_t _indexCapacity = 2000000);
-bool IsUsingUnifiedBuffers();
+void InitUnifiedBuffers(uint32_t _vertexCapacity = 2500000, uint32_t _indexCapacity = 2000000);
 UnifiedBuffers const& GetUnifiedBuffers();
 
 void WriteIntoUnifiedBuffers

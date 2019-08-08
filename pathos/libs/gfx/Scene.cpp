@@ -267,8 +267,6 @@ void BuildMeshInstanceArray(kt::Slice<Scene::ModelInstance> const& _modelInstanc
 
 static void RenderShadowInstances_MultiDraw(kt::Slice<InstanceData> const& _sortedInstances, Scene* _scene, gpu::cmd::Context* _ctx)
 {
-	KT_ASSERT(gfx::ResourceManager::IsUsingUnifiedBuffers());
-
 	uint8_t* instanceStream = gpu::cmd::BeginUpdateTransientBuffer(_ctx, _scene->m_instanceGpuBuf, c_instanceDataSize * _sortedInstances.Size()).Data();
 
 	InstanceData const* begin = _sortedInstances.Begin();
@@ -365,22 +363,19 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 	InstanceData const* begin = instancesSorted.Begin();
 	InstanceData const* end = instancesSorted.End() - 1; // -1 for sentinel
 
-	bool const usingUnifiedBuffers = gfx::ResourceManager::IsUsingUnifiedBuffers();
-
 	gpu::cmd::SetVertexBuffer(_ctx, _shadowMap ? 1 : 3, m_instanceGpuBuf);
 
-	if (usingUnifiedBuffers)
-	{
-		gfx::ResourceManager::UnifiedBuffers const& unifiedBuffers = gfx::ResourceManager::GetUnifiedBuffers();
-		gpu::cmd::SetVertexBuffer(_ctx, 0, unifiedBuffers.m_posVertexBuf);
-		gpu::cmd::SetIndexBuffer(_ctx, unifiedBuffers.m_indexBufferRef);
 
-		if (!_shadowMap)
-		{
-			gpu::cmd::SetVertexBuffer(_ctx, 1, unifiedBuffers.m_tangentSpaceVertexBuf);
-			gpu::cmd::SetVertexBuffer(_ctx, 2, unifiedBuffers.m_uv0VertexBuf);
-		}
+	gfx::ResourceManager::UnifiedBuffers const& unifiedBuffers = gfx::ResourceManager::GetUnifiedBuffers();
+	gpu::cmd::SetVertexBuffer(_ctx, 0, unifiedBuffers.m_posVertexBuf);
+	gpu::cmd::SetIndexBuffer(_ctx, unifiedBuffers.m_indexBufferRef);
+
+	if (!_shadowMap)
+	{
+		gpu::cmd::SetVertexBuffer(_ctx, 1, unifiedBuffers.m_tangentSpaceVertexBuf);
+		gpu::cmd::SetVertexBuffer(_ctx, 2, unifiedBuffers.m_uv0VertexBuf);
 	}
+
 	
 	uint32_t batchInstanceBegin = 0;
 	for (;;)
@@ -401,19 +396,6 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 		// Write out draw calls
 		gfx::Mesh const& mesh = *ResourceManager::GetMesh(curMeshIdx);
 
-		if (!usingUnifiedBuffers)
-		{
-			gpu::cmd::SetVertexBuffer(_ctx, 0, mesh.m_posGpuBuf);
-			gpu::cmd::SetIndexBuffer(_ctx, mesh.m_indexGpuBuf);
-
-			if (!_shadowMap)
-			{
-				gpu::cmd::SetVertexBuffer(_ctx, 1, mesh.m_tangentGpuBuf);
-				gpu::cmd::SetVertexBuffer(_ctx, 2, mesh.m_uv0GpuBuf);
-			}
-		}
-
-
 		uint32_t lastMaterialIdx = UINT32_MAX;
 		for (gfx::Mesh::SubMesh const& subMesh : mesh.m_subMeshes)
 		{
@@ -428,15 +410,8 @@ void Scene::RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap)
 				}
 			}
 
-			if (usingUnifiedBuffers)
-			{
-				uint32_t const indexOffset = subMesh.m_indexBufferStartOffset + mesh.m_unifiedBufferIndexOffset;
-				gpu::cmd::DrawIndexedInstanced(_ctx, subMesh.m_numIndices, numInstances, indexOffset, mesh.m_unifiedBufferVertexOffset, batchInstanceBegin);
-			}
-			else
-			{
-				gpu::cmd::DrawIndexedInstanced(_ctx, subMesh.m_numIndices, numInstances, subMesh.m_indexBufferStartOffset, 0, batchInstanceBegin);
-			}
+			uint32_t const indexOffset = subMesh.m_indexBufferStartOffset + mesh.m_unifiedBufferIndexOffset;
+			gpu::cmd::DrawIndexedInstanced(_ctx, subMesh.m_numIndices, numInstances, indexOffset, mesh.m_unifiedBufferVertexOffset, batchInstanceBegin);
 		}
 		
 		batchInstanceBegin += numInstances;
@@ -460,5 +435,12 @@ void Scene::EndFrame()
 	gfx::DebugRender::Flush(gpu::GetMainThreadCommandCtx());
 }
 
+
+void Scene::AddModelInstance(ResourceManager::ModelIdx _idx, kt::Mat4 const& _mtx)
+{
+	ModelInstance& inst = m_modelInstances.PushBack();
+	inst.m_modelIdx = _idx;
+	inst.m_mtx = _mtx;
+}
 
 }

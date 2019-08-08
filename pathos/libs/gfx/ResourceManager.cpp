@@ -64,7 +64,6 @@ struct State
 	core::FolderWatcher* m_shaderWatcher;
 
 	bool m_materialsDirty = false;
-	bool m_usingUnifiedBuffers = false;
 } s_state;
 
 static void CreateMaterialGpuBuffer(uint32_t _maxElems)
@@ -148,10 +147,8 @@ void Shutdown()
 	s_state = State{};
 }
 
-void EnableUnifiedBuffers(uint32_t _vertexCapacity /*= 2500000*/, uint32_t _indexCapacity /*= 2000000*/)
+void InitUnifiedBuffers(uint32_t _vertexCapacity /*= 2500000*/, uint32_t _indexCapacity /*= 2000000*/)
 {
-	KT_ASSERT(!s_state.m_usingUnifiedBuffers);
-	s_state.m_usingUnifiedBuffers = true;
 	s_state.m_unifiedBuffers.m_vertexCapacity = _vertexCapacity;
 	s_state.m_unifiedBuffers.m_indexCapacity = _indexCapacity;
 	s_state.m_unifiedBuffers.m_indexUsed = 0;
@@ -192,16 +189,6 @@ void EnableUnifiedBuffers(uint32_t _vertexCapacity /*= 2500000*/, uint32_t _inde
 	}
 }
 
-void SetUseUnifiedVertexAndIndexBuffers(bool _enabled)
-{
-	s_state.m_usingUnifiedBuffers = _enabled;
-}
-
-bool IsUsingUnifiedBuffers()
-{
-	return s_state.m_usingUnifiedBuffers;
-}
-
 UnifiedBuffers const& GetUnifiedBuffers()
 {
 	return s_state.m_unifiedBuffers;
@@ -219,8 +206,6 @@ void WriteIntoUnifiedBuffers
 	uint32_t& o_vtxOffset
 )
 {
-	KT_ASSERT(IsUsingUnifiedBuffers());
-
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
 	UnifiedBuffers& buffers = s_state.m_unifiedBuffers;
@@ -369,7 +354,8 @@ ModelIdx CreateModel()
 ModelIdx CreateModelFromGLTF(char const* _path)
 {
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
-	if (IsUsingUnifiedBuffers())
+
+	// For copying into unified buffers.
 	{
 		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_indexBufferRef, gpu::ResourceState::CopyDest);
 		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_posVertexBuf, gpu::ResourceState::CopyDest);
@@ -381,7 +367,6 @@ ModelIdx CreateModelFromGLTF(char const* _path)
 	ModelIdx const idx = ModelIdx(uint16_t(s_state.m_meshes.Size()));
 	s_state.m_models.PushBack().LoadFromGLTF(_path);
 	
-	if (IsUsingUnifiedBuffers())
 	{
 		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_indexBufferRef, gpu::ResourceState::IndexBuffer);
 		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_posVertexBuf, gpu::ResourceState::VertexBuffer);

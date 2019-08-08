@@ -55,6 +55,8 @@ public:
 
 	void EndFrame();
 
+	void AddModelInstance(ResourceManager::ModelIdx _idx, kt::Mat4 const& _mtx);
+
 	struct ModelInstance
 	{
 		kt::Mat4 m_mtx;

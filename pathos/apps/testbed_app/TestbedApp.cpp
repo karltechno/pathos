@@ -35,7 +35,7 @@ static const float c_shadowMapRes = 2048.0f;
 
 void TestbedApp::Setup()
 {
-	gfx::ResourceManager::EnableUnifiedBuffers();
+	gfx::ResourceManager::InitUnifiedBuffers();
 
 	m_scene.Init(uint32_t(c_shadowMapRes));
 
@@ -85,6 +85,7 @@ void TestbedApp::Setup()
 		m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/DamagedHelmet/DamagedHelmet.gltf");
 		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/sponza/Sponza.gltf");
 		m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/rainier_ak/Scene.gltf");
+		m_scene.AddModelInstance(m_modelIdx, kt::Mat4::Identity());
 		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/MetalRoughSpheres/MetalRoughSpheres.gltf");
 	}
 
