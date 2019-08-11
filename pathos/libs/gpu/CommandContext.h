@@ -4,6 +4,13 @@
 
 #include "Types.h"
 
+#define GPU_PROFILE_COLOUR(r, g, b) (0xff000000 | (uint32_t(r & 0xFF)) | (uint32_t(g & 0xFF) << 8) | (uint32_t(b & 0xFF) << 16))
+
+#define GPU_PROFILE_BEGIN(_ctx, _name, _colour) gpu::cmd::PushMarker(_ctx, _name, _colour);
+#define GPU_PROFILE_END(_ctx) gpu::cmd::PopMarker(_ctx);
+
+#define GPU_PROFILE_SCOPE(_ctx, _name, _colour) gpu::cmd::ScopedMarker KT_UNIQUE_IDENTIFIER(GPU_SCOPED_MARKER_)(_ctx, _name, _colour);
+
 namespace gpu
 {
 
@@ -26,6 +33,11 @@ enum class ContextType
 
 Context* Begin(ContextType _type);
 void End(Context* _ctx);
+
+void PushMarker(Context* _ctx, char const* _name, uint32_t _colour);
+void PushMarker(Context* _ctx, char const* _name);
+
+void PopMarker(Context* _ctx);
 
 ContextType GetContextType(Context* _ctx);
 
@@ -79,6 +91,23 @@ void SetScissorRect(Context* _ctx, gpu::Rect const& _rect);
 void SetViewport(Context* _ctx, gpu::Rect const& _rect, float _minDepth, float _maxDepth);
 
 void SetViewportAndScissorRectFromTexture(Context* _ctx, gpu::TextureHandle _tex, float _minDepth, float _maxDepth);
+
+struct ScopedMarker
+{
+	ScopedMarker(gpu::cmd::Context* _ctx, char const* _name, uint32_t _colour)
+		: m_ctx(_ctx)
+	{
+		gpu::cmd::PushMarker(_ctx, _name, _colour);
+	}
+
+	~ScopedMarker()
+	{
+		gpu::cmd::PopMarker(m_ctx);
+	}
+
+	gpu::cmd::Context* m_ctx;
+};
+
 }
 
 }
