@@ -49,7 +49,6 @@ struct LightData
     float3 direction;
 	float intensity;
     
-    // Scale and offset as described in https://google.github.io/filament/Filament.md.html
     float2 spotParams; float2 __pad0__;
 };
 
