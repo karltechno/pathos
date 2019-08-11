@@ -5,7 +5,7 @@
 #define PATHOS_MAX_SHADOW_CASCADES 4
 
 #ifdef __cplusplus
-	#define PATHOS_ASSERT_16B_ALIGNED(_struct) static_assert((sizeof(_struct) & 15) == 0, #_struct ## " is not a multiple of 16 bytes.");
+	#define PATHOS_ASSERT_16B_ALIGNED(_struct) static_assert((sizeof(_struct) & 15) == 0, #_struct " is not a multiple of 16 bytes.");
 #else
 	#define PATHOS_ASSERT_16B_ALIGNED(_struct)
 #endif
