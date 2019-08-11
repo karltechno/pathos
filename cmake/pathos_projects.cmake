@@ -14,4 +14,12 @@ macro(add_pathos_app name sources)
     set_target_properties(${name} PROPERTIES FOLDER pathos_apps)
     source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "src" FILES ${sources})
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+    if(WIN32)
+        add_custom_command(TARGET ${name} POST_BUILD 
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${PATHOS_SRC}/libs/gpu/d3d12/WinPixEventRuntime/WinPixEventRuntime.dll"              
+                $<TARGET_FILE_DIR:${name}>)
+    endif()
+
 endmacro()

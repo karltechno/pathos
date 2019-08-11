@@ -6,6 +6,7 @@
 #include "DescriptorHeap_D3D12.h"
 
 #include <d3d12.h>
+#include "WinPixEventRuntime/pix3.h"
 
 
 #define CHECK_QUEUE_FLAGS(_ctx, _required) \
@@ -134,6 +135,21 @@ void End(Context* _ctx)
 	_ctx->m_cmdAllocator = nullptr;
 
 	delete _ctx;
+}
+
+void PushMarker(Context* _ctx, char const* _name)
+{
+	PushMarker(_ctx, _name, GPU_PROFILE_COLOUR(0, 0, 0xFF));
+}
+
+void PushMarker(Context* _ctx, char const* _name, uint32_t _colour)
+{
+	::PIXBeginEvent(_ctx->m_cmdList, PIX_COLOR(uint8_t(_colour & 0xFF), uint8_t((_colour >> 8) & 0xFF), uint8_t((_colour >> 16) & 0xFF)), _name);
+}
+
+void PopMarker(Context* _ctx)
+{
+	::PIXEndEvent(_ctx->m_cmdList);
 }
 
 static void MarkDirtyIfBound(Context* _ctx, gpu::ResourceHandle _handle, AllocatedResource_D3D12* _res)
