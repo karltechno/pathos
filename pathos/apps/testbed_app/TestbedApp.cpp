@@ -29,8 +29,6 @@ static core::CVar<float> s_camFarPlane("cam.far_plane", "Camera far plane", 5000
 
 static core::CVar<bool> s_vsync("app.vsync", "Vsync enabled", true);
 
-constexpr uint32_t c_numShadowCascades = 4;
-
 static const float c_shadowMapRes = 2048.0f;
 
 void TestbedApp::Setup()
@@ -122,29 +120,8 @@ void TestbedApp::Setup()
 
 void ShadowTest(gpu::cmd::Context* _ctx, TestbedApp& _app)
 {
-	KT_UNUSED2(_ctx, _app);
-
-	gpu::cmd::SetViewportAndScissorRectFromTexture(_ctx, _app.m_scene.m_shadowCascadeTex, 0.0f, 1.0f);
-	gpu::cmd::ResourceBarrier(_ctx, _app.m_scene.m_shadowCascadeTex, gpu::ResourceState::DepthStencilTarget);
-	gpu::cmd::SetRenderTarget(_ctx, 0, gpu::TextureHandle{});
-
-	// TODO: Hack because barrier handling is bad atm.
-	gpu::cmd::FlushBarriers(_ctx);
-
-	for (uint32_t cascadeIdx = 0; cascadeIdx < c_numShadowCascades; ++cascadeIdx)
-	{
-		gpu::cmd::ClearDepth(_ctx, _app.m_scene.m_shadowCascadeTex, 1.0f, cascadeIdx);
-		gpu::cmd::SetDepthBuffer(_ctx, _app.m_scene.m_shadowCascadeTex, cascadeIdx);
-		gpu::DescriptorData cbv;
-		cbv.Set(_app.m_scene.m_shadowCascades[cascadeIdx].GetViewProj().Data(), sizeof(kt::Mat4));
-
-		gpu::cmd::SetGraphicsCBVTable(_ctx, cbv, PATHOS_PER_VIEW_SPACE);
-		gpu::cmd::SetPSO(_ctx, _app.m_shadowMapPso);
-
-		_app.m_scene.RenderInstances(_ctx);
-	}
-
-	gpu::cmd::ResourceBarrier(_ctx, _app.m_scene.m_shadowCascadeTex, gpu::ResourceState::ShaderResource);
+	gpu::cmd::SetPSO(_ctx, _app.m_shadowMapPso);
+	_app.m_scene.RenderCascadeViews(_ctx);
 }
 
 void TestbedApp::Tick(float _dt)
@@ -163,6 +140,8 @@ void TestbedApp::Tick(float _dt)
 
 	m_scene.BeginFrameAndUpdateBuffers(ctx, m_cam, _dt);
 	m_scene.BindPerFrameConstants(ctx);
+
+	m_scene.SubmitInstances();
 
 	ShadowTest(ctx, *this);
 

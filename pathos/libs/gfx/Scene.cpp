@@ -72,11 +72,7 @@ Scene::Scene()
 		frameConstDesc.m_sizeInBytes = sizeof(shaderlib::FrameConstants);
 		m_frameConstantsGpuBuf = gpu::CreateBuffer(frameConstDesc, nullptr, "Frame Constants Buffer");
 	}
-	
-	m_instanceXformBuf.Init(gpu::BufferFlags::Dynamic | gpu::BufferFlags::ShaderResource, 1024, gpu::Format::Unknown, "gfx::Scene instance xforms");
-	m_indirectArgsBuf.Init(gpu::BufferFlags::Dynamic, 1024, gpu::Format::Unknown, "gfx::Scene indirect args");
-	m_instanceUniformsBuf.Init(gpu::BufferFlags::Dynamic | gpu::BufferFlags::ShaderResource, 1024, gpu::Format::Unknown, "gfx::Scene instance uniforms");
-	m_instanceIdStepBuf.Init(gpu::BufferFlags::Dynamic | gpu::BufferFlags::Vertex, 1024, gpu::Format::Unknown, "gfx::Scene instance step");
+
 }
 
 void Scene::Init(uint32_t _shadowMapResolution /*= 2048*/)
@@ -152,6 +148,8 @@ static void UpdateLights(Scene* _scene)
 
 void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera const& _mainView, float _dt)
 {
+	m_meshRenderer.Clear();
+
 	m_sceneBounds = CalcSceneBounds(*this);
 
 	m_frameConstants.mainViewProj = _mainView.GetViewProj();
@@ -208,179 +206,49 @@ void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera cons
 	gpu::cmd::ResourceBarrier(_ctx, m_frameConstantsGpuBuf, gpu::ResourceState::ConstantBuffer);
 }
 
-struct KT_ALIGNAS(16) InstanceData
+void Scene::SubmitInstances()
 {
-	float m_mtx43[4 * 3];
-
-	ResourceManager::MeshIdx m_meshIdx;
-
-	uint8_t __pad0__[sizeof(m_mtx43) - sizeof(ResourceManager::MeshIdx)];
-};
-
-static void PackMat44_to_Mat34_Transpose(kt::Mat4 const& _mat4, float* o_mat34)
-{
-#if 1
-	float const* mtxPtr = _mat4.Data();
-
-	for (uint32_t row = 0; row < 3; ++row)
-	{
-		o_mat34[row * 4 + 0] = mtxPtr[row + 0];
-		o_mat34[row * 4 + 1] = mtxPtr[row + 4];
-		o_mat34[row * 4 + 2] = mtxPtr[row + 8];
-		o_mat34[row * 4 + 3] = mtxPtr[row + 12];
-	}
-#else
-	kt::Mat4 x = kt::Transpose(_mat4);
-	for (uint32_t row = 0; row < 3; ++row)
-	{
-		o_mat34[row * 4 + 0] = x[row][0];
-		o_mat34[row * 4 + 1] = x[row][1];
-		o_mat34[row * 4 + 2] = x[row][2];
-		o_mat34[row * 4 + 3] = x[row][3];
-	}
-#endif
-}
-
-void BuildMeshInstanceArray(kt::Slice<Scene::ModelInstance> const& _modelInstances, kt::Array<InstanceData>& o_instances)
-{
-	// TODO: Temp allocator, better size.
-	o_instances.Reserve(_modelInstances.Size() * 4);
-
-	// TODO: Culling
-	// TODO: Slow
-	for (Scene::ModelInstance const& modelInstance : _modelInstances)
+	for (Scene::ModelInstance const& modelInstance : m_modelInstances)
 	{
 		gfx::Model const& model = *ResourceManager::GetModel(modelInstance.m_modelIdx);
-
-		InstanceData* instances = o_instances.PushBack_Raw(model.m_nodes.Size());
-		// TODO: Bad name?
 		for (gfx::Model::Node const& modelMeshInstance : model.m_nodes)
 		{
 			ResourceManager::MeshIdx const meshIdx = model.m_meshes[modelMeshInstance.m_internalMeshIdx];
-			instances->m_meshIdx = meshIdx;
-			PackMat44_to_Mat34_Transpose(kt::Mul(modelInstance.m_mtx, modelMeshInstance.m_mtx), instances->m_mtx43);
-			++instances;
+			m_meshRenderer.Submit(meshIdx, kt::Mul(modelInstance.m_mtx, modelMeshInstance.m_mtx));
 		}
-
 	}
+
+	m_meshRenderer.BuildMultiDrawBuffers(gpu::GetMainThreadCommandCtx());
+}
+
+
+void Scene::RenderCascadeViews(gpu::cmd::Context* _ctx)
+{
+	gpu::cmd::SetViewportAndScissorRectFromTexture(_ctx, m_shadowCascadeTex, 0.0f, 1.0f);
+	gpu::cmd::ResourceBarrier(_ctx, m_shadowCascadeTex, gpu::ResourceState::DepthStencilTarget);
+	gpu::cmd::SetRenderTarget(_ctx, 0, gpu::TextureHandle{});
+
+	// TODO: Hack because barrier handling is bad atm.
+	gpu::cmd::FlushBarriers(_ctx);
+
+	for (uint32_t cascadeIdx = 0; cascadeIdx < c_numShadowCascades; ++cascadeIdx)
+	{
+		gpu::cmd::ClearDepth(_ctx, m_shadowCascadeTex, 1.0f, cascadeIdx);
+		gpu::cmd::SetDepthBuffer(_ctx, m_shadowCascadeTex, cascadeIdx);
+		gpu::DescriptorData cbv;
+		cbv.Set(m_shadowCascades[cascadeIdx].GetViewProj().Data(), sizeof(kt::Mat4));
+
+		gpu::cmd::SetGraphicsCBVTable(_ctx, cbv, PATHOS_PER_VIEW_SPACE);
+
+		m_meshRenderer.RenderInstances(_ctx);
+	}
+
+	gpu::cmd::ResourceBarrier(_ctx, m_shadowCascadeTex, gpu::ResourceState::ShaderResource);
 }
 
 void Scene::RenderInstances(gpu::cmd::Context* _ctx)
 {
-	if (m_modelInstances.Size() == 0)
-	{
-		return;
-	}
-
-	kt::Array<InstanceData> instancesSorted(core::GetThreadFrameAllocator());
-	BuildMeshInstanceArray(kt::MakeSlice(m_modelInstances.Begin(), m_modelInstances.End()), instancesSorted);
-
-	// +1 for uint_max sentinel.
-	instancesSorted.PushBack().m_meshIdx = ResourceManager::MeshIdx{};
-
-	{
-		// TODO: big if we actually render lots of instance, again - temp allocator.
-		InstanceData* tmp = (InstanceData*)core::GetThreadFrameAllocator()->Alloc(sizeof(InstanceData) * instancesSorted.Size());
-		// -1, don't sort sentinel
-		kt::RadixSort(instancesSorted.Begin(), instancesSorted.End() - 1, tmp, [](InstanceData const& _inst) { return _inst.m_meshIdx.idx; });
-	}
-
-	uint32_t* instanceStepRemap = m_instanceIdStepBuf.BeginUpdate(_ctx, instancesSorted.Size());
-	shaderlib::InstanceData_Xform* xformWrite = m_instanceXformBuf.BeginUpdate(_ctx, instancesSorted.Size());
-
-	gpu::cmd::ResourceBarrier(_ctx, m_instanceIdStepBuf.m_buffer, gpu::ResourceState::CopyDest);
-	gpu::cmd::ResourceBarrier(_ctx, m_instanceXformBuf.m_buffer, gpu::ResourceState::CopyDest);
-
-	kt::Array<shaderlib::InstanceData_UniformOffsets> uniformOffsets(core::GetThreadFrameAllocator());
-	kt::Array<gpu::IndexedDrawArguments> drawArgsData(core::GetThreadFrameAllocator());
-
-	uniformOffsets.Reserve(instancesSorted.Size());
-	drawArgsData.Reserve(instancesSorted.Size());
-
-	InstanceData const* begin = instancesSorted.Begin();
-	InstanceData const* end = instancesSorted.End() - 1; // -1 for sentinel
-
-	uint32_t numBatches = 0;
-	uint32_t batchInstanceBegin = 0;
-
-	uint32_t instanceStepRemapNext = 0;
-
-	for (;;)
-	{
-		ResourceManager::MeshIdx const curMeshIdx = begin->m_meshIdx;
-		
-		uint32_t numInstances = 0;
-
-		do
-		{
-			_mm_store_ps((float*)&xformWrite->row0, _mm_load_ps(begin->m_mtx43));
-			_mm_store_ps((float*)&xformWrite->row1, _mm_load_ps(begin->m_mtx43 + 4));
-			_mm_store_ps((float*)&xformWrite->row2, _mm_load_ps(begin->m_mtx43 + 8));
-			++xformWrite;
-			++numInstances;
-			++begin;
-		} while (begin->m_meshIdx == curMeshIdx);
-
-		gfx::Mesh const& mesh = *ResourceManager::GetMesh(curMeshIdx);
-
-		numBatches += mesh.m_subMeshes.Size();
-		gpu::IndexedDrawArguments* drawArgs = drawArgsData.PushBack_Raw(mesh.m_subMeshes.Size());
-		shaderlib::InstanceData_UniformOffsets* instanceUniforms = uniformOffsets.PushBack_Raw(mesh.m_subMeshes.Size() * numInstances);
-
-		uint32_t const transformIdxBegin = batchInstanceBegin;
-
-		for (gfx::Mesh::SubMesh const& subMesh : mesh.m_subMeshes)
-		{
-			drawArgs->m_baseVertex = 0;
-			drawArgs->m_indexStart = subMesh.m_indexBufferStartOffset + mesh.m_unifiedBufferIndexOffset;
-			drawArgs->m_indicesPerInstance = subMesh.m_numIndices;
-			drawArgs->m_instanceCount = numInstances;
-			drawArgs->m_startInstance = batchInstanceBegin;
-			++drawArgs;
-
-			batchInstanceBegin += numInstances;
-
-			uint32_t const materialIdx = subMesh.m_materialIdx.idx;
-			for (uint32_t i = 0; i < numInstances; ++i)
-			{
-				*instanceStepRemap++ = instanceStepRemapNext++;
-				instanceUniforms->transformIdx = transformIdxBegin + i;
-				instanceUniforms->materialIdx = materialIdx;
-				instanceUniforms->baseVtx = mesh.m_unifiedBufferVertexOffset;
-				++instanceUniforms;
-			}
-		}
-
-		if (begin == end)
-		{
-			break;
-		}
-	}
-
-	gpu::cmd::ResourceBarrier(_ctx, m_indirectArgsBuf.m_buffer, gpu::ResourceState::CopyDest);
-	gpu::cmd::ResourceBarrier(_ctx, m_instanceUniformsBuf.m_buffer, gpu::ResourceState::CopyDest);
-
-	gpu::cmd::FlushBarriers(_ctx);
-	m_indirectArgsBuf.Update(_ctx, drawArgsData.Data(), drawArgsData.Size());
-	m_instanceUniformsBuf.Update(_ctx, uniformOffsets.Data(), uniformOffsets.Size());
-	m_instanceXformBuf.EndUpdate(_ctx);
-	m_instanceIdStepBuf.EndUpdate(_ctx);
-
-	gpu::cmd::ResourceBarrier(_ctx, m_indirectArgsBuf.m_buffer, gpu::ResourceState::IndirectArg);
-	gpu::cmd::ResourceBarrier(_ctx, m_instanceUniformsBuf.m_buffer, gpu::ResourceState::ShaderResource);
-	gpu::cmd::ResourceBarrier(_ctx, m_instanceXformBuf.m_buffer, gpu::ResourceState::ShaderResource);
-	gpu::cmd::ResourceBarrier(_ctx, m_instanceIdStepBuf.m_buffer, gpu::ResourceState::VertexBuffer);
-
-	gpu::cmd::SetVertexBuffer(_ctx, 0, m_instanceIdStepBuf.m_buffer);
-
-	gpu::cmd::SetIndexBuffer(_ctx, gfx::ResourceManager::GetUnifiedBuffers().m_indexBufferRef);
-
-	gpu::DescriptorData viewDescriptors[2];
-	viewDescriptors[0].Set(m_instanceXformBuf.m_buffer);
-	viewDescriptors[1].Set(m_instanceUniformsBuf.m_buffer);
-	gpu::cmd::SetGraphicsSRVTable(_ctx, viewDescriptors, PATHOS_PER_VIEW_SPACE);
-
-	gpu::cmd::DrawIndexedInstancedIndirect(_ctx, m_indirectArgsBuf.m_buffer, 0, numBatches);
+	m_meshRenderer.RenderInstances(_ctx);
 }
 
 void Scene::EndFrame()

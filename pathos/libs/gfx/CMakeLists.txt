@@ -7,6 +7,8 @@ set(GFX_SOURCES
     "EnvMap.cpp"
     "Material.h"
     "Material.cpp"
+    "MeshRenderer.h"
+    "MeshRenderer.cpp"
     "Model.h"
     "Model.cpp"
     "Primitive.h"

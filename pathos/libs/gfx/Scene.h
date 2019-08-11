@@ -14,6 +14,7 @@
 #include "Camera.h"
 #include "Texture.h"
 #include "ResourceManager.h"
+#include "MeshRenderer.h"
 
 
 namespace gfx
@@ -55,6 +56,9 @@ public:
 
 	void BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera const& _mainView, float _dt);
 
+	void SubmitInstances();
+
+	void RenderCascadeViews(gpu::cmd::Context* _ctx);
 	void RenderInstances(gpu::cmd::Context* _ctx);
 
 	void EndFrame();
@@ -73,16 +77,14 @@ public:
 
 	gfx::Camera m_shadowCascades[c_numShadowCascades];
 
+	// TODO: Separate for each view, culling etc.
+	gfx::MeshRenderer m_meshRenderer;
+
 	kt::Array<Light> m_lights;
 	gpu::BufferRef m_lightGpuBuf;
 
 	shaderlib::FrameConstants m_frameConstants;
 	gpu::BufferRef m_frameConstantsGpuBuf;
-
-	gfx::ResizableDynamicBufferT<gpu::IndexedDrawArguments> m_indirectArgsBuf;
-	gfx::ResizableDynamicBufferT<shaderlib::InstanceData_Xform> m_instanceXformBuf;
-	gfx::ResizableDynamicBufferT<shaderlib::InstanceData_UniformOffsets> m_instanceUniformsBuf;
-	gfx::ResizableDynamicBufferT<uint32_t> m_instanceIdStepBuf;
 
 	gpu::TextureRef m_shadowCascadeTex;
 
