@@ -9,27 +9,9 @@ struct VSIn_ObjectFull
     float2 uv : TEXCOORD;
 };
 
-struct VSIn_ObjectFullInstanced
+struct VSIn_ObjectPos
 {
     float3 pos : POSITION;
-    float3 normal : NORMAL;
-    float4 tangentSign : TANGENT;
-    float2 uv : TEXCOORD0;
-
-    float3 instanceCol0 : TEXCOORD1;
-    float3 instanceCol1 : TEXCOORD2;
-    float3 instanceCol2 : TEXCOORD3;
-    float3 instanceCol3 : TEXCOORD4;
-};
-
-struct VSIn_ObjectPosInstanced
-{
-    float3 pos : POSITION;
-
-    float3 instanceCol0 : TEXCOORD0;
-    float3 instanceCol1 : TEXCOORD1;
-    float3 instanceCol2 : TEXCOORD2;
-    float3 instanceCol3 : TEXCOORD3;
 };
 
 struct VSOut_Pos
@@ -68,6 +50,18 @@ struct VSOut_ObjectFull
     float2 uv : TEXCOORD2;
     float3 normal : NORMAL;
     float4 tangentSign : TANGENT;
+};
+
+struct VSOut_ObjectFull_Material
+{
+    float4 pos : SV_Position;
+    float3 posWS : POSITION;
+    float viewDepth : VIEW_DEPTH;
+    float2 uv : TEXCOORD;
+    float3 normal : NORMAL;
+    float4 tangentSign : TANGENT;
+    
+    nointerpolation uint materialIdx : MATERIAL;
 };
 
 float3 ReconstructBitangent(in float3 _normal, in float4 _tangent)

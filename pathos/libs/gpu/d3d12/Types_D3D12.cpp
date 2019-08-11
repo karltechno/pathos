@@ -103,6 +103,7 @@ D3D12_RESOURCE_STATES D3DTranslateResourceState(ResourceState _state)
 		case ResourceState::CopySrc: return D3D12_RESOURCE_STATE_COPY_SOURCE;
 		case ResourceState::Present: return D3D12_RESOURCE_STATE_PRESENT;
 		case ResourceState::IndexBuffer: return D3D12_RESOURCE_STATE_INDEX_BUFFER;
+		case ResourceState::IndirectArg: return D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
 
 		case ResourceState::VertexBuffer:
 		case ResourceState::ConstantBuffer:

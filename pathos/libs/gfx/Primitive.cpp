@@ -3,7 +3,7 @@
 namespace gfx
 {
 
-void gfx::GenCube(PrimitiveBuffers& _buffers)
+void GenCube(PrimitiveBuffers& _buffers)
 {
 	static kt::Vec3 const c_faceNormals[] = 
 	{

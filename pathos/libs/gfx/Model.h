@@ -62,7 +62,6 @@ struct Model
 	Model() = default;
 
 	static gpu::VertexLayout FullVertexLayout();
-	static gpu::VertexLayout FullVertexLayoutInstanced();
 
 	bool LoadFromGLTF(char const* _path);
 

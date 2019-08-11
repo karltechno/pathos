@@ -19,6 +19,7 @@ set(GFX_SOURCES
     "Scene.cpp"
     "ShadowUtils.h"
     "ShadowUtils.cpp"
+    "Utils.h"
 )
 
 add_pathos_lib(gfx "${GFX_SOURCES}")

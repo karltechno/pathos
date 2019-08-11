@@ -9,7 +9,7 @@ namespace editor
 
 void GPUWindows::Register()
 {
-	m_windowHandle = editor::RegisterWindow("gpu", "resources", [this](float _dt) { Draw(_dt); }, [this]() { ImGui::SetNextWindowSize(ImVec2(400.0f, 400.0f), ImGuiCond_FirstUseEver); });
+	m_windowHandle = editor::RegisterWindow("gpu", "resources", [this](float _dt) { Draw(_dt); }, []() { ImGui::SetNextWindowSize(ImVec2(400.0f, 400.0f), ImGuiCond_FirstUseEver); });
 }
 
 void GPUWindows::Unregister()

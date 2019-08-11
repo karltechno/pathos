@@ -44,9 +44,13 @@ static uint32_t RequiredUploadHeapAlign(AllocatedResource_D3D12 const& _res)
 		{
 			return D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
 		}
+		else if(!!(_res.m_bufferDesc.m_flags & gpu::BufferFlags::ShaderResource))
+		{
+			return _res.m_bufferDesc.m_strideInBytes; 
+		}
 		else
 		{
-			return 16; // Anything better ?
+			return 16;
 		}
 	}
 	else
@@ -143,14 +147,12 @@ static void CopyInitialTextureData(AllocatedResource_D3D12& _tex, void const* _d
 	listBase->Release();
 }
 
-bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* _initialData, char const* _debugName)
+bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* _initialData, uint32_t _initialDataSize, char const* _debugName)
 {
 	KT_ASSERT(!m_res);
 
 	m_bufferDesc = _desc;
 	m_type = ResourceType::Buffer;
-
-	uint32_t const initialDataSize = _desc.m_sizeInBytes;
 
 	// constant buffers need to be a multiple of 256.
 	if (!!(m_bufferDesc.m_flags & gpu::BufferFlags::Constant))
@@ -249,13 +251,13 @@ bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* 
 			g_device->GetFrameResources()->m_uploadAllocator.Alloc(*this);
 			m_lastFrameTouched = g_device->m_frameCounter;
 			KT_ASSERT(m_mappedCpuData);
-			memcpy(m_mappedCpuData, _initialData, initialDataSize);
+			memcpy(m_mappedCpuData, _initialData, _initialDataSize);
 			UpdateViews();
 		}
 		else
 		{
 			KT_ASSERT(m_res);
-			CopyInitialResourceData(m_res, _initialData, initialDataSize, gpu::D3DTranslateResourceState(creationState), gpu::D3DTranslateResourceState(bestInitialState));
+			CopyInitialResourceData(m_res, _initialData, _initialDataSize, gpu::D3DTranslateResourceState(creationState), gpu::D3DTranslateResourceState(bestInitialState));
 			m_resState = bestInitialState;
 		}
 	}
@@ -333,7 +335,15 @@ void AllocatedResource_D3D12::UpdateViews()
 		srvDesc.Format = ToDXGIFormat(m_bufferDesc.m_format);
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.Buffer.FirstElement = 0;
+		if (!(m_bufferDesc.m_flags & BufferFlags::Transient))
+		{
+			srvDesc.Buffer.FirstElement = 0;
+		}
+		else
+		{
+			KT_ASSERT(m_offset % m_bufferDesc.m_strideInBytes == 0);
+			srvDesc.Buffer.FirstElement = m_offset / m_bufferDesc.m_strideInBytes;
+		}
 		srvDesc.Buffer.NumElements = m_bufferDesc.m_sizeInBytes / m_bufferDesc.m_strideInBytes;
 		srvDesc.Buffer.StructureByteStride = m_bufferDesc.m_strideInBytes;
 		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
@@ -524,6 +534,11 @@ static ID3D12PipelineState* CreateD3DGraphicsPSO(ID3D12Device* _device, gpu::Gra
 		{
 			d3dDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE; 
 		} break;
+
+		default:
+		{
+			KT_ASSERT(false);
+		}break;
 	}
 
 	d3dDesc.NumRenderTargets = _desc.m_numRenderTargets;
@@ -1050,7 +1065,14 @@ void FrameUploadAllocator_D3D12::ClearOnBeginFrame()
 	m_numFullPages = 0;
 }
 
-ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _align)
+// 
+static uint64_t AlignUpNonPow2(uint64_t _base, uint64_t _align)
+{
+	uint64_t const diff = _align - (_base % _align);
+	return _base + (diff == _align ? 0 : diff);
+}
+
+ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _align, bool _alignOffsetForSrv)
 {
 	do 
 	{
@@ -1065,8 +1087,17 @@ ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _a
 			KT_ASSERT(m_numFullPages == m_pages.Size() - 1);
 			page = &m_pages.Back();
 		}
+		uintptr_t alignedAddr;
 
-		uintptr_t const alignedAddr = kt::AlignUp(page->m_base + page->m_curOffset, _align);
+		if (_alignOffsetForSrv)
+		{
+			alignedAddr = page->m_base + AlignUpNonPow2(page->m_curOffset, _align);
+		}
+		else
+		{
+			alignedAddr = kt::AlignUp(page->m_base + page->m_curOffset, _align);
+		}
+
 		uintptr_t const endAddr = alignedAddr + _size;
 		if (endAddr > page->m_base + page->m_size)
 		{
@@ -1088,7 +1119,6 @@ ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _a
 
 		page->m_curOffset = uint32_t(endAddr - page->m_base);
 
-
 		return alloc;
 
 	} while (true);
@@ -1098,7 +1128,9 @@ ScratchAlloc_D3D12 FrameUploadAllocator_D3D12::Alloc(uint32_t _size, uint32_t _a
 
 void FrameUploadAllocator_D3D12::Alloc(AllocatedResource_D3D12& o_res)
 {
-	ScratchAlloc_D3D12 scratch = Alloc(o_res.m_bufferDesc.m_sizeInBytes, RequiredUploadHeapAlign(o_res));
+	bool const alignOffsetForSrv = o_res.IsBuffer() && !!(o_res.m_bufferDesc.m_flags & BufferFlags::ShaderResource);
+
+	ScratchAlloc_D3D12 scratch = Alloc(o_res.m_bufferDesc.m_sizeInBytes, RequiredUploadHeapAlign(o_res), alignOffsetForSrv);
 	o_res.m_mappedCpuData = scratch.m_cpuData;
 	o_res.m_res = scratch.m_res;
 	o_res.m_offset = scratch.m_offset;
@@ -1655,22 +1687,27 @@ Device_D3D12::~Device_D3D12()
 	SafeReleaseDX(m_multiDrawIndexedCommandSig);
 }
 
-gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initialData, char const* _debugName)
+gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initialData, uint32_t _initialDataSize, char const* _debugName)
 {
 	AllocatedResource_D3D12* res;
-	gpu::ResourceHandle const handle = gpu::ResourceHandle{g_device->m_resourceHandles.Alloc(res)};
+	gpu::ResourceHandle const handle = gpu::ResourceHandle{ g_device->m_resourceHandles.Alloc(res) };
 	if (!handle.IsValid())
 	{
 		return gpu::BufferHandle{};
 	}
 
-	if (!res->InitAsBuffer(_desc, _initialData, _debugName))
+	if (!res->InitAsBuffer(_desc, _initialData, _initialDataSize, _debugName))
 	{
 		g_device->m_resourceHandles.Free(handle);
 		return gpu::BufferHandle{};
 	}
 
 	return gpu::BufferHandle{ handle };
+}
+
+gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initialData, char const* _debugName)
+{
+	return CreateBuffer(_desc, _initialData, _desc.m_sizeInBytes, _debugName);
 }
 
 gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc, void const* _initialData, char const* _debugName)
@@ -1690,6 +1727,7 @@ gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc, void const* _ini
 
 	return gpu::TextureHandle{ handle };
 }
+
 
 gpu::ShaderHandle CreateShader(ShaderType _type, gpu::ShaderBytecode const& _byteCode, char const* _debugName)
 {
@@ -1946,7 +1984,7 @@ bool Init(void* _nwh)
 	// TODO: Toggle debug layer
 	g_device = new Device_D3D12();
 	// TODO
-	g_device->Init(_nwh, true);
+	g_device->Init(_nwh, false);
 	return true;
 }
 
@@ -2218,6 +2256,17 @@ bool GetBufferInfo(gpu::BufferHandle _handle, gpu::BufferDesc& o_bufferDesc)
 {
 	gpu::ResourceType type;
 	return  GetResourceInfo(_handle, type, &o_bufferDesc) && type == ResourceType::Buffer;
+}
+
+uint32_t GetBufferNumElements(gpu::BufferHandle _handle)
+{
+	gpu::BufferDesc desc;
+	if (!GetBufferInfo(_handle, desc))
+	{
+		return 0;
+	}
+
+	return desc.m_strideInBytes == 0 ? 0 : desc.m_sizeInBytes / desc.m_strideInBytes;
 }
 
 bool GetShaderInfo(ShaderHandle _handle, ShaderType& o_type, char const*& o_name)

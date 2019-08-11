@@ -184,6 +184,10 @@ bool HandleInputEvent(input::Event const& _event)
 		{
 			return s_ctx.m_lockKbMouse;
 		} break;
+
+		default:
+		{
+		} break;
 	}
 
 	return false;

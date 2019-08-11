@@ -96,6 +96,8 @@ enum class ResourceState : uint8_t
 	
 	CopyDest,
 	CopySrc,
+
+	IndirectArg,
 	
 	Present,
 
@@ -259,9 +261,9 @@ struct VertexDeclEntry
 
 	VertexDeclEntry(Format _fmt, VertexSemantic _semantic, bool _isInstanceData, uint8_t _semanticIdx = 0, uint8_t _streamIdx = 0)
 		: m_format(_fmt)
-		, m_semantic(_semantic)
 		, m_semanticIndex(_semanticIdx)
 		, m_streamIdx(_streamIdx)
+		, m_semantic(_semantic)
 		, m_isInstanceData(_isInstanceData)
 	{}
 

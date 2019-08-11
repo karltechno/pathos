@@ -65,7 +65,7 @@ struct AllocatedResource_D3D12 : AllocatedObjectBase_D3D12
 		: m_bufferDesc{}
 	{}
 
-	bool InitAsBuffer(BufferDesc const& _desc, void const* _initialData, char const* _debugName = nullptr);
+	bool InitAsBuffer(BufferDesc const& _desc, void const* _initialData, uint32_t _initialDataSize, char const* _debugName = nullptr);
 
 	bool InitAsTexture(TextureDesc const& _desc, void const* _initialData, char const* _debugName = nullptr);
 	void InitFromBackbuffer(ID3D12Resource* _res, uint32_t _idx, gpu::Format _format, uint32_t _height, uint32_t _width);
@@ -190,7 +190,7 @@ struct FrameUploadAllocator_D3D12
 	void ClearOnBeginFrame();
 
 	void Alloc(AllocatedResource_D3D12& o_res);
-	ScratchAlloc_D3D12 Alloc(uint32_t _size, uint32_t _align);
+	ScratchAlloc_D3D12 Alloc(uint32_t _size, uint32_t _align, bool _alignOffsetForSrv = false);
 
 private:
 	kt::Array<FrameUploadPage_D3D12> m_pages;

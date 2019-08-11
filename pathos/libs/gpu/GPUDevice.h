@@ -16,8 +16,10 @@ void EndFrame();
 
 cmd::Context* GetMainThreadCommandCtx();
 
-gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initialData = nullptr, char const* _debugName = nullptr);
-gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc, void const* _initialData = nullptr, char const* _debugName = nullptr);
+gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initialData, uint32_t _initialDataSize, char const* _debugName);
+gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initialData, char const* _debugName);
+
+gpu::TextureHandle CreateTexture(gpu::TextureDesc const& _desc, void const* _initialData, char const* _debugName = nullptr);
 
 void GetSwapchainDimensions(uint32_t& o_width, uint32_t& o_height);
 
@@ -43,6 +45,7 @@ bool GetShaderInfo(gpu::ShaderHandle _handle, gpu::ShaderType& o_type, char cons
 bool GetResourceInfo(gpu::ResourceHandle _handle, gpu::ResourceType& _type, gpu::BufferDesc* o_bufferDesc = nullptr, gpu::TextureDesc* o_textureDesc = nullptr, char const** o_name = nullptr);
 bool GetTextureInfo(gpu::TextureHandle _handle, gpu::TextureDesc& o_textureDesc);
 bool GetBufferInfo(gpu::BufferHandle _handle, gpu::BufferDesc& o_bufferDesc);
+uint32_t GetBufferNumElements(gpu::BufferHandle _handle);
 
 void AddRef(gpu::ResourceHandle _handle);
 void AddRef(gpu::ShaderHandle _handle);

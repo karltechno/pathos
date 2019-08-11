@@ -55,18 +55,18 @@ void TestbedApp::Setup()
 	{
 		gpu::TextureUsageFlags const flags = gpu::TextureUsageFlags::UnorderedAccess | gpu::TextureUsageFlags::ShaderResource;
 		gpu::TextureDesc const texDesc = gpu::TextureDesc::DescCube(32, 32, flags, gpu::Format::R16B16G16A16_Float);
-		m_irradMap = gpu::CreateTexture(texDesc, nullptr, "IRRAD_TEST");
+		m_scene.m_iblIrradiance = gpu::CreateTexture(texDesc, nullptr, "IBL Irradiance");
 	}
 
 	{
 		gpu::TextureUsageFlags const flags = gpu::TextureUsageFlags::UnorderedAccess | gpu::TextureUsageFlags::ShaderResource;
 		gpu::TextureDesc texDesc = gpu::TextureDesc::DescCube(1024, 1024, flags, gpu::Format::R16B16G16A16_Float);
 		texDesc.m_mipLevels = gfx::MipChainLength(1024, 1024);
-		m_ggxMap = gpu::CreateTexture(texDesc, nullptr, "GGX_MAP");
+		m_scene.m_iblGgx = gpu::CreateTexture(texDesc, nullptr, "IBL GGX");
 	}
 
 	{
-		m_shadowMapPso = gfx::CreateShadowMapPSO_Instanced(gpu::Format::D32_Float);
+		m_shadowMapPso = gfx::CreateShadowMapPSO(gpu::Format::D32_Float);
 	}
 
 	m_skyboxRenderer.Init(m_cubeMap);
@@ -76,15 +76,15 @@ void TestbedApp::Setup()
 		psoDesc.m_depthFormat = gpu::BackbufferDepthFormat();
 		psoDesc.m_numRenderTargets = 1;
 		psoDesc.m_renderTargetFormats[0] = gpu::BackbufferFormat();
-		psoDesc.m_vertexLayout = gfx::Model::FullVertexLayoutInstanced();
+		psoDesc.m_vertexLayout = gfx::Scene::ManualFetchInstancedVertexLayout();
 		psoDesc.m_vs = vertexShader;
 		psoDesc.m_ps = pixelShader;
 
 		m_pso = gpu::CreateGraphicsPSO(psoDesc, "Object PSO Test");
 		
-		m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/DamagedHelmet/DamagedHelmet.gltf");
-		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/sponza/Sponza.gltf");
 		m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/rainier_ak/Scene.gltf");
+		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/sponza/Sponza.gltf");
+		m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/DamagedHelmet/DamagedHelmet.gltf");
 		m_scene.AddModelInstance(m_modelIdx, kt::Mat4::Identity());
 		//m_modelIdx = gfx::ResourceManager::CreateModelFromGLTF("models/MetalRoughSpheres/MetalRoughSpheres.gltf");
 	}
@@ -100,23 +100,23 @@ void TestbedApp::Setup()
 	
 	gpu::GenerateMips(ctx, m_cubeMap);
 
-	gfx::BakeEnvMapGGX(ctx, m_cubeMap, m_ggxMap);
+	gfx::BakeEnvMapGGX(ctx, m_cubeMap, m_scene.m_iblGgx);
 
 	{
 		gpu::cmd::SetPSO(ctx, gfx::ResourceManager::GetSharedResources().m_bakeIrradPso);
-		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::UnorderedAccess);
+		gpu::cmd::ResourceBarrier(ctx, m_scene.m_iblIrradiance, gpu::ResourceState::UnorderedAccess);
 
 		gpu::DescriptorData srv;
 		srv.Set(m_cubeMap);
 
 		gpu::DescriptorData uav;
-		uav.Set(m_irradMap);
+		uav.Set(m_scene.m_iblIrradiance);
 
 		gpu::cmd::SetComputeSRVTable(ctx, srv, 0);
 		gpu::cmd::SetComputeUAVTable(ctx, uav, 0);
 
 		gpu::cmd::Dispatch(ctx, 32 / 32, 32 / 32, 6);
-		gpu::cmd::ResourceBarrier(ctx, m_irradMap, gpu::ResourceState::ShaderResource);
+		gpu::cmd::ResourceBarrier(ctx, m_scene.m_iblIrradiance, gpu::ResourceState::ShaderResource);
 	}
 }
 
@@ -138,10 +138,10 @@ void ShadowTest(gpu::cmd::Context* _ctx, TestbedApp& _app)
 		gpu::DescriptorData cbv;
 		cbv.Set(_app.m_scene.m_shadowCascades[cascadeIdx].GetViewProj().Data(), sizeof(kt::Mat4));
 
-		gpu::cmd::SetGraphicsCBVTable(_ctx, cbv, PATHOS_PER_BATCH_SPACE);
+		gpu::cmd::SetGraphicsCBVTable(_ctx, cbv, PATHOS_PER_VIEW_SPACE);
 		gpu::cmd::SetPSO(_ctx, _app.m_shadowMapPso);
 
-		_app.m_scene.RenderInstances(_ctx, true);
+		_app.m_scene.RenderInstances(_ctx);
 	}
 
 	gpu::cmd::ResourceBarrier(_ctx, _app.m_scene.m_shadowCascadeTex, gpu::ResourceState::ShaderResource);
@@ -159,9 +159,11 @@ void TestbedApp::Tick(float _dt)
 	m_cam.SetProjection(params);
 
 	m_camController.UpdateCamera(_dt, m_cam);
-	m_scene.BeginFrameAndUpdateBuffers(gpu::GetMainThreadCommandCtx(), m_cam, _dt);
-
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
+
+	m_scene.BeginFrameAndUpdateBuffers(ctx, m_cam, _dt);
+	m_scene.BindPerFrameConstants(ctx);
+
 	ShadowTest(ctx, *this);
 
 	gpu::TextureHandle backbuffer = gpu::CurrentBackbuffer();
@@ -183,18 +185,9 @@ void TestbedApp::Tick(float _dt)
 
 	gpu::cmd::SetViewportAndScissorRectFromTexture(ctx, backbuffer, 0.0f, 1.0f);
 
-	gpu::DescriptorData frameSrvs[6];
-	frameSrvs[0].Set(m_irradMap);
-	frameSrvs[1].Set(m_ggxMap);
-	frameSrvs[2].Set(gfx::ResourceManager::GetSharedResources().m_ggxLut);
-	frameSrvs[3].Set(m_scene.m_lightGpuBuf);
-	frameSrvs[4].Set(m_scene.m_shadowCascadeTex);
-	frameSrvs[5].Set(gfx::ResourceManager::GetMaterialGpuBuffer());
-
 	gpu::cmd::SetGraphicsSRVTable(ctx, gfx::ResourceManager::GetTextureDescriptorTable(), PATHOS_CUSTOM_SPACE);
 
-	gpu::cmd::SetGraphicsSRVTable(ctx, frameSrvs, PATHOS_PER_FRAME_SPACE);
-	m_scene.RenderInstances(ctx, false);
+	m_scene.RenderInstances(ctx);
 
 	m_skyboxRenderer.Render(ctx, m_cam);
 	

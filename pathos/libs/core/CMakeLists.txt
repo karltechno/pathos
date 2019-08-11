@@ -5,6 +5,8 @@ set(CORE_SOURCES
 	"CVar.cpp" 
 	"FolderWatcher.h"
 	"FolderWatcher.cpp"
+	"Memory.h"
+	"Memory.cpp"
 )
 
 add_pathos_lib(core "${CORE_SOURCES}")

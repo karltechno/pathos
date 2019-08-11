@@ -1,25 +1,25 @@
+#include "shaderlib/CommonShared.h"
+#include "shaderlib/DefinesShared.h"
 #include "shaderlib/ShaderOutput.hlsli"
+
+#include "shaderlib/GFXPerFrameBindings.hlsli"
 
 struct ShadowMtx
 {
     float4x4 viewProj;
 };
 
-ConstantBuffer<ShadowMtx> g_cb : register(b0, space0);
+ConstantBuffer<ShadowMtx> g_viewCb : register(b0, PATHOS_PER_VIEW_SPACE);
 
-float3 TransformInstanceData_Point(VSIn_ObjectPosInstanced _input, float3 _p)
-{
-    float3 ret = _input.instanceCol3;
-    ret += _input.instanceCol0 * _p.x;
-    ret += _input.instanceCol1 * _p.y;   
-    ret += _input.instanceCol2 * _p.z;    
-    return ret;
-}
+StructuredBuffer<InstanceData_Xform> g_instanceData : register(t0, PATHOS_PER_VIEW_SPACE);
 
-float4 main(VSIn_ObjectPosInstanced _in) : SV_Position
+float4 main(uint _meshInstanceId : TEXCOORD0, uint _vid : SV_VertexID) : SV_Position
 {
-    float3 ws = TransformInstanceData_Point(_in, _in.pos);
-    float4 p = mul(float4(ws, 1.0), g_cb.viewProj);
+    InstanceData_Xform instanceData = g_instanceData[_meshInstanceId];
+    float3 pos = g_unifiedVtxPos[_vid];
+
+    float3 ws = TransformInstanceData(float4(pos, 1), instanceData.row0, instanceData.row1, instanceData.row2);
+    float4 p = mul(float4(ws, 1.0), g_viewCb.viewProj);
     p.z = max(p.z, 0.);
     return p;
 }

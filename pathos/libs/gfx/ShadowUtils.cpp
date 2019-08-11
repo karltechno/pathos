@@ -117,25 +117,19 @@ void CalculateShadowCascades
 }
 
 
-gpu::PSORef CreateShadowMapPSO_Instanced(gpu::Format _depthFormat)
+gpu::PSORef CreateShadowMapPSO(gpu::Format _depthFormat)
 {
 	gpu::GraphicsPSODesc desc;
 	desc.m_depthFormat = _depthFormat;
 	desc.m_numRenderTargets = 0;
 	desc.m_primType = gpu::PrimitiveType::TriangleList;
-	desc.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position, false, 0, 0);
+	desc.m_vertexLayout.Add(gpu::Format::R32_Uint, gpu::VertexSemantic::TexCoord, true, 0, 0);
 
 	desc.m_depthStencilDesc.m_depthFn = gpu::ComparisonFn::Less;
 	desc.m_depthStencilDesc.m_depthWrite = true;
 	desc.m_depthStencilDesc.m_depthEnable = true;
 
 	desc.m_rasterDesc.m_scopedScaledDepthBias = 3.0f;
-
-	// instance data
-	desc.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 0, 1);
-	desc.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 1, 1);
-	desc.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 2, 1);
-	desc.m_vertexLayout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 3, 1);
 
 	gpu::ShaderRef const vs = ResourceManager::LoadShader("shaders/ShadowMap.vs.cso", gpu::ShaderType::Vertex);
 

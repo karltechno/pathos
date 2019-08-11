@@ -32,22 +32,6 @@ gpu::VertexLayout Model::FullVertexLayout()
 	return layout;
 }
 
-gpu::VertexLayout Model::FullVertexLayoutInstanced()
-{
-	gpu::VertexLayout layout;
-	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Position, false, 0, 0);
-	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::Normal, false, 0, 1);
-	layout.Add(gpu::Format::R32G32B32A32_Float, gpu::VertexSemantic::Tangent, false, 0, 1);
-	layout.Add(gpu::Format::R32G32_Float, gpu::VertexSemantic::TexCoord, false, 0, 2);
-
-	// instance data
-	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 1, 3);
-	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 2, 3);
-	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 3, 3);
-	layout.Add(gpu::Format::R32G32B32_Float, gpu::VertexSemantic::TexCoord, true, 4, 3);
-	return layout;
-}
-
 uint8_t* AccessorStartOffset(cgltf_accessor* _accessor)
 {
 	return (uint8_t*)_accessor->buffer_view->buffer->data + _accessor->buffer_view->offset + _accessor->offset;
@@ -187,6 +171,7 @@ static void GenMikktTangents(Mesh* _model, uint32_t _idxBegin, uint32_t _idxEnd)
 	mikktCtx.m_pUserData = &tangData;
 
 	tbool const mikktOk = genTangSpaceDefault(&mikktCtx);
+	KT_UNUSED(mikktOk);
 	KT_ASSERT(mikktOk);
 }
 
@@ -561,7 +546,7 @@ void SerializeMaterial(kt::ISerializer* _s, Material& _mat)
 	kt::Serialize(_s, _mat.m_params);
 	kt::Serialize(_s, _mat.m_name);
 
-	auto serializeTex = [&_s, &_mat](ResourceManager::TextureIdx& _handle, TextureLoadFlags _flags)
+	auto serializeTex = [&_s](ResourceManager::TextureIdx& _handle, TextureLoadFlags _flags)
 	{
 		bool ok;
 		kt::StaticString<512> pathSerialize;

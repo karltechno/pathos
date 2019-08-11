@@ -9,6 +9,8 @@
 #include <gpu/Types.h>
 #include <gpu/HandleRef.h>
 
+#include <gfx/Utils.h>
+
 #include "Camera.h"
 #include "Texture.h"
 #include "ResourceManager.h"
@@ -42,6 +44,9 @@ struct Light
 class Scene
 {
 public:
+	// TODO: Move rendering code into separate class.
+	static gpu::VertexLayout ManualFetchInstancedVertexLayout();
+
 	static uint32_t constexpr c_numShadowCascades = 4;
 
 	Scene();
@@ -50,12 +55,13 @@ public:
 
 	void BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera const& _mainView, float _dt);
 
-	// TODO: Shadow map bool hack.
-	void RenderInstances(gpu::cmd::Context* _ctx, bool _shadowMap);
+	void RenderInstances(gpu::cmd::Context* _ctx);
 
 	void EndFrame();
 
 	void AddModelInstance(ResourceManager::ModelIdx _idx, kt::Mat4 const& _mtx);
+
+	void BindPerFrameConstants(gpu::cmd::Context* _ctx);
 
 	struct ModelInstance
 	{
@@ -73,10 +79,16 @@ public:
 	shaderlib::FrameConstants m_frameConstants;
 	gpu::BufferRef m_frameConstantsGpuBuf;
 
-	gpu::BufferRef m_instanceGpuBuf;
-	gpu::BufferRef m_indirectArgsBuf;
+	gfx::ResizableDynamicBufferT<gpu::IndexedDrawArguments> m_indirectArgsBuf;
+	gfx::ResizableDynamicBufferT<shaderlib::InstanceData_Xform> m_instanceXformBuf;
+	gfx::ResizableDynamicBufferT<shaderlib::InstanceData_UniformOffsets> m_instanceUniformsBuf;
+	gfx::ResizableDynamicBufferT<uint32_t> m_instanceIdStepBuf;
 
 	gpu::TextureRef m_shadowCascadeTex;
+
+	// TODO: MoveMe.
+	gpu::TextureRef m_iblIrradiance;
+	gpu::TextureRef m_iblGgx;
 
 	kt::AABB m_sceneBounds;
 

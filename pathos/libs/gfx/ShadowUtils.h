@@ -19,7 +19,7 @@ void CalculateShadowCascades
 	float *o_splitsViewSpace
 );
 
-gpu::PSORef CreateShadowMapPSO_Instanced(gpu::Format _depthFormat);
+gpu::PSORef CreateShadowMapPSO(gpu::Format _depthFormat);
 
 kt::Mat4 const& NDC_To_UV_Matrix();
 

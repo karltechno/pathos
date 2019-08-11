@@ -3,6 +3,7 @@
 #include <string>
 #include <stddef.h>
 
+#include <core/Memory.h>
 #include <core/FolderWatcher.h>
 #include <shaderlib/CommonShared.h>
 
@@ -165,7 +166,7 @@ void InitUnifiedBuffers(uint32_t _vertexCapacity /*= 2500000*/, uint32_t _indexC
 
 	{
 		gpu::BufferDesc posDesc;
-		posDesc.m_flags = gpu::BufferFlags::Vertex | gpu::BufferFlags::Dynamic;
+		posDesc.m_flags = gpu::BufferFlags::ShaderResource | gpu::BufferFlags::Dynamic;
 		posDesc.m_sizeInBytes = sizeof(float[3]) * _vertexCapacity;
 		posDesc.m_strideInBytes = sizeof(float[3]);
 		s_state.m_unifiedBuffers.m_posVertexBuf = gpu::CreateBuffer(posDesc, nullptr, "Unified Vertex Buffer (Pos)");
@@ -173,7 +174,7 @@ void InitUnifiedBuffers(uint32_t _vertexCapacity /*= 2500000*/, uint32_t _indexC
 
 	{
 		gpu::BufferDesc tangentSpaceDesc;
-		tangentSpaceDesc.m_flags = gpu::BufferFlags::Vertex | gpu::BufferFlags::Dynamic;
+		tangentSpaceDesc.m_flags = gpu::BufferFlags::ShaderResource | gpu::BufferFlags::Dynamic;
 		tangentSpaceDesc.m_sizeInBytes = sizeof(gfx::TangentSpace) * _vertexCapacity;
 		tangentSpaceDesc.m_strideInBytes = sizeof(gfx::TangentSpace);
 		s_state.m_unifiedBuffers.m_tangentSpaceVertexBuf = gpu::CreateBuffer(tangentSpaceDesc, nullptr, "Unified Vertex Buffer (Tangent Space)");
@@ -181,8 +182,7 @@ void InitUnifiedBuffers(uint32_t _vertexCapacity /*= 2500000*/, uint32_t _indexC
 
 	{
 		gpu::BufferDesc uvDesc;
-		uvDesc.m_flags = gpu::BufferFlags::Vertex | gpu::BufferFlags::Dynamic;
-		uvDesc.m_format = gpu::Format::R32G32_Float;
+		uvDesc.m_flags = gpu::BufferFlags::ShaderResource | gpu::BufferFlags::Dynamic;
 		uvDesc.m_sizeInBytes = sizeof(float[2]) * _vertexCapacity;
 		uvDesc.m_strideInBytes = sizeof(float[2]);
 		s_state.m_unifiedBuffers.m_uv0VertexBuf = gpu::CreateBuffer(uvDesc, nullptr, "Unified Vertex Buffer (UV0)");
@@ -226,7 +226,7 @@ void WriteIntoUnifiedBuffers
 
 static kt::Array<uint8_t> ReadEntireFile(char const* _path)
 {
-	kt::Array<uint8_t> ret;
+	kt::Array<uint8_t> ret(core::GetThreadFrameAllocator());
 
 	FILE* f = fopen(_path, "rb");
 	if (!f)
@@ -254,8 +254,6 @@ void Update()
 	
 		if (it != s_state.m_shaderCache.End())
 		{
-			gpu::ShaderBytecode newBytecode;
-
 			kt::Array<uint8_t> shaderData = ReadEntireFile(shaderBase.Data());
 
 			if (shaderData.Size() == 0)
@@ -364,14 +362,14 @@ ModelIdx CreateModelFromGLTF(char const* _path)
 		gpu::cmd::FlushBarriers(ctx);
 	}
 
-	ModelIdx const idx = ModelIdx(uint16_t(s_state.m_meshes.Size()));
+	ModelIdx const idx = ModelIdx(uint16_t(s_state.m_models.Size()));
 	s_state.m_models.PushBack().LoadFromGLTF(_path);
 	
 	{
 		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_indexBufferRef, gpu::ResourceState::IndexBuffer);
-		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_posVertexBuf, gpu::ResourceState::VertexBuffer);
-		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_uv0VertexBuf, gpu::ResourceState::VertexBuffer);
-		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_tangentSpaceVertexBuf, gpu::ResourceState::VertexBuffer);
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_posVertexBuf, gpu::ResourceState::ShaderResource);
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_uv0VertexBuf, gpu::ResourceState::ShaderResource);
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_tangentSpaceVertexBuf, gpu::ResourceState::ShaderResource);
 		
 		// TODO: Unecessary barriers if we load multiple models, unecessary flush. Barrier batching needs fixing.
 		gpu::cmd::FlushBarriers(ctx);

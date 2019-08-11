@@ -70,6 +70,35 @@ struct BatchConstants
     uint materialIdx;
 };
 
+struct InstanceData_Xform
+{
+    // NOTE: Row major, not column major like other matrices
+    float4 row0;
+    float4 row1;
+    float4 row2;
+};
+
+struct InstanceData_UniformOffsets
+{
+    uint materialIdx;
+    uint transformIdx;
+    uint baseVtx; // TODO: MoveMe ?
+    float2 __pad0__; 
+};
+
+struct TangentSpace
+{
+    float3 normal;
+    float4 tangentSign;
+};
+
+#if !defined(__cplusplus)
+float3 TransformInstanceData(in float4 _vtx, in float4 _row0, in float4 _row1, in float4 _row2)
+{
+    return float3(dot(_vtx, _row0), dot(_vtx, _row1), dot(_vtx, _row2));
+}
+#endif
+
 SHADERLIB_NAMESPACE_END
 
 #endif // COMMON_SHARED_H

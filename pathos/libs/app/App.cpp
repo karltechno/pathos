@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <core/Memory.h>
 #include <core/CVar.h>
 #include <editor/Editor.h>
 #include <input/Input.h>
@@ -30,6 +31,8 @@ static kt::LeakCheckAllocator s_leakCheckAllocator;
 app::WindowHandle PATHOS_INIT(int _argc, char** _argv)
 {
 	KT_UNUSED2(_argc, _argv);
+	uint32_t const c_frameAllocatorSize = 32 * 1024 * 1024; // 32 mb
+	core::InitThreadFrameAllocator(c_frameAllocatorSize);
 
 #if PATHOS_CHECK_LEAK
 	s_leakCheckAllocator.SetAllocatorAndClear(kt::GetDefaultAllocator());
@@ -60,6 +63,7 @@ void PATHOS_SHUTDOWN()
 	core::ShutdownCVars();
 	editor::Shutdown();
 	gpu::Shutdown();
+	core::ShutdownThreadFrameAllocator();
 #endif
 }
 
@@ -108,6 +112,8 @@ void GraphicsApp::Go(WindowHandle _wh, int _argc, char** _argv)
 	kt::TimePoint lastFrameStart = kt::TimePoint::Now();
 	kt::Duration tickTime = kt::Duration::FromMilliseconds(16.0);
 
+	core::ResetThreadFrameAllocator();
+
 	do 
 	{
 		gpu::BeginFrame();
@@ -129,6 +135,7 @@ void GraphicsApp::Go(WindowHandle _wh, int _argc, char** _argv)
 		lastFrameStart = now;
 
 		gpu::EndFrame();
+		core::ResetThreadFrameAllocator();
 	} while (m_keepAlive);
 
 	Shutdown();

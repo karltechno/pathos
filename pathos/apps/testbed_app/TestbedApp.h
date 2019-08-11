@@ -33,8 +33,6 @@ struct TestbedApp : app::GraphicsApp
 
 	gpu::BufferRef m_constantBuffer;
 	gpu::TextureRef m_cubeMap;
-	gpu::TextureRef m_irradMap;
-	gpu::TextureRef m_ggxMap;
 
 	gfx::SkyBoxRenderer m_skyboxRenderer;
 

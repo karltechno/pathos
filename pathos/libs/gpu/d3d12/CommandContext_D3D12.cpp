@@ -471,11 +471,12 @@ kt::Slice<uint8_t> BeginUpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _ha
 {
 	// Should this be done on the copy queue and synchronized?
 	CHECK_QUEUE_FLAGS(_ctx, CommandListFlags_D3D12::Copy);
+
+#if KT_DEBUG
 	KT_ASSERT(_ctx->m_device->m_resourceHandles.IsValid(_handle));
 	AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
 	KT_ASSERT(!!(res->m_bufferDesc.m_flags & BufferFlags::Dynamic));
 
-#if KT_DEBUG
 	for (CommandContext_D3D12::PendingDynamicUpload const& oldUpdate : _ctx->m_state.m_pendingUploads)
 	{
 		KT_ASSERT(oldUpdate.m_resource.Handle() != _handle && "Already updating this buffer!");
@@ -510,7 +511,7 @@ void EndUpdateDynamicBuffer(Context* _ctx, gpu::BufferHandle _handle)
 		}
 	}
 
-	KT_ASSERT(!"BeginUpdateDynamicBuffer was not called with this resource.")
+	KT_ASSERT(!"BeginUpdateDynamicBuffer was not called with this resource.");
 }
 
 kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _handle, uint32_t _size)
@@ -616,6 +617,13 @@ void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth, uint32_
 void ResourceBarrier(Context* _ctx, gpu::ResourceHandle _handle, gpu::ResourceState _newState)
 {
 	AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
+
+	if (!!(res->m_bufferDesc.m_flags & gpu::BufferFlags::Transient))
+	{
+		// Always in generic read - code path left for high level code refactorability between transient/dynamic.
+		return;
+	}
+
 	KT_ASSERT(res);
 	if (res->m_resState == _newState)
 	{
@@ -863,6 +871,7 @@ void SetViewportAndScissorRectFromTexture(Context* _ctx, gpu::TextureHandle _tex
 	gpu::TextureDesc desc;
 	bool const ok = gpu::GetTextureInfo(_tex, desc);
 	KT_ASSERT(ok);
+	KT_UNUSED(ok);
 
 	gpu::Rect const rect(float(desc.m_width), float(desc.m_height));
 

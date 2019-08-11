@@ -4,35 +4,16 @@
 #include "shaderlib/CommonShared.h"
 #include "shaderlib/DefinesShared.h"
 
-TextureCube<float4> g_irrad                 : register(t0, PATHOS_PER_FRAME_SPACE);
-TextureCube<float4> g_ggxEnv                : register(t1, PATHOS_PER_FRAME_SPACE);
-Texture2D<float4> g_ggxLut                  : register(t2, PATHOS_PER_FRAME_SPACE);
-StructuredBuffer<LightData> g_lights        : register(t3, PATHOS_PER_FRAME_SPACE);
-Texture2DArray<float> g_shadowCascades      : register(t4, PATHOS_PER_FRAME_SPACE);
-StructuredBuffer<MaterialData> g_materials  : register(t5, PATHOS_PER_FRAME_SPACE);
-
-ConstantBuffer<BatchConstants> g_batch      : register(b0, PATHOS_PER_BATCH_SPACE); 
-
-ConstantBuffer<FrameConstants> g_frame      : register(b0, PATHOS_PER_FRAME_SPACE);
-
-Texture2D<float4> g_bindlessTexArray[]      : register(t0, PATHOS_CUSTOM_SPACE);
-
-static const float3 c_cascadeCols[4] = 
-{
-    float3(1, 0, 0),
-    float3(0, 1, 0),
-    float3(0, 0, 1),
-    float3(1, 1, 0)
-};
+#include "shaderlib/GFXPerFrameBindings.hlsli"
 
 
 void SelectCascade(float3 _world, float _viewZ, out float _cascade, out float3 _lightSpace)
 {
     // Branchless cascade selection (assuming 4 csm)
-    float4 weights = _viewZ < g_frame.cascadeSplits;
+    float4 weights = _viewZ < g_frameCb.cascadeSplits;
     weights.yzw -= weights.xyz;
     _cascade = dot(weights, float4(0, 1, 2, 3));
-    float4 coord = mul(float4(_world, 1.), g_frame.cascadeMatrices[_cascade]);
+    float4 coord = mul(float4(_world, 1.), g_frameCb.cascadeMatrices[_cascade]);
 
     _lightSpace = coord.xyz / coord.w;
 }
@@ -46,7 +27,7 @@ float ComputeDirectionalShadow(float3 _world, float _viewZ, float3 _sunDir)
     return g_shadowCascades.SampleCmp(g_samplerCmp, float3(shadowPos.xy, cascade), shadowPos.z);
 }
 
-float4 main(in VSOut_ObjectFull _input) : SV_Target
+float4 main(in VSOut_ObjectFull_Material _input) : SV_Target
 {
     float3 normal = normalize(_input.normal);
     float3 tangent = normalize(_input.tangentSign.xyz);
@@ -54,9 +35,9 @@ float4 main(in VSOut_ObjectFull _input) : SV_Target
 
     float3 color = float3(0.0, 0.0, 0.0);
 
-    float3 view = normalize(g_frame.camPos - _input.posWS); 
+    float3 view = normalize(g_frameCb.camPos - _input.posWS); 
 
-    MaterialData materialData = g_materials[g_batch.materialIdx];
+    MaterialData materialData = g_materials[_input.materialIdx];
 
     float3 metalRough = g_bindlessTexArray[materialData.metalRoughTexIdx].Sample(g_samplerAnisoWrap, _input.uv).xyz;
     float3 normalTex = normalize(g_bindlessTexArray[materialData.normalMapTexIdx].Sample(g_samplerAnisoWrap, _input.uv).xyz * 2.0 - 1.0);
@@ -69,13 +50,13 @@ float4 main(in VSOut_ObjectFull _input) : SV_Target
 
     SurfaceData surf = CreateSurfaceData(normalTex, _input.posWS, metallic, roughness, baseCol);
 
-    for(uint pointLightIdx = 0; pointLightIdx < g_frame.numPointLights; ++pointLightIdx)
+    for(uint pointLightIdx = 0; pointLightIdx < g_frameCb.numPointLights; ++pointLightIdx)
     {
         LightData light = g_lights[pointLightIdx];
         color += ComputeLighting_Point(light, surf, view);
     }
 
-    for(uint spotLightIdx = g_frame.numPointLights; spotLightIdx < g_frame.numSpotLights + g_frame.numPointLights; ++spotLightIdx)
+    for(uint spotLightIdx = g_frameCb.numPointLights; spotLightIdx < g_frameCb.numSpotLights + g_frameCb.numPointLights; ++spotLightIdx)
     {
         LightData light = g_lights[spotLightIdx];
         color += ComputeLighting_Spot(light, surf, view);
@@ -83,15 +64,14 @@ float4 main(in VSOut_ObjectFull _input) : SV_Target
 
     float ao = g_bindlessTexArray[materialData.occlusionTexIdx].Sample(g_samplerLinearWrap, _input.uv).x;
 
-    float dirShadow = ComputeDirectionalShadow(_input.posWS, _input.viewDepth, g_frame.sunDir);
-    color += ComputeLighting_Common(g_frame.sunColor, surf, -g_frame.sunDir, view) * dirShadow * ao;
+    float dirShadow = ComputeDirectionalShadow(_input.posWS, _input.viewDepth, g_frameCb.sunDir);
+    color += ComputeLighting_Common(g_frameCb.sunColor, surf, -g_frameCb.sunDir, view) * dirShadow * ao;
     
     float3 irrad = g_irrad.Sample(g_samplerLinearWrap, surf.norm).xyz;
 
     uint w,h,levels;
     g_ggxEnv.GetDimensions(0, w, h, levels);
     color += ComputeLighting_IBL(surf, view, irrad, g_ggxEnv, levels, g_ggxLut) * ao;
-    
 
     return float4(color, 1);
 }   
