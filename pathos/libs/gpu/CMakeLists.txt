@@ -28,6 +28,10 @@ if(WIN32)
 		"d3d12/Types_D3D12.cpp"           
 		"d3d12/d3dx12.h"
 		"d3d12/GenMips.hlsli"       
+		"d3d12/WinPixEventRuntime/pix3.h"
+		"d3d12/WinPixEventRuntime/pix3_win.h"
+		"d3d12/WinPixEventRuntime/PIXEventsCommon.h"
+		"d3d12/WinPixEventRuntime/PIXEventsGenerated.h"
 	)
 
 	set(COMPUTE_SOURCES 
@@ -55,5 +59,5 @@ add_pathos_lib(gpu "${GPU_SOURCES}")
 target_link_libraries(gpu kt)
 
 if(WIN32)
-	target_link_libraries(gpu d3d12 dxgi dxguid)
+	target_link_libraries(gpu d3d12 dxgi dxguid "${CMAKE_CURRENT_SOURCE_DIR}/d3d12/WinPixEventRuntime/WinPixEventRuntime.lib")
 endif()
