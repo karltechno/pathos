@@ -27,10 +27,10 @@ static void PackMat44_to_Mat34_Transpose(kt::Mat4 const& _mat4, MeshRenderer::Ma
 
 MeshRenderer::MeshRenderer()
 {
-	m_instanceXformBuf.Init(gpu::BufferFlags::Dynamic | gpu::BufferFlags::ShaderResource, 1024, gpu::Format::Unknown, "gfx::Scene instance xforms");
+	m_instanceXformBuf.Init(gpu::BufferFlags::Dynamic | gpu::BufferFlags::ShaderResource, 4096, gpu::Format::Unknown, "gfx::Scene instance xforms");
 	m_indirectArgsBuf.Init(gpu::BufferFlags::Dynamic, 1024, gpu::Format::Unknown, "gfx::Scene indirect args");
-	m_instanceUniformsBuf.Init(gpu::BufferFlags::Dynamic | gpu::BufferFlags::ShaderResource, 1024, gpu::Format::Unknown, "gfx::Scene instance uniforms");
-	m_instanceIdStepBuf.Init(gpu::BufferFlags::Dynamic | gpu::BufferFlags::Vertex, 1024, gpu::Format::Unknown, "gfx::Scene instance step");
+	m_instanceUniformsBuf.Init(gpu::BufferFlags::Dynamic | gpu::BufferFlags::ShaderResource, 4096, gpu::Format::Unknown, "gfx::Scene instance uniforms");
+	m_instanceIdStepBuf.Init(gpu::BufferFlags::Dynamic | gpu::BufferFlags::Vertex, 4096, gpu::Format::Unknown, "gfx::Scene instance step");
 }
 
 void MeshRenderer::Submit(gfx::ResourceManager::MeshIdx _meshIdx, kt::Mat4 const& _mtx)
@@ -80,9 +80,7 @@ void MeshRenderer::BuildMultiDrawBuffers(gpu::cmd::Context* _ctx)
 	uint32_t const* beginInstanceIdx = sortIndices;
 
 	uint32_t numBatches = 0;
-	uint32_t batchInstanceBegin = 0;
-
-	uint32_t instanceStepRemapNext = 0;
+	uint32_t globalInstanceIndex = 0;
 
 	for (;;)
 	{
@@ -111,24 +109,21 @@ void MeshRenderer::BuildMultiDrawBuffers(gpu::cmd::Context* _ctx)
 		gpu::IndexedDrawArguments* drawArgs = drawArgsData.PushBack_Raw(mesh.m_subMeshes.Size());
 		shaderlib::InstanceData_UniformOffsets* instanceUniforms = uniformOffsets.PushBack_Raw(mesh.m_subMeshes.Size() * numInstancesForThisBatch);
 
-		uint32_t const transformIdxBegin = batchInstanceBegin;
+		uint32_t const transformIdxBegin = globalInstanceIndex;
 
 		for (gfx::Mesh::SubMesh const& subMesh : mesh.m_subMeshes)
 		{
-			drawArgs->m_baseVertex = 0;
+			drawArgs->m_baseVertex = 0; // This is completely useless with manual vertex fetch, because SV_VertexID does not take it into account.
 			drawArgs->m_indexStart = subMesh.m_indexBufferStartOffset + mesh.m_unifiedBufferIndexOffset;
 			drawArgs->m_indicesPerInstance = subMesh.m_numIndices;
 			drawArgs->m_instanceCount = numInstancesForThisBatch;
-			drawArgs->m_startInstance = batchInstanceBegin;
+			drawArgs->m_startInstance = globalInstanceIndex;
 			++drawArgs;
-
-			// TODO, remove instanceStepRemap and use this.
-			batchInstanceBegin += numInstancesForThisBatch;
 
 			uint32_t const materialIdx = subMesh.m_materialIdx.idx;
 			for (uint32_t i = 0; i < numInstancesForThisBatch; ++i)
 			{
-				*instanceStepRemap++ = instanceStepRemapNext++;
+				*instanceStepRemap++ = globalInstanceIndex++;
 				instanceUniforms->transformIdx = transformIdxBegin + i;
 				instanceUniforms->materialIdx = materialIdx;
 				instanceUniforms->baseVtx = mesh.m_unifiedBufferVertexOffset;
