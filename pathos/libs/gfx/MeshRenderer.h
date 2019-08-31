@@ -6,7 +6,6 @@
 #include <gpu/Types.h>
 #include <shaderlib/CommonShared.h>
 
-#include "View.h"
 #include "ResourceManager.h"
 #include "Utils.h"
 

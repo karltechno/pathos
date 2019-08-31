@@ -85,13 +85,14 @@ void MeshRenderer::BuildMultiDrawBuffers(gpu::cmd::Context* _ctx)
 	for (;;)
 	{
 		ResourceManager::MeshIdx const curMeshIdx = m_meshes[*beginInstanceIdx];
-		Matrix3x4 const& mtx34 = m_transforms3x4[*beginInstanceIdx];
 
 		ResourceManager::MeshIdx nextMeshIdx;
 		uint32_t numInstancesForThisBatch = 0;
 
 		do
 		{
+			Matrix3x4 const& mtx34 = m_transforms3x4[*beginInstanceIdx];
+
 			_mm_store_ps((float*)&xformWrite->row0, _mm_load_ps(mtx34.data));
 			_mm_store_ps((float*)&xformWrite->row1, _mm_load_ps(mtx34.data + 4));
 			_mm_store_ps((float*)&xformWrite->row2, _mm_load_ps(mtx34.data + 8));
