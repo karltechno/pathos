@@ -127,7 +127,15 @@ def main():
     num_rebuilt = 0
 
     for shader in shaders_to_rebuild:
-        shader_out_path = os.path.abspath(os.path.join(shader_out_dir, os.path.basename(shader))) + '.cso'
+        shader_file_name = os.path.basename(shader) + '.cso'
+        shader_rel_path = os.path.relpath(os.path.split(shader)[0], shader_src_dir)
+        shader_path = os.path.join(shader_out_dir, shader_rel_path)
+        
+        if not os.path.isdir(shader_path):
+            os.makedirs(shader_path)
+
+        shader_out_path = os.path.join(shader_path, shader_file_name)  
+
         log("\nRebuilding shader: {}".format(shader))
 
         dxc_args = [dxc_exe_path, '-Zpr', get_shader_profile_arg(shader), '-Emain', '-Fo{}'.format(shader_out_path), os.path.abspath(shader)]
