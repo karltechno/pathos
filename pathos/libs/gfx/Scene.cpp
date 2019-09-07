@@ -256,8 +256,8 @@ void Scene::EndFrame()
 	gpu::DescriptorData cbv;
 	cbv.Set(m_frameConstantsGpuBuf);
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
-	gpu::cmd::SetGraphicsCBVTable(ctx, cbv, 1);
-	gfx::DebugRender::Flush(gpu::GetMainThreadCommandCtx());
+	gpu::cmd::SetGraphicsCBVTable(ctx, cbv, PATHOS_PER_FRAME_SPACE);
+	gfx::DebugRender::Flush(ctx);
 }
 
 

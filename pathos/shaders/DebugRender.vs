@@ -1,6 +1,7 @@
 #include "shaderlib/ShaderOutput.hlsli"
 #include "shaderlib/CommonShared.h"
 #include "shaderlib/DefinesShared.h"
+#include "shaderlib/GFXPerFrameBindings.hlsli"
 
 struct VSInput
 {
@@ -8,12 +9,11 @@ struct VSInput
     float4 col : COLOR;
 };
 
-ConstantBuffer<FrameConstants> g_frame : register(b0, PATHOS_PER_FRAME_SPACE);
 
 VSOut_PosCol main(VSInput _input)
 {
     VSOut_PosCol ret;
-    ret.pos = mul(float4(_input.pos, 1.0), g_frame.mainViewProj);
+    ret.pos = mul(float4(_input.pos, 1.0), g_frameCb.mainViewProj);
     ret.posWS = _input.pos;
     ret.col = _input.col;
     return ret;

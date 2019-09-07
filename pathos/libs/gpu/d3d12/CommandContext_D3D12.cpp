@@ -47,6 +47,8 @@ void ResetState(Context* _ctx)
 	{
 		SetVertexBuffer(_ctx, 0, gpu::BufferHandle{});
 	}
+
+	SetViewportAndScissorRectFromTexture(_ctx, gpu::CurrentBackbuffer(), 0.0f, 1.0f);
 }
 
 ContextType GetContextType(Context* _ctx)
@@ -633,6 +635,7 @@ void ClearDepth(Context* _ctx, gpu::TextureHandle _handle, float _depth, uint32_
 void ResourceBarrier(Context* _ctx, gpu::ResourceHandle _handle, gpu::ResourceState _newState)
 {
 	AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
+	KT_ASSERT(res);
 
 	if (!!(res->m_bufferDesc.m_flags & gpu::BufferFlags::Transient))
 	{
@@ -640,7 +643,6 @@ void ResourceBarrier(Context* _ctx, gpu::ResourceHandle _handle, gpu::ResourceSt
 		return;
 	}
 
-	KT_ASSERT(res);
 	if (res->m_resState == _newState)
 	{
 		return;
