@@ -242,6 +242,8 @@ void ImGuiHandler::InternalRender()
 
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
+	GPU_PROFILE_SCOPE(ctx, "ImGui::Render", GPU_PROFILE_COLOUR(0x00, 0x00, 0xfe));
+
 	gpu::cmd::SetRenderTarget(ctx, 0, gpu::CurrentBackbuffer());
 
 	uint32_t const vertAllocSize = drawData->TotalVtxCount * sizeof(ImDrawVert);

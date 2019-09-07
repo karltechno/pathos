@@ -88,6 +88,8 @@ void Shutdown()
 
 void Flush(gpu::cmd::Context* _ctx)
 {
+	GPU_PROFILE_SCOPE(_ctx, "DebugRender::Flush", 0xFF00FFFF);
+
 	gpu::cmd::SetDepthBuffer(_ctx, gpu::BackbufferDepth());
 	gpu::cmd::SetRenderTarget(_ctx, 0, gpu::CurrentBackbuffer());
 

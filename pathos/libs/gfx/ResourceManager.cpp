@@ -208,6 +208,8 @@ void WriteIntoUnifiedBuffers
 {
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 
+	GPU_PROFILE_SCOPE(ctx, "ResourceManager::WriteIntoUnifiedBuffers", GPU_PROFILE_COLOUR(0xff, 0x00, 0xff));
+
 	UnifiedBuffers& buffers = s_state.m_unifiedBuffers;
 
 	KT_ASSERT(buffers.m_indexUsed + _numIndices < buffers.m_indexCapacity);
@@ -489,7 +491,6 @@ gpu::ShaderHandle LoadShader(char const* _path, gpu::ShaderType _type)
 		return it->m_val;
 	}
 
-	// TODO: Temp allocator here.
 	kt::Array<uint8_t> shaderData = ReadEntireFile(_path);
 
 	if (shaderData.Size() == 0)

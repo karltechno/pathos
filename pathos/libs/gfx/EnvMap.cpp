@@ -23,7 +23,7 @@ void CreateCubemapFromEquirect(gpu::cmd::Context* _cmd, char const* _equirectPat
 
 void CreateCubemapFromEquirect(gpu::cmd::Context* _cmd, gpu::ResourceHandle _inEquirect, gpu::ResourceHandle _outCubemap)
 {
-	GPU_PROFILE_SCOPE(_cmd, "CreateCubemapFromEquirect", GPU_PROFILE_COLOUR(0x00, 0xff, 0xff));
+	GPU_PROFILE_SCOPE(_cmd, "EnvMap::CreateCubemapFromEquirect", GPU_PROFILE_COLOUR(0x00, 0xff, 0xff));
 
 	gpu::ResourceType resType;
 	gpu::TextureDesc equiDesc, cubeMapDesc;
@@ -49,7 +49,7 @@ void CreateCubemapFromEquirect(gpu::cmd::Context* _cmd, gpu::ResourceHandle _inE
 
 void BakeEnvMapGGX(gpu::cmd::Context* _cmd, gpu::ResourceHandle _inCubeMap, gpu::ResourceHandle _outGGXMap)
 {
-	GPU_PROFILE_SCOPE(_cmd, "BakeEnvMapGGX", GPU_PROFILE_COLOUR(0x00, 0x00, 0xff));
+	GPU_PROFILE_SCOPE(_cmd, "EnvMap::BakeEnvMapGGX", GPU_PROFILE_COLOUR(0x00, 0x00, 0xff));
 
 	gpu::ResourceType resType;
 	gpu::TextureDesc cubeDesc, ggxDesc;

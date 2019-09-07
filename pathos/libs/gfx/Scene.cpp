@@ -95,6 +95,9 @@ static void UpdateLights(Scene* _scene)
 		return;
 	}
 
+	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
+	GPU_PROFILE_SCOPE(ctx, "Scene::UpdateLights", GPU_PROFILE_COLOUR(0xf0, 0xff, 0x00));
+
 	Light* sortedLights = (Light*)KT_ALLOCA(numLights * sizeof(Light));
 	memcpy(sortedLights, _scene->m_lights.Data(), _scene->m_lights.Size() * sizeof(Light));
 
@@ -115,7 +118,6 @@ static void UpdateLights(Scene* _scene)
 		}
 	}
 
-	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
 	shaderlib::LightData* gpuLightData = (shaderlib::LightData*)gpu::cmd::BeginUpdateDynamicBuffer(ctx, _scene->m_lightGpuBuf, numLights * sizeof(shaderlib::LightData), 0).Data();
 	
 	uint32_t lightCounts[uint32_t(Light::Type::Count)] = {};
@@ -148,6 +150,8 @@ static void UpdateLights(Scene* _scene)
 
 void Scene::BeginFrameAndUpdateBuffers(gpu::cmd::Context* _ctx, gfx::Camera const& _mainView, float _dt)
 {
+	GPU_PROFILE_SCOPE(_ctx, "Scene::BeginFrameAndUpdateBuffers", GPU_PROFILE_COLOUR(0xf0, 0xff, 0x00));
+
 	m_meshRenderer.Clear();
 
 	m_sceneBounds = CalcSceneBounds(*this);
@@ -224,6 +228,8 @@ void Scene::SubmitInstances()
 
 void Scene::RenderCascadeViews(gpu::cmd::Context* _ctx)
 {
+	GPU_PROFILE_SCOPE(_ctx, "Scene::RenderCascadeViews", GPU_PROFILE_COLOUR(0x00, 0xff, 0xff));
+
 	gpu::cmd::SetViewportAndScissorRectFromTexture(_ctx, m_shadowCascadeTex, 0.0f, 1.0f);
 	gpu::cmd::ResourceBarrier(_ctx, m_shadowCascadeTex, gpu::ResourceState::DepthStencilTarget);
 	gpu::cmd::SetRenderTarget(_ctx, 0, gpu::TextureHandle{});

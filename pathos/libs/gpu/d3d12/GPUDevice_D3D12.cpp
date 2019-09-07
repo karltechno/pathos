@@ -27,8 +27,8 @@
 #include "GenMipsLinear.h"
 #include "GenMipsSRGB.h"
 
-static D3D12_HEAP_PROPERTIES const c_defaultHeapProperties{ D3D12_HEAP_TYPE_DEFAULT , D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 1, 1 };
-static D3D12_HEAP_PROPERTIES const c_uploadHeapProperties{ D3D12_HEAP_TYPE_UPLOAD , D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 1, 1 };
+static D3D12_HEAP_PROPERTIES const c_defaultHeapProperties{ D3D12_HEAP_TYPE_DEFAULT, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 1, 1 };
+static D3D12_HEAP_PROPERTIES const c_uploadHeapProperties{ D3D12_HEAP_TYPE_UPLOAD, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 1, 1 };
 
 namespace gpu
 {
@@ -2071,6 +2071,8 @@ void Device_D3D12::FrameResources::ClearOnBeginFrame()
 // However this isn't technically correct, and throws GPU-Based validation errors.
 void GenerateMips(gpu::cmd::Context* _ctx, gpu::ResourceHandle _handle)
 {
+	GPU_PROFILE_SCOPE(_ctx, "GPUDevice::GenerateMips", GPU_PROFILE_COLOUR(0x00, 0xff, 0x00));
+
 	AllocatedResource_D3D12* res = g_device->m_resourceHandles.Lookup(_handle);
 	KT_ASSERT(res);
 
@@ -2255,7 +2257,7 @@ bool GetTextureInfo(gpu::TextureHandle _handle, gpu::TextureDesc& o_textureDesc)
 bool GetBufferInfo(gpu::BufferHandle _handle, gpu::BufferDesc& o_bufferDesc)
 {
 	gpu::ResourceType type;
-	return  GetResourceInfo(_handle, type, &o_bufferDesc) && type == ResourceType::Buffer;
+	return GetResourceInfo(_handle, type, &o_bufferDesc) && type == ResourceType::Buffer;
 }
 
 uint32_t GetBufferNumElements(gpu::BufferHandle _handle)

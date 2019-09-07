@@ -47,6 +47,8 @@ void MeshRenderer::BuildMultiDrawBuffers(gpu::cmd::Context* _ctx)
 		return;
 	}
 
+	GPU_PROFILE_SCOPE(_ctx, "MeshRenderer::BuildMultiDrawBuffers", GPU_PROFILE_COLOUR(0x00, 0x00, 0xff));
+
 	uint32_t const maxInstances = m_meshes.Size();
 
 	// add end of buffer sentinel.
@@ -162,6 +164,8 @@ void MeshRenderer::RenderInstances(gpu::cmd::Context* _ctx)
 	{
 		return;
 	}
+
+	GPU_PROFILE_SCOPE(_ctx, "MeshRenderer::RenderInstances", GPU_PROFILE_COLOUR(0x00, 0xff, 0xff));
 
 	gpu::cmd::SetVertexBuffer(_ctx, 0, m_instanceIdStepBuf.m_buffer);
 
