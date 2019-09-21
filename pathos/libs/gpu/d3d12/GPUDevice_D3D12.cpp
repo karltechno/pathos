@@ -1461,9 +1461,11 @@ static void InitMipPsos(Device_D3D12* _dev)
 #undef MAKE_PSO
 }
 
-static void ValidateCaps(ID3D12Device* _dev)
+static void InitAndValidateCaps(ID3D12Device* _dev, Caps* o_caps)
 {
 	D3D12_FEATURE_DATA_D3D12_OPTIONS featureSupport{};
+	D3D12_FEATURE_DATA_D3D12_OPTIONS1 featureSupport1{};
+	D3D12_FEATURE_DATA_D3D12_OPTIONS3 featureSupport3{};
 	D3D_CHECK(_dev->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &featureSupport, sizeof(featureSupport)));
 
 	if (featureSupport.ResourceBindingTier == D3D12_RESOURCE_BINDING_TIER_1)
@@ -1471,6 +1473,16 @@ static void ValidateCaps(ID3D12Device* _dev)
 		KT_ASSERT(!"Resource binding tier 2 required for unbounded SRV tables (bindless textures).");
 		::exit(1);
 	}
+
+	D3D_CHECK(_dev->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &featureSupport1, sizeof(featureSupport1)));
+	D3D_CHECK(_dev->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS3, &featureSupport3, sizeof(featureSupport3)));
+
+	o_caps->conservativeRasterization = featureSupport.ConservativeRasterizationTier != D3D12_CONSERVATIVE_RASTERIZATION_TIER_NOT_SUPPORTED;
+	o_caps->doubleShaderOps = featureSupport.DoublePrecisionFloatShaderOps;
+	o_caps->int64ShaderOps = featureSupport1.Int64ShaderOps;
+	o_caps->waveOps = featureSupport1.WaveOps;
+	o_caps->waveCountMin = featureSupport1.WaveLaneCountMin;
+	o_caps->shaderBarycentrics = featureSupport3.BarycentricsSupported;
 }
 
 void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
@@ -1542,7 +1554,7 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		return;
 	}
 	
-	ValidateCaps(m_d3dDev);
+	InitAndValidateCaps(m_d3dDev, &m_caps);
 
 	if (_useDebugLayer)
 	{
@@ -2365,5 +2377,9 @@ uint32_t CPUFrameIndexWrapped()
 }
 
 
+Caps GetCaps()
+{
+	return g_device->m_caps;
+}
 
 }

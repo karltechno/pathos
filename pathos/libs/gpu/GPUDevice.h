@@ -69,6 +69,7 @@ void Release(gpu::PersistentDescriptorTableHandle _handle);
 void ResolveQuery(QueryIndex _index, uint64_t* o_begin, uint64_t* o_end);
 
 uint64_t GetQueryFrequency();
+Caps GetCaps();
 
 // Debugging:
 void EnumResourceHandles(kt::StaticFunction<void(gpu::ResourceHandle), 32> const& _ftor);

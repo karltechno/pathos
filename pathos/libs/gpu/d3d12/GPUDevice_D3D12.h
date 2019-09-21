@@ -278,6 +278,8 @@ struct Device_D3D12
 
 	QueryProfiler_D3D12 m_queryProfiler;
 
+	Caps m_caps;
+	
 	struct MipPSOs
 	{
 		// Second is srgb
