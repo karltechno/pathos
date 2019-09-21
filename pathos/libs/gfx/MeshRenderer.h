@@ -41,6 +41,7 @@ private:
 	gfx::ResizableDynamicBufferT<shaderlib::InstanceData_Xform> m_instanceXformBuf;
 	gfx::ResizableDynamicBufferT<uint32_t> m_instanceIdx_MeshIdx_Buf;
 
+	uint32_t m_numSubmeshesSubmittedThisFrame = 0;
 	uint32_t m_batchesBuiltThisFrame = 0;
 };
 

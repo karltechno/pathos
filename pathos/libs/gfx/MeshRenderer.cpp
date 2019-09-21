@@ -35,6 +35,7 @@ MeshRenderer::MeshRenderer()
 void MeshRenderer::Submit(gfx::ResourceManager::MeshIdx _meshIdx, kt::Mat4 const& _mtx)
 {
 	PackMat44_to_Mat34_Transpose(_mtx, m_transforms3x4.PushBack_Raw());
+	m_numSubmeshesSubmittedThisFrame += gfx::ResourceManager::GetMesh(_meshIdx)->m_subMeshes.Size();
 	m_meshes.PushBack(_meshIdx);
 }
 
@@ -71,11 +72,11 @@ void MeshRenderer::BuildMultiDrawBuffersCPU(gpu::cmd::Context* _ctx)
 	gpu::cmd::ResourceBarrier(_ctx, m_instanceIdx_MeshIdx_Buf.m_buffer, gpu::ResourceState::CopyDest);
 	gpu::cmd::ResourceBarrier(_ctx, m_instanceXformBuf.m_buffer, gpu::ResourceState::CopyDest);
 
+	uint32_t* instanceIdx_meshIdxWrite = m_instanceIdx_MeshIdx_Buf.BeginUpdate(_ctx, m_numSubmeshesSubmittedThisFrame);
+
 	kt::Array<gpu::IndexedDrawArguments> drawArgsData(core::GetThreadFrameAllocator());
-	kt::Array<uint32_t> instanceIdx_meshIdx(core::GetThreadFrameAllocator());
 
 	drawArgsData.Reserve(numMeshInstances);
-	instanceIdx_meshIdx.Reserve(numMeshInstances * 5); // We should count exact submesh indices when submitting instances.
 
 	uint32_t const* beginInstanceIdx = sortIndices;
 
@@ -131,7 +132,7 @@ void MeshRenderer::BuildMultiDrawBuffersCPU(gpu::cmd::Context* _ctx)
 
 			do
 			{
-				*instanceIdx_meshIdx_write++ = (transformIdxBegin++) | (subMeshGpuOffset << PATHOS_SUBMESH_ID_REMAP_SHIFT);
+				*instanceIdx_meshIdxWrite++ = (transformIdxBegin++) | (subMeshGpuOffset << PATHOS_SUBMESH_ID_REMAP_SHIFT);
 			} while (--instancesToWrite);
 
 			globalInstanceIndex += numInstancesForThisBatch;
@@ -152,7 +153,7 @@ void MeshRenderer::BuildMultiDrawBuffersCPU(gpu::cmd::Context* _ctx)
 	gpu::cmd::FlushBarriers(_ctx);
 	m_indirectArgsBuf.Update(_ctx, drawArgsData.Data(), drawArgsData.Size());
 	m_instanceXformBuf.EndUpdate(_ctx);
-	m_instanceIdx_MeshIdx_Buf.Update(_ctx, instanceIdx_meshIdx.Data(), instanceIdx_meshIdx.Size());
+	m_instanceIdx_MeshIdx_Buf.EndUpdate(_ctx);
 
 	gpu::cmd::ResourceBarrier(_ctx, m_indirectArgsBuf.m_buffer, gpu::ResourceState::IndirectArg);
 	gpu::cmd::ResourceBarrier(_ctx, m_instanceXformBuf.m_buffer, gpu::ResourceState::ShaderResource);
