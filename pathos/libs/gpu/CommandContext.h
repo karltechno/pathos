@@ -67,6 +67,7 @@ void UAVBarrier(Context* _ctx, gpu::ResourceHandle _handle);
 void FlushBarriers(Context* _ctx); 
 
 void CopyResource(Context* _ctx, gpu::ResourceHandle _src, gpu::ResourceHandle _dest);
+void CopyBufferRegion(Context* _ctx, gpu::ResourceHandle _dest, uint32_t _destOffset, gpu::ResourceHandle _src, uint32_t _srcOffset, uint32_t _size);
 
 void DrawIndexedInstanced(Context* _ctx, uint32_t _indexCount, uint32_t _instanceCount, uint32_t _startIndex, uint32_t _baseVertex, uint32_t _startInstance);
 void DrawInstanced(Context* _ctx, uint32_t _vertexCount, uint32_t _instanceCount, uint32_t _startVertex, uint32_t _startInstance);

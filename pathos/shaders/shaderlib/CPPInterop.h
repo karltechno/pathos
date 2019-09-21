@@ -25,6 +25,11 @@ using float4x4 = kt::Mat4;
 using float3x3 = kt::Mat3;
 
 using uint = uint32_t;
+using uint2 = uint32_t[2];
+using uint3 = uint32_t[3];
+using uint4 = uint32_t[3];
+
+
 
 #else
 

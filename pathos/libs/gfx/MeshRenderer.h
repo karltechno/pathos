@@ -19,7 +19,9 @@ public:
 
 	void Submit(gfx::ResourceManager::MeshIdx _meshIdx, kt::Mat4 const& _mtx);
 
-	void BuildMultiDrawBuffers(gpu::cmd::Context* _ctx);
+	void BuildMultiDrawBuffersCPU(gpu::cmd::Context* _ctx);
+
+	void BuildMultiDrawBuffersGPU(gpu::cmd::Context* _ctx);
 
 	void RenderInstances(gpu::cmd::Context* _ctx);
 
@@ -37,8 +39,7 @@ private:
 
 	gfx::ResizableDynamicBufferT<gpu::IndexedDrawArguments> m_indirectArgsBuf;
 	gfx::ResizableDynamicBufferT<shaderlib::InstanceData_Xform> m_instanceXformBuf;
-	gfx::ResizableDynamicBufferT<shaderlib::InstanceData_UniformOffsets> m_instanceUniformsBuf;
-	gfx::ResizableDynamicBufferT<uint32_t> m_instanceIdStepBuf;
+	gfx::ResizableDynamicBufferT<uint32_t> m_instanceIdx_MeshIdx_Buf;
 
 	uint32_t m_batchesBuiltThisFrame = 0;
 };

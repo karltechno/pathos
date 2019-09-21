@@ -48,13 +48,10 @@ struct Mesh
 	kt::Array<SubMesh> m_subMeshes;
 	kt::Array<kt::AABB> m_subMeshBoundingBoxes;
 
-	gpu::BufferRef m_posGpuBuf;
-	gpu::BufferRef m_indexGpuBuf;
-	gpu::BufferRef m_tangentGpuBuf;
-	gpu::BufferRef m_uv0GpuBuf;
-
 	uint32_t m_unifiedBufferIndexOffset;
 	uint32_t m_unifiedBufferVertexOffset;
+
+	uint32_t m_gpuSubMeshDataOffset;
 };
 
 struct Model

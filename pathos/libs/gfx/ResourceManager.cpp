@@ -38,9 +38,11 @@ struct StdStringHashI
 	}
 };
 
+
 struct State
 {
 	static uint32_t constexpr c_maxBindlessTextures = 1024;
+	static uint32_t constexpr c_counterBufferEntries = 1024;
 
 	using TextureCache = kt::HashMap<std::string, TextureIdx, StdStringHashI>;
 	using ShaderCache = kt::HashMap<std::string, gpu::ShaderRef, StdStringHashI>;
@@ -63,6 +65,9 @@ struct State
 	UnifiedBuffers m_unifiedBuffers;
 
 	core::FolderWatcher* m_shaderWatcher;
+
+	gpu::BufferRef m_counterBuffer;
+	uint32_t m_nextCounterIdx = 0;
 
 	bool m_materialsDirty = false;
 } s_state;
@@ -119,6 +124,15 @@ static void InitSharedResources()
 		gpu::cmd::SetComputeUAVTable(cmdList, uav, 0);
 		gpu::cmd::Dispatch(cmdList, 256 / 8, 256 / 8, 1);
 		gpu::cmd::ResourceBarrier(cmdList, s_state.m_sharedResources.m_ggxLut, gpu::ResourceState::ShaderResource);
+	}
+
+	{
+		gpu::BufferDesc counterDesc;
+		counterDesc.m_flags = gpu::BufferFlags::UnorderedAccess;
+		counterDesc.m_format = gpu::Format::R32_Uint;
+		counterDesc.m_sizeInBytes = sizeof(uint32_t) * State::c_counterBufferEntries;
+		counterDesc.m_strideInBytes = sizeof(uint32_t);
+		s_state.m_counterBuffer = gpu::CreateBuffer(counterDesc, nullptr, "Shared Counter Buffer");
 	}
 }
 
@@ -187,11 +201,24 @@ void InitUnifiedBuffers(uint32_t _vertexCapacity /*= 2500000*/, uint32_t _indexC
 		uvDesc.m_strideInBytes = sizeof(float[2]);
 		s_state.m_unifiedBuffers.m_uv0VertexBuf = gpu::CreateBuffer(uvDesc, nullptr, "Unified Vertex Buffer (UV0)");
 	}
+
+	s_state.m_unifiedBuffers.m_submeshGpuBuf.Init(gpu::BufferFlags::ShaderResource | gpu::BufferFlags::Dynamic, 4096, gpu::Format::Unknown, "SubMesh_GPUData");
 }
 
 UnifiedBuffers const& GetUnifiedBuffers()
 {
 	return s_state.m_unifiedBuffers;
+}
+
+gpu::BufferHandle GetCounterBuffer()
+{
+	return s_state.m_counterBuffer;
+}
+
+uint32_t AllocateCounterBufferIndex()
+{
+	KT_ASSERT(s_state.m_nextCounterIdx < State::c_counterBufferEntries);
+	return s_state.m_nextCounterIdx++;
 }
 
 void WriteIntoUnifiedBuffers
@@ -202,8 +229,8 @@ void WriteIntoUnifiedBuffers
 	uint32_t const* _indices, 
 	uint32_t _numVertices,
 	uint32_t _numIndices, 
-	uint32_t& o_idxOffset, 
-	uint32_t& o_vtxOffset
+	uint32_t* o_idxOffset,
+	uint32_t* o_vtxOffset
 )
 {
 	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
@@ -214,8 +241,8 @@ void WriteIntoUnifiedBuffers
 
 	KT_ASSERT(buffers.m_indexUsed + _numIndices < buffers.m_indexCapacity);
 	KT_ASSERT(buffers.m_vertexUsed + _numVertices < buffers.m_vertexCapacity);
-	o_idxOffset = buffers.m_indexUsed;
-	o_vtxOffset = buffers.m_vertexUsed;
+	*o_idxOffset = buffers.m_indexUsed;
+	*o_vtxOffset = buffers.m_vertexUsed;
 
 	gpu::cmd::UpdateDynamicBuffer(ctx, buffers.m_posVertexBuf, _positions, sizeof(float[3]) * _numVertices, buffers.m_vertexUsed * sizeof(float[3]));
 	gpu::cmd::UpdateDynamicBuffer(ctx, buffers.m_uv0VertexBuf, _uvs, sizeof(float[2]) * _numVertices, buffers.m_vertexUsed * sizeof(float[2]));
@@ -224,6 +251,46 @@ void WriteIntoUnifiedBuffers
 
 	buffers.m_indexUsed += _numIndices;
 	buffers.m_vertexUsed += _numVertices;
+}
+
+void AddSubMeshGPUData(gfx::Mesh& _mesh)
+{
+	uint32_t submeshesToAdd = _mesh.m_subMeshes.Size();
+	if (!submeshesToAdd)
+	{
+		return;
+	}
+	
+	UnifiedBuffers& buffers = s_state.m_unifiedBuffers;
+
+	gpu::cmd::Context* ctx = gpu::GetMainThreadCommandCtx();
+
+	_mesh.m_gpuSubMeshDataOffset = buffers.m_numSubMeshes;
+
+	shaderlib::GPUSubMeshData* dataWrite = buffers.m_submeshGpuBuf.BeginUpdateAtOffset(ctx, buffers.m_numSubMeshes, submeshesToAdd);
+	buffers.m_numSubMeshes += submeshesToAdd;
+
+	gfx::Mesh::SubMesh const* subMeshRead = _mesh.m_subMeshes.Data();
+	kt::AABB const* aabbRead = _mesh.m_subMeshBoundingBoxes.Data();
+
+	KT_ASSERT(_mesh.m_subMeshBoundingBoxes.Size() == _mesh.m_subMeshes.Size());
+
+	do
+	{
+		dataWrite->materialIdx = subMeshRead->m_materialIdx.idx;
+		dataWrite->numIndices = subMeshRead->m_numIndices;
+		dataWrite->unifiedVertexBufferOffset = _mesh.m_unifiedBufferVertexOffset;
+		dataWrite->unifiedIndexBufferOffset = _mesh.m_unifiedBufferIndexOffset + subMeshRead->m_indexBufferStartOffset;
+		memcpy(&dataWrite->bboxMin, &aabbRead->m_min, sizeof(float) * 3);
+		memcpy(&dataWrite->bboxMax, &aabbRead->m_max, sizeof(float) * 3);
+		dataWrite->bboxMin.w = 1.0f;
+		dataWrite->bboxMax.w = 1.0f;
+
+		++dataWrite;
+		++subMeshRead;
+	} while (--submeshesToAdd);
+
+	buffers.m_submeshGpuBuf.EndUpdate(ctx);
 }
 
 static kt::Array<uint8_t> ReadEntireFile(char const* _path)
@@ -361,6 +428,7 @@ ModelIdx CreateModelFromGLTF(char const* _path)
 		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_posVertexBuf, gpu::ResourceState::CopyDest);
 		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_uv0VertexBuf, gpu::ResourceState::CopyDest);
 		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_tangentSpaceVertexBuf, gpu::ResourceState::CopyDest);
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_submeshGpuBuf.m_buffer, gpu::ResourceState::CopyDest);
 		gpu::cmd::FlushBarriers(ctx);
 	}
 
@@ -372,7 +440,8 @@ ModelIdx CreateModelFromGLTF(char const* _path)
 		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_posVertexBuf, gpu::ResourceState::ShaderResource);
 		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_uv0VertexBuf, gpu::ResourceState::ShaderResource);
 		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_tangentSpaceVertexBuf, gpu::ResourceState::ShaderResource);
-		
+		gpu::cmd::ResourceBarrier(ctx, s_state.m_unifiedBuffers.m_submeshGpuBuf.m_buffer, gpu::ResourceState::ShaderResource);
+
 		// TODO: Unecessary barriers if we load multiple models, unecessary flush. Barrier batching needs fixing.
 		gpu::cmd::FlushBarriers(ctx);
 	}

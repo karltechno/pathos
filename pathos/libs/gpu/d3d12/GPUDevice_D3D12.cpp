@@ -9,6 +9,8 @@
 #include <kt/Vec4.h>
 #include <kt/Hash.h>
 
+#include <core/Memory.h>
+
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -16,6 +18,7 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <dxgidebug.h>
+#include <DXProgrammableCapture.h>
 #include "d3dx12.h"
 
 #include <string.h>
@@ -229,7 +232,7 @@ bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* 
 		m_gpuAddress = m_res->GetGPUVirtualAddress();
 		m_offset = 0;
 
-		UpdateViews();
+		UpdateBufferViews();
 	}
 	else
 	{
@@ -252,7 +255,7 @@ bool AllocatedResource_D3D12::InitAsBuffer(BufferDesc const& _desc, void const* 
 			m_lastFrameTouched = g_device->m_frameCounter;
 			KT_ASSERT(m_mappedCpuData);
 			memcpy(m_mappedCpuData, _initialData, _initialDataSize);
-			UpdateViews();
+			UpdateBufferViews();
 		}
 		else
 		{
@@ -317,8 +320,10 @@ void AllocatedResource_D3D12::Destroy()
 }
 
 
-void AllocatedResource_D3D12::UpdateViews()
+void AllocatedResource_D3D12::UpdateBufferViews()
 {
+	KT_ASSERT(m_type == ResourceType::Buffer);
+
 	if (!!(m_bufferDesc.m_flags & BufferFlags::Constant))
 	{
 		KT_ASSERT(m_cbv.ptr);
@@ -348,6 +353,20 @@ void AllocatedResource_D3D12::UpdateViews()
 		srvDesc.Buffer.StructureByteStride = m_bufferDesc.m_strideInBytes;
 		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 		g_device->m_d3dDev->CreateShaderResourceView(m_res, &srvDesc, m_srv);
+	}
+
+	if (!!(m_bufferDesc.m_flags & BufferFlags::UnorderedAccess))
+	{
+		KT_ASSERT(m_uavs.Size() == 1);
+		KT_ASSERT(m_bufferDesc.m_sizeInBytes);
+		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
+		// TODO: Check UAV type.
+		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+		uavDesc.Format = ToDXGIFormat(m_bufferDesc.m_format);
+		uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE; // TODO: Raw?
+		uavDesc.Buffer.FirstElement = 0;
+		uavDesc.Buffer.NumElements = m_bufferDesc.m_strideInBytes / m_bufferDesc.m_sizeInBytes;
+		uavDesc.Buffer.StructureByteStride = m_bufferDesc.m_strideInBytes;
 	}
 }
 
@@ -1551,6 +1570,9 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		}
 	}
 
+	// Only succeeds if PIX is connected.
+	::DXGIGetDebugInterface1(0, IID_PPV_ARGS(&m_dxGraphicsAnalysis));
+
 	// Todo: capabilities.
 	D3D12_FEATURE_DATA_D3D12_OPTIONS opts;
 	D3D12_FEATURE_DATA_D3D12_OPTIONS1 opts1;
@@ -1679,6 +1701,7 @@ Device_D3D12::~Device_D3D12()
 	// Release final d3d objects.
 	SafeReleaseDX(m_d3dDev);
 	SafeReleaseDX(m_swapChain);
+	SafeReleaseDX(m_dxGraphicsAnalysis);
 
 	SafeReleaseDX(m_graphicsRootSig);
 	SafeReleaseDX(m_computeRootSig);
@@ -2116,7 +2139,7 @@ void GenerateMips(gpu::cmd::Context* _ctx, gpu::ResourceHandle _handle)
 
 	gpu::cmd::SetPSO(_ctx, genMipsPso);
 
-	kt::Array<D3D12_RESOURCE_BARRIER> barrierArray;
+	kt::Array<D3D12_RESOURCE_BARRIER> barrierArray(core::GetThreadFrameAllocator());
 	barrierArray.Reserve(arraySlices * totalMips);
 
 	auto transitionSubresourceArrayFn = [arraySlices, res, totalMips, &barrierArray](D3D12_RESOURCE_STATES _before, D3D12_RESOURCE_STATES _after, uint32_t _mip)
@@ -2283,5 +2306,31 @@ bool GetShaderInfo(ShaderHandle _handle, ShaderType& o_type, char const*& o_name
 	return false;
 }
 
+void BeginGraphicsDebuggerCapture()
+{
+	if (g_device->m_dxGraphicsAnalysis)
+	{
+		g_device->m_dxGraphicsAnalysis->BeginCapture();
+	}
+}
+
+void EndGraphicsDebuggerCapture()
+{
+	if (g_device->m_dxGraphicsAnalysis)
+	{
+		g_device->m_dxGraphicsAnalysis->EndCapture();
+	}
+}
+
+void D3D12_Device_Removed_Handler()
+{
+	
+	//CComPtr<ID3D12DeviceRemovedExtendedData> pDred;
+	//VERIFY_SUCCEEDED(pDevice->QueryInterface(IID_PPV_ARGS(&pDred)));
+	//D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT DredAutoBreadcrumbsOutput;
+	//D3D12_DRED_PAGE_FAULT_OUTPUT DredPageFaultOutput;
+	//VERIFY_SUCCEEDED(pDred->GetAutoBreadcrumbsOutput(&DredAutoBreadcrumbsOutput));
+	//VERIFY_SUCCEEDED(pDred->GetPageFaultAllocationOutput(&DredPageFaultOutput));
+}
 
 }

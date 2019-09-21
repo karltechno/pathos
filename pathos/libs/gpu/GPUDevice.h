@@ -14,6 +14,10 @@ void Shutdown();
 void BeginFrame();
 void EndFrame();
 
+void BeginGraphicsDebuggerCapture();
+void EndGraphicsDebuggerCapture();
+
+
 cmd::Context* GetMainThreadCommandCtx();
 
 gpu::BufferHandle CreateBuffer(gpu::BufferDesc const& _desc, void const* _initialData, uint32_t _initialDataSize, char const* _debugName);

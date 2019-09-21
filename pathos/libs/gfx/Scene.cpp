@@ -222,7 +222,7 @@ void Scene::SubmitInstances()
 		}
 	}
 
-	m_meshRenderer.BuildMultiDrawBuffers(gpu::GetMainThreadCommandCtx());
+	m_meshRenderer.BuildMultiDrawBuffersCPU(gpu::GetMainThreadCommandCtx());
 }
 
 
@@ -277,7 +277,9 @@ void Scene::AddModelInstance(ResourceManager::ModelIdx _idx, kt::Mat4 const& _mt
 void Scene::BindPerFrameConstants(gpu::cmd::Context* _ctx)
 {
 	// See: "shaderlib/GFXPerFrameBindings.hlsli"
-	gpu::DescriptorData frameSrvs[9];
+	gfx::ResourceManager::UnifiedBuffers const& buffers = gfx::ResourceManager::GetUnifiedBuffers();
+
+	gpu::DescriptorData frameSrvs[10];
 
 	frameSrvs[0].Set(m_iblIrradiance);
 	frameSrvs[1].Set(m_iblGgx);
@@ -285,12 +287,10 @@ void Scene::BindPerFrameConstants(gpu::cmd::Context* _ctx)
 	frameSrvs[3].Set(m_lightGpuBuf);
 	frameSrvs[4].Set(m_shadowCascadeTex);
 	frameSrvs[5].Set(gfx::ResourceManager::GetMaterialGpuBuffer());
-
-	gfx::ResourceManager::UnifiedBuffers const& buffers = gfx::ResourceManager::GetUnifiedBuffers();
-
-	frameSrvs[6].Set(buffers.m_posVertexBuf);
-	frameSrvs[7].Set(buffers.m_tangentSpaceVertexBuf);
-	frameSrvs[8].Set(buffers.m_uv0VertexBuf);
+	frameSrvs[6].Set(buffers.m_submeshGpuBuf.m_buffer);
+	frameSrvs[7].Set(buffers.m_posVertexBuf);
+	frameSrvs[8].Set(buffers.m_tangentSpaceVertexBuf);
+	frameSrvs[9].Set(buffers.m_uv0VertexBuf);
 
 	gpu::cmd::SetGraphicsSRVTable(_ctx, frameSrvs, PATHOS_PER_FRAME_SPACE);
 }

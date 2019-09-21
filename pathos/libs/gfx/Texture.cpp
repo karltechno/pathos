@@ -100,6 +100,7 @@ bool Texture::LoadFromFile(char const* _fileName, TextureLoadFlags _flags)
 	{
 		gpu::Format const gpuFmt = !!(_flags & TextureLoadFlags::sRGB) ? gpu::Format::R8G8B8A8_UNorm_SRGB : gpu::Format::R8G8B8A8_UNorm;
 		CreateGPUBuffer2D(*this, m_texelData.Data(), m_width, m_height, gpuFmt, m_numMips, _fileName);
+		m_texelData.ClearAndFree();
 		return true;
 	}
 
@@ -120,6 +121,7 @@ bool Texture::LoadFromFile(char const* _fileName, TextureLoadFlags _flags)
 		m_height = uint32_t(y);
 		m_numMips = 1;
 		CreateGPUBuffer2D(*this, hdrPtr, m_width, m_height, gpu::Format::R32G32B32A32_Float, 1, _fileName);
+		m_texelData.ClearAndFree();
 		return true;
 	}
 
@@ -134,13 +136,11 @@ bool Texture::LoadFromFile(char const* _fileName, TextureLoadFlags _flags)
 	if(LoadFromRGBA8(srcTexels, uint32_t(x), uint32_t(y), _flags, _fileName))
 	{
 		WriteToCache(*this, _flags, _fileName);
+		m_texelData.ClearAndFree();
 		return true;
 	}
 	
-	// TODO: Make a flag or something if we ever want to keep data around on CPU. 
-	// Better yet, stream data straight into gpu memory.
-	m_texelData.ClearAndFree();
-	
+
 	return false;
 }
 
@@ -244,6 +244,7 @@ bool Texture::LoadFromRGBA8(uint8_t const* _texels, uint32_t _width, uint32_t _h
 	}
 
 	CreateGPUBuffer2D(*this, m_texelData.Data(), _width, _height, gpuFmt, mipChainLen, _debugName);
+	m_texelData.ClearAndFree();
 	return true;
 }
 

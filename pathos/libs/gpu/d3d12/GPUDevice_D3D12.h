@@ -16,6 +16,7 @@ struct ID3D12CommandSignature;
 struct IDXGISwapChain4;
 struct IDXGISwapChain3;
 struct IDXGISwapChain1;
+struct IDXGraphicsAnalysis;
 
 #define STORE_GPU_DEBUG_NAME (1) // TODO: Better handling
 
@@ -72,7 +73,7 @@ struct AllocatedResource_D3D12 : AllocatedObjectBase_D3D12
 
 	void Destroy();
 
-	void UpdateViews();
+	void UpdateBufferViews();
 
 	void UpdateTransientSize(uint32_t _size);
 
@@ -235,6 +236,7 @@ struct Device_D3D12
 
 	ID3D12Device2* m_d3dDev = nullptr;
 	IDXGISwapChain3* m_swapChain = nullptr;
+	IDXGraphicsAnalysis* m_dxGraphicsAnalysis = nullptr;
 	
 	gpu::TextureRef m_backBuffers[c_maxBufferedFrames];
 

@@ -89,21 +89,24 @@ struct InstanceData_Xform
 };
 PATHOS_ASSERT_16B_ALIGNED(InstanceData_Xform);
 
-struct InstanceData_UniformOffsets
-{
-    uint materialIdx;
-    uint transformIdx;
-    uint baseVtx; // TODO: MoveMe ?
-    float __pad0__; 
-};
-PATHOS_ASSERT_16B_ALIGNED(InstanceData_UniformOffsets);
-
-// TODO: Should align ?
+// TODO: Should align - and pack?
 struct TangentSpace
 {
     float3 normal;
     float4 tangentSign;
 };
+
+
+struct GPUSubMeshData
+{
+	float4 bboxMin;
+	float4 bboxMax;
+	uint unifiedIndexBufferOffset;
+	uint unifiedVertexBufferOffset;
+    uint numIndices;
+    uint materialIdx;
+};
+PATHOS_ASSERT_16B_ALIGNED(GPUSubMeshData);
 
 #if !defined(__cplusplus)
 float3 TransformInstanceData(in float4 _vtx, in float4 _row0, in float4 _row1, in float4 _row2)

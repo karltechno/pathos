@@ -8,11 +8,17 @@
 #include <d3d12.h>
 #include <guiddef.h>
 
+namespace gpu
+{
+void D3D12_Device_Removed_Handler();
+}
+
 #if KT_DEBUG
 	#define D3D_CHECK(_expr) \
 		KT_MACRO_BLOCK_BEGIN \
 			HRESULT const KT_STRING_JOIN(hr_, __LINE__) = _expr; \
 			KT_ASSERT(SUCCEEDED(KT_STRING_JOIN(hr_, __LINE__))) \
+			if(KT_STRING_JOIN(hr_, __LINE__) == DXGI_ERROR_DEVICE_REMOVED) gpu::D3D12_Device_Removed_Handler(); \
 		KT_MACRO_BLOCK_END
 #else
 	#define D3D_CHECK(_expr) _expr

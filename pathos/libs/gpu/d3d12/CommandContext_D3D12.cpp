@@ -546,7 +546,7 @@ kt::Slice<uint8_t> BeginUpdateTransientBuffer(Context* _ctx, gpu::BufferHandle _
 
 	KT_ASSERT(res->m_mappedCpuData);
 	res->m_lastFrameTouched = _ctx->m_device->m_frameCounter;
-	res->UpdateViews();
+	res->UpdateBufferViews();
 
 	return kt::MakeSlice((uint8_t*)res->m_mappedCpuData, res->m_bufferDesc.m_sizeInBytes);
 }
@@ -757,6 +757,16 @@ void CopyResource(Context* _ctx, gpu::ResourceHandle _src, gpu::ResourceHandle _
 	KT_ASSERT(resDst);
 	_ctx->m_cmdList->CopyResource(resDst->m_res, resSrc->m_res);
 }
+
+void CopyBufferRegion(Context* _ctx, gpu::ResourceHandle _dest, uint32_t _destOffset, gpu::ResourceHandle _src, uint32_t _srcOffset, uint32_t _size)
+{
+	AllocatedResource_D3D12* resSrc = _ctx->m_device->m_resourceHandles.Lookup(_src);
+	AllocatedResource_D3D12* resDst = _ctx->m_device->m_resourceHandles.Lookup(_dest);
+	KT_ASSERT(resSrc);
+	KT_ASSERT(resDst);
+	_ctx->m_cmdList->CopyBufferRegion(resDst->m_res, _destOffset, resSrc->m_res, _srcOffset, _size);
+}
+
 
 void CommandContext_D3D12::ApplyGraphicsStateChanges()
 {

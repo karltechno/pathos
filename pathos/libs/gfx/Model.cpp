@@ -446,9 +446,11 @@ void Mesh::CreateGPUBuffers(bool _keepDataOnCpu)
 		m_indices.Data(),
 		m_posStream.Size(),
 		m_indices.Size(),
-		m_unifiedBufferIndexOffset,
-		m_unifiedBufferVertexOffset
+		&m_unifiedBufferIndexOffset,
+		&m_unifiedBufferVertexOffset
 	);
+
+	ResourceManager::AddSubMeshGPUData(*this);
 
 	if (!_keepDataOnCpu)
 	{
@@ -657,7 +659,6 @@ bool SerializeModelCache(char const* _initialPath, kt::ISerializer* _s, Model& _
 			meshIdx = ResourceManager::CreateMesh();
 			gfx::Mesh& newMesh = *ResourceManager::GetMesh(meshIdx);
 			SerializeMesh(_s, newMesh);
-			newMesh.CreateGPUBuffers();
 			// if we are reading, we need to remap submesh material indices.
 			for (gfx::Mesh::SubMesh& subMesh : newMesh.m_subMeshes)
 			{
@@ -673,6 +674,8 @@ bool SerializeModelCache(char const* _initialPath, kt::ISerializer* _s, Model& _
 				}
 				KT_ASSERT(remapped);
 			}
+
+			newMesh.CreateGPUBuffers();
 		}
 
 	}

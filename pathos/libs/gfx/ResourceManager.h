@@ -2,8 +2,10 @@
 #include <kt/Slice.h>
 
 #include <gpu/Types.h>
+#include <shaderlib/CommonShared.h>
 
 #include "Texture.h"
+#include "Utils.h"
 
 namespace gfx
 {
@@ -75,6 +77,9 @@ void Shutdown();
 
 struct UnifiedBuffers
 {
+	gfx::ResizableDynamicBufferT<shaderlib::GPUSubMeshData> m_submeshGpuBuf;
+	uint32_t m_numSubMeshes = 0;
+
 	gpu::BufferRef m_posVertexBuf;
 	gpu::BufferRef m_tangentSpaceVertexBuf;
 	gpu::BufferRef m_uv0VertexBuf;
@@ -93,6 +98,10 @@ struct UnifiedBuffers
 void InitUnifiedBuffers(uint32_t _vertexCapacity = 2500000, uint32_t _indexCapacity = 2000000);
 UnifiedBuffers const& GetUnifiedBuffers();
 
+// A global R32_UINT buffer for use as UAV counters. Use AllocateCounterBufferIndex to allocate an index inside of it.
+gpu::BufferHandle GetCounterBuffer();
+uint32_t AllocateCounterBufferIndex();
+
 void WriteIntoUnifiedBuffers
 (
 	float const* _positions,
@@ -101,9 +110,11 @@ void WriteIntoUnifiedBuffers
 	uint32_t const* _indices,
 	uint32_t _numVertices,
 	uint32_t _numIndices,
-	uint32_t& o_idxOffset,
-	uint32_t& o_vtxOffset
+	uint32_t* o_idxOffset,
+	uint32_t* o_vtxOffset
 );
+
+void AddSubMeshGPUData(gfx::Mesh& _model);
 
 void Update();
 
