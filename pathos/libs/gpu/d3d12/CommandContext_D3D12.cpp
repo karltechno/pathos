@@ -4,6 +4,7 @@
 #include "Utils_D3D12.h"
 #include "GPUDevice_D3D12.h"
 #include "DescriptorHeap_D3D12.h"
+#include "GPUProfiler.h"
 
 #include <d3d12.h>
 #include "WinPixEventRuntime/pix3.h"
@@ -25,10 +26,9 @@ namespace gpu
 namespace cmd
 {
 
-
 Context* Begin(ContextType _type)
 {
-	return new CommandContext_D3D12(_type, g_device);
+	return (Context*)(new CommandContext_D3D12(_type, g_device));
 }
 
 void ResetState(Context* _ctx)
@@ -147,11 +147,24 @@ void PushMarker(Context* _ctx, char const* _name)
 void PushMarker(Context* _ctx, char const* _name, uint32_t _colour)
 {
 	::PIXBeginEvent(_ctx->m_cmdList, PIX_COLOR(uint8_t(_colour & 0xFF), uint8_t((_colour >> 8) & 0xFF), uint8_t((_colour >> 16) & 0xFF)), _name);
+	gpu::profiler::Begin(_ctx, _name, _colour);
 }
 
 void PopMarker(Context* _ctx)
 {
 	::PIXEndEvent(_ctx->m_cmdList);
+	gpu::profiler::End(_ctx);
+}
+
+
+gpu::QueryIndex BeginQuery(Context* _ctx)
+{
+	return _ctx->m_device->m_queryProfiler.BeginQuery(_ctx->m_cmdList);
+}
+
+void EndQuery(Context* _ctx, QueryIndex _idx)
+{
+	_ctx->m_device->m_queryProfiler.EndQuery(_ctx->m_cmdList, _idx);
 }
 
 static void MarkDirtyIfBound(Context* _ctx, gpu::ResourceHandle _handle, AllocatedResource_D3D12* _res)

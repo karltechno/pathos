@@ -3,10 +3,14 @@
 #include <kt/StaticFunction.h>
 
 #include "Types.h"
-#include "CommandContext.h"
 
 namespace gpu
 {
+
+namespace cmd
+{
+struct Context;
+}
 
 bool Init(void* _nwh);
 void Shutdown();
@@ -42,6 +46,7 @@ gpu::TextureHandle CurrentBackbuffer();
 gpu::TextureHandle BackbufferDepth();
 gpu::Format	BackbufferFormat();
 gpu::Format	BackbufferDepthFormat();
+uint32_t CPUFrameIndexWrapped();
 
 void SetVsyncEnabled(bool _vsync);
 
@@ -61,6 +66,9 @@ void Release(gpu::ShaderHandle _handle);
 void Release(gpu::PSOHandle _handle);
 void Release(gpu::PersistentDescriptorTableHandle _handle);
 
+void ResolveQuery(QueryIndex _index, uint64_t* o_begin, uint64_t* o_end);
+
+uint64_t GetQueryFrequency();
 
 // Debugging:
 void EnumResourceHandles(kt::StaticFunction<void(gpu::ResourceHandle), 32> const& _ftor);

@@ -2,6 +2,7 @@
 #include "Utils_D3D12.h"
 #include "Types.h"
 #include "CommandContext_D3D12.h"
+#include "GPUProfiler.h"
 
 #include <kt/Macros.h>
 #include <kt/Logging.h>
@@ -1651,6 +1652,8 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 	m_cpuFrameIdx = m_swapChain->GetCurrentBackBufferIndex();
 
 	InitMipPsos(g_device);
+
+	m_queryProfiler.Init(m_d3dDev);
 }
 
 Device_D3D12::Device_D3D12()
@@ -1663,6 +1666,8 @@ Device_D3D12::~Device_D3D12()
 	m_mipPsos = MipPSOs{};
 	// Sync gpu.
 	m_commandQueueManager.FlushAllBlockingCPU();
+
+	m_queryProfiler.Shutdown();
 
 	// Clear any handles we are holding.
 	for (gpu::TextureRef& texRef : m_backBuffers)
@@ -2031,21 +2036,30 @@ void Device_D3D12::BeginFrame()
 {
 	m_commandQueueManager.WaitForFenceBlockingCPU(m_frameFences[m_cpuFrameIdx]);
 
+	m_mainThreadCtx = gpu::cmd::Begin(gpu::cmd::ContextType::Graphics);
+
 	m_framesResources[m_cpuFrameIdx].ClearOnBeginFrame();
 	m_descriptorcbvsrvuavRingBuffer.OnBeginFrame(m_cpuFrameIdx);
 
-	m_mainThreadCtx = gpu::cmd::Begin(gpu::cmd::ContextType::Graphics);
+	m_queryProfiler.ResolveFrame(m_cpuFrameIdx);
+	gpu::profiler::ResolveFrame(m_cpuFrameIdx);
+
+	m_queryProfiler.ClearFrame(m_cpuFrameIdx);
+	gpu::profiler::BeginFrame(m_mainThreadCtx, m_cpuFrameIdx);
+
 	gpu::cmd::ResourceBarrier(m_mainThreadCtx, m_backBuffers[m_cpuFrameIdx], gpu::ResourceState::RenderTarget);
 	gpu::cmd::FlushBarriers(m_mainThreadCtx);
 }
 
 void Device_D3D12::EndFrame()
 {
+	gpu::profiler::EndFrame(m_mainThreadCtx, m_cpuFrameIdx);
+
+	m_descriptorcbvsrvuavRingBuffer.OnEndOfFrame(m_cpuFrameIdx);
+
 	gpu::cmd::ResourceBarrier(m_mainThreadCtx, m_backBuffers[m_cpuFrameIdx], gpu::ResourceState::Present);
 	gpu::cmd::End(m_mainThreadCtx);
 	m_mainThreadCtx = nullptr;
-
-	m_descriptorcbvsrvuavRingBuffer.OnEndOfFrame(m_cpuFrameIdx);
 
 	D3D_CHECK(m_swapChain->Present(m_vsync ? 1 : 0, 0));
 	m_frameFences[m_cpuFrameIdx] = m_commandQueueManager.GraphicsQueue().InsertAndIncrementFence();
@@ -2332,5 +2346,24 @@ void D3D12_Device_Removed_Handler()
 	//VERIFY_SUCCEEDED(pDred->GetAutoBreadcrumbsOutput(&DredAutoBreadcrumbsOutput));
 	//VERIFY_SUCCEEDED(pDred->GetPageFaultAllocationOutput(&DredPageFaultOutput));
 }
+
+void ResolveQuery(QueryIndex _index, uint64_t* o_begin, uint64_t* o_end)
+{
+	g_device->m_queryProfiler.ResolveQuery(_index, o_begin, o_end);
+}
+
+uint64_t GetQueryFrequency()
+{
+	uint64_t t;
+	D3D_CHECK(g_device->m_commandQueueManager.GraphicsQueue().D3DCommandQueue()->GetTimestampFrequency(&t));
+	return t;
+}
+
+uint32_t CPUFrameIndexWrapped()
+{
+	return g_device->m_cpuFrameIdx;
+}
+
+
 
 }

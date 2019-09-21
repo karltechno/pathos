@@ -128,6 +128,8 @@ private:
 	void ApplyGraphicsStateChanges();
 };
 
+struct Context : CommandContext_D3D12 {};
+
 }
 
 }

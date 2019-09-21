@@ -17,10 +17,7 @@ namespace gpu
 namespace cmd
 {
 
-#if KT_PLATFORM_WINDOWS // TODO: Replace with D3D12 macro.
-struct CommandContext_D3D12;
-using Context = CommandContext_D3D12;
-#endif
+struct Context;
 
 enum class ContextType
 {
@@ -38,6 +35,9 @@ void PushMarker(Context* _ctx, char const* _name, uint32_t _colour);
 void PushMarker(Context* _ctx, char const* _name);
 
 void PopMarker(Context* _ctx);
+
+QueryIndex BeginQuery(Context* _ctx);
+void EndQuery(Context* _ctx, QueryIndex _idx);
 
 ContextType GetContextType(Context* _ctx);
 

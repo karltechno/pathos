@@ -3,18 +3,23 @@
 
 #include "imgui.h"
 #include "gpu/GPUDevice.h"
+#include "gpu/GPUProfiler.h"
+#include "kt/Strings.h"
 
 namespace editor
 {
 
 void GPUWindows::Register()
 {
-	m_windowHandle = editor::RegisterWindow("gpu", "resources", [this](float _dt) { Draw(_dt); }, []() { ImGui::SetNextWindowSize(ImVec2(400.0f, 400.0f), ImGuiCond_FirstUseEver); });
+	m_resourceWindow = editor::RegisterWindow("gpu", "resources", [this](float _dt) { DrawResources(_dt); }, []() { ImGui::SetNextWindowSize(ImVec2(400.0f, 400.0f), ImGuiCond_FirstUseEver); });
+	m_profilerWindow = editor::RegisterWindow("gpu", "Profiler", [this](float _dt) {DrawProfiler(_dt); }, []() { ImGui::SetNextWindowSize(ImVec2(600.0f, 500.0f), ImGuiSetCond_FirstUseEver); });
+
 }
 
 void GPUWindows::Unregister()
 {
-	editor::UnregisterWindow(m_windowHandle);
+	editor::UnregisterWindow(m_resourceWindow);
+	editor::UnregisterWindow(m_profilerWindow);
 }
 
 void GPUWindows::DrawBufferTab()
@@ -156,7 +161,7 @@ void GPUWindows::DrawTextureTab()
 	ImGui::Columns();
 }
 
-void GPUWindows::Draw(float _dt)
+void GPUWindows::DrawResources(float _dt)
 {
 	KT_UNUSED(_dt);
 	ImGui::BeginTabBar("Resource Types");
@@ -175,5 +180,80 @@ void GPUWindows::Draw(float _dt)
 
 	ImGui::EndTabBar();
 }
+
+static void DrawProfilerRecursive(gpu::profiler::ResolvedTreeEntry const* _array, uint32_t _idx, double _timeRange, uint64_t _timeBegin, uint64_t _ticksPerSecond, uint32_t _depth)
+{
+	float width = ImGui::GetContentRegionAvailWidth();
+
+	ImVec2 const windowPos = ImGui::GetCursorScreenPos();
+	gpu::profiler::ResolvedTreeEntry const& entry = _array[_idx];
+	ImDrawList* list = ImGui::GetWindowDrawList();
+
+	float const c_profileHeight = 25.0f;
+
+	float const xBegin = width * float(double(entry.beginTime - _timeBegin) / _timeRange);
+	float const xEnd = xBegin + width * float(double(entry.endTime - entry.beginTime) / _timeRange);
+
+	float const yBegin = c_profileHeight * _depth + 1.0f;
+	float const yEnd = c_profileHeight * (_depth + 1) - 1.0f;
+
+	ImVec2 const rectTL = ImVec2(windowPos.x + xBegin, windowPos.y + yBegin);
+	ImVec2 const rectBR = ImVec2(windowPos.x + xEnd, windowPos.y + yEnd);
+
+	kt::String512 tooltip;
+	double const ms = (double(entry.endTime - entry.beginTime) * 1000.0) / _ticksPerSecond;
+	tooltip.AppendFmt("%s - %.2fms", entry.name, ms);
+
+	ImVec2 const textSize = ImGui::CalcTextSize(tooltip.Begin(), tooltip.End());
+
+	list->AddRectFilled(rectTL, rectBR, entry.colour, 0.0f);
+
+	ImGui::PushClipRect(rectTL, rectBR, true);
+
+	float const textBeginLocalX = (rectBR.x - rectTL.x) * 0.5f - textSize.x * 0.5f;
+	float const textBeginLocalY = (rectBR.y - rectTL.y) * 0.5f - textSize.y * 0.5f;
+
+	list->AddText(ImVec2(rectTL.x + textBeginLocalX, rectTL.y + textBeginLocalY), ~entry.colour | 0xff000000, tooltip.Begin(), tooltip.End());
+
+	ImGui::PopClipRect();
+
+	if (ImGui::IsMouseHoveringRect(rectTL, rectBR))
+	{
+		ImGui::SetTooltip("%s - %.2fms", entry.name, ms);
+	}
+
+	if (entry.childLink != UINT32_MAX)
+	{
+		DrawProfilerRecursive(_array, entry.childLink, _timeRange, _timeBegin, _ticksPerSecond, _depth + 1);
+	}
+
+	if (entry.siblingLink != UINT32_MAX)
+	{
+		DrawProfilerRecursive(_array, entry.siblingLink, _timeRange, _timeBegin, _ticksPerSecond, _depth);
+	}
+}
+
+void GPUWindows::DrawProfiler(float _dt)
+{
+	KT_UNUSED(_dt);
+	gpu::profiler::ResolvedTreeEntry const* root;
+	uint32_t numNodes;
+	gpu::profiler::GetFrameTree(&root, &numNodes);
+
+	if (!numNodes)
+	{
+		return;
+	}
+
+	uint64_t const ticksPerSecond = gpu::GetQueryFrequency();
+
+	uint64_t const begin = root->beginTime;
+
+	double const range = root->endTime - root->beginTime;
+
+	DrawProfilerRecursive(root, 0, range, begin, ticksPerSecond, 0);
+}
+
+
 
 }

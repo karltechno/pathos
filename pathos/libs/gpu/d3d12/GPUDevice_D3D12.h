@@ -10,6 +10,7 @@
 #include "DescriptorHeap_D3D12.h"
 #include "Types_D3D12.h"
 #include "HandleRef.h"
+#include "QueryProfiler_D3D12.h"
 
 struct ID3D12Device2;
 struct ID3D12CommandSignature;
@@ -268,12 +269,14 @@ struct Device_D3D12
 	kt::VersionedHandlePool<AllocatedPSO_D3D12>			m_psoHandles;
 	kt::VersionedHandlePool<AllocatedPersistentDescriptorTable_D3D12> m_persistentTableHandles;
 
-	cmd::CommandContext_D3D12* m_mainThreadCtx = nullptr;
+	cmd::Context* m_mainThreadCtx = nullptr;
 
 	ID3D12CommandSignature* m_multiDrawIndexedCommandSig = nullptr;
 	ID3D12CommandSignature* m_dispatchIndirectCommandSig = nullptr;
 
 	PSOCache m_psoCache;
+
+	QueryProfiler_D3D12 m_queryProfiler;
 
 	struct MipPSOs
 	{

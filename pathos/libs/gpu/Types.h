@@ -50,6 +50,8 @@ using ShaderHandle						= TaggedHandle<ShaderTag>;
 using ResourceHandle					= TaggedHandle<ResourceTag>;
 using PersistentDescriptorTableHandle	= TaggedHandle<PersistentDescriptorTableTag>;
 
+using QueryIndex						= uint32_t;
+
 struct BufferHandle : ResourceHandle
 {
 	BufferHandle() = default;

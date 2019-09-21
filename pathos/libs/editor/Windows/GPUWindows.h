@@ -11,12 +11,15 @@ struct GPUWindows
 	void Register();
 	void Unregister();
 
-	void Draw(float _dt);
+	void DrawResources(float _dt);
+	void DrawProfiler(float _dt);
 
 	void DrawBufferTab();
 	void DrawTextureTab();
 
-	editor::ImGuiWindowHandle m_windowHandle;
+	editor::ImGuiWindowHandle m_resourceWindow;
+	editor::ImGuiWindowHandle m_profilerWindow;
+
 	gpu::BufferHandle m_selectedBuffer;
 	gpu::TextureHandle m_selectedTexture;
 };
