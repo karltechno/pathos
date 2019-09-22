@@ -1913,6 +1913,8 @@ void ReloadShader(ShaderHandle _handle, ShaderBytecode const& _newBytecode)
 				}
 				pso->m_pso = CreateD3DComputePSO(g_device->m_d3dDev, shader->m_byteCode);
 			}
+
+			++numPsos;
 		}
 	}
 	else
