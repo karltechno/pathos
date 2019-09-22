@@ -51,11 +51,13 @@ enum class DirtyStateFlags : uint32_t
 };
 KT_ENUM_CLASS_FLAG_OPERATORS(DirtyStateFlags);
 
-struct Barrier_D3D12
+struct BatchedBarrier
 {
-	gpu::ResourceRef m_res;
-	gpu::ResourceState m_newState;
-	bool m_isUav = false;
+	gpu::ResourceState prevState;
+	gpu::ResourceState nextState;
+	gpu::ResourceRef resource;
+
+	D3D12_RESOURCE_BARRIER barrier;
 };
 
 struct CommandContext_D3D12
@@ -97,6 +99,7 @@ struct CommandContext_D3D12
 		gpu::ResourceRef m_resource;
 	};
 
+
 	struct State
 	{
 		gpu::PrimitiveType m_primitive = gpu::PrimitiveType::Num_PrimitiveType;
@@ -118,7 +121,8 @@ struct CommandContext_D3D12
 			float m_depthMax;
 		} m_viewport;
 
-		kt::InplaceArray<D3D12_RESOURCE_BARRIER, 16u> m_batchedBarriers;
+
+		kt::InplaceArray<BatchedBarrier, 16u> m_batchedBarriers;
 
 		kt::InplaceArray<PendingDynamicUpload, 16u> m_pendingUploads;
 	} m_state;

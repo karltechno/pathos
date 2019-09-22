@@ -656,35 +656,52 @@ void ResourceBarrier(Context* _ctx, gpu::ResourceHandle _handle, gpu::ResourceSt
 		return;
 	}
 
+	D3D12_RESOURCE_STATES const newState = gpu::D3DTranslateResourceState(_newState);
+
+	// Check if there are any pending barriers - maybe store in resource?
+	for (uint32_t i = 0; i < _ctx->m_state.m_batchedBarriers.Size(); ++i)
+	{
+		BatchedBarrier& barrier = _ctx->m_state.m_batchedBarriers[i];
+		if (barrier.barrier.Type == D3D12_RESOURCE_BARRIER_TYPE_TRANSITION 
+			&& barrier.resource.Handle() == _handle)
+		{
+			if (barrier.prevState == _newState)
+			{
+				// just remove this barrier 
+				_ctx->m_state.m_batchedBarriers.EraseSwap(i);
+				return;
+			}
+
+			// swap the new state if is isn't ours. 
+			// TODO: This is pretty blunt, and might break - consider revisiting this.
+			barrier.barrier.Transition.StateAfter = newState;
+			// force to all subresources
+			barrier.barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+			
+			KT_ASSERT(barrier.barrier.Transition.StateAfter != barrier.barrier.Transition.StateBefore);
+			return;
+		}
+	}
+
+	// No pending barriers, double check current resource state.
 	if (res->m_resState == _newState)
 	{
 		return;
 	}
 
-	D3D12_RESOURCE_STATES const newState = gpu::D3DTranslateResourceState(_newState);
+	BatchedBarrier& barrier = _ctx->m_state.m_batchedBarriers.PushBack();
 
-	// Check if there are any pending barriers - maybe store in resource?
-	for (D3D12_RESOURCE_BARRIER& b : _ctx->m_state.m_batchedBarriers)
-	{
-		if (b.Type == D3D12_RESOURCE_BARRIER_TYPE_TRANSITION 
-			&& b.Transition.pResource == res->m_res)
-		{
-			// swap the new state if is isn't ours. 
-			// TODO: This is pretty blunt, and might break - consider revisiting this.
-			b.Transition.StateAfter = newState;
-			// force to all subresources
-			b.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-			return;
-		}
-	}
+	barrier.prevState = res->m_resState;
+	barrier.nextState = _newState;
 
-	D3D12_RESOURCE_BARRIER& d3dBarrier = _ctx->m_state.m_batchedBarriers.PushBack();
-	d3dBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	d3dBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE; // TODO: Split barriers (probably easiest with rendergraph-esque abstraction).
-	d3dBarrier.Transition.StateBefore = gpu::D3DTranslateResourceState(res->m_resState);
-	d3dBarrier.Transition.StateAfter = newState;
-	d3dBarrier.Transition.pResource = res->m_res;
-	d3dBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	barrier.barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE; // TODO: Split barriers (probably easiest with rendergraph-esque abstraction).
+	barrier.barrier.Transition.StateBefore = gpu::D3DTranslateResourceState(res->m_resState);
+	barrier.barrier.Transition.StateAfter = newState;
+	barrier.barrier.Transition.pResource = res->m_res;
+	barrier.barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+	KT_ASSERT(barrier.barrier.Transition.StateAfter != barrier.barrier.Transition.StateBefore);
 
 	// TODO: doesn't play nice with threading, or redundant barriers
 	res->m_resState = _newState;
@@ -695,10 +712,11 @@ void UAVBarrier(Context* _ctx, gpu::ResourceHandle _handle)
 	AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(_handle);
 	KT_ASSERT(res);
 
-	D3D12_RESOURCE_BARRIER& barrier = _ctx->m_state.m_batchedBarriers.PushBack();
-	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-	barrier.UAV.pResource = res->m_res;
+	BatchedBarrier& barrier = _ctx->m_state.m_batchedBarriers.PushBack();
+	barrier.resource = _handle;
+	barrier.barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	barrier.barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+	barrier.barrier.UAV.pResource = res->m_res;
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE AllocAndCopyFromDescriptorRing(CommandContext_D3D12* _ctx, kt::Slice<D3D12_CPU_DESCRIPTOR_HANDLE> const& _srcHandles)
@@ -758,7 +776,14 @@ void FlushBarriers(Context* _ctx)
 		return;
 	}
 
-	_ctx->m_cmdList->ResourceBarrier(_ctx->m_state.m_batchedBarriers.Size(), _ctx->m_state.m_batchedBarriers.Data());
+	D3D12_RESOURCE_BARRIER* d3dbarriers = (D3D12_RESOURCE_BARRIER*)KT_ALLOCA(sizeof(D3D12_RESOURCE_BARRIER) * _ctx->m_state.m_batchedBarriers.Size());
+
+	for (uint32_t i = 0; i < _ctx->m_state.m_batchedBarriers.Size(); ++i)
+	{
+		d3dbarriers[i] = _ctx->m_state.m_batchedBarriers[i].barrier;
+	}
+
+	_ctx->m_cmdList->ResourceBarrier(_ctx->m_state.m_batchedBarriers.Size(), d3dbarriers);
 	_ctx->m_state.m_batchedBarriers.Clear();
 }
 
