@@ -351,7 +351,7 @@ void AllocatedResource_D3D12::UpdateBufferViews()
 			srvDesc.Buffer.FirstElement = m_offset / m_bufferDesc.m_strideInBytes;
 		}
 		srvDesc.Buffer.NumElements = m_bufferDesc.m_sizeInBytes / m_bufferDesc.m_strideInBytes;
-		srvDesc.Buffer.StructureByteStride = m_bufferDesc.m_strideInBytes;
+		srvDesc.Buffer.StructureByteStride = m_bufferDesc.m_format == Format::Unknown ? m_bufferDesc.m_strideInBytes : 0;
 		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 		g_device->m_d3dDev->CreateShaderResourceView(m_res, &srvDesc, m_srv);
 	}
@@ -366,8 +366,9 @@ void AllocatedResource_D3D12::UpdateBufferViews()
 		uavDesc.Format = ToDXGIFormat(m_bufferDesc.m_format);
 		uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE; // TODO: Raw?
 		uavDesc.Buffer.FirstElement = 0;
-		uavDesc.Buffer.NumElements = m_bufferDesc.m_strideInBytes / m_bufferDesc.m_sizeInBytes;
-		uavDesc.Buffer.StructureByteStride = m_bufferDesc.m_strideInBytes;
+		uavDesc.Buffer.NumElements = m_bufferDesc.m_sizeInBytes / m_bufferDesc.m_strideInBytes;
+		uavDesc.Buffer.StructureByteStride = m_bufferDesc.m_format == Format::Unknown ? m_bufferDesc.m_strideInBytes : 0;
+		g_device->m_d3dDev->CreateUnorderedAccessView(m_res, nullptr, &uavDesc, m_uavs[0]);
 	}
 }
 
