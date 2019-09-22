@@ -300,7 +300,7 @@ static D3D12_GPU_DESCRIPTOR_HANDLE MakeUAVTable(Context* _ctx, kt::Slice<Descrip
 		if (AllocatedResource_D3D12* res = _ctx->m_device->m_resourceHandles.Lookup(descriptor.res.m_handle))
 		{
 			KT_ASSERT(descriptor.res.m_uavMipIdx < res->m_uavs.Size());
-			KT_ASSERT(res->m_srv.ptr);
+			KT_ASSERT(res->m_uavs[descriptor.res.m_uavMipIdx].ptr);
 			cpuHandle = res->m_uavs[descriptor.res.m_uavMipIdx];
 		}
 		else
