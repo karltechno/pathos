@@ -78,6 +78,17 @@ struct ShaderBytecode
 	size_t m_size = 0;
 };
 
+struct Caps
+{
+	uint32_t waveCountMin;
+
+	bool conservativeRasterization;
+	bool doubleShaderOps;
+	bool int64ShaderOps;
+	bool waveOps;
+	bool shaderBarycentrics;
+};
+
 enum class ResourceState : uint8_t
 {
 	Unknown,
