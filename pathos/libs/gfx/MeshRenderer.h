@@ -5,12 +5,23 @@
 #include <gpu/CommandContext.h>
 #include <gpu/Types.h>
 #include <shaderlib/CommonShared.h>
+#include <shaderlib/CullingShared.h>
 
 #include "ResourceManager.h"
 #include "Utils.h"
 
 namespace gfx
 {
+
+struct GPUCullingBuffers
+{
+	GPUCullingBuffers()
+	{
+		instanceCullingData.Init(gpu::BufferFlags::ShaderResource | gpu::BufferFlags::Dynamic, 4096, gpu::Format::Unknown, "Scratch Mesh/Instance Culling Buffer");
+	}
+
+	gfx::ResizableDynamicBufferT<uint32_t> instanceCullingData;
+};
 
 class MeshRenderer
 {
@@ -21,7 +32,7 @@ public:
 
 	void BuildMultiDrawBuffersCPU(gpu::cmd::Context* _ctx);
 
-	void BuildMultiDrawBuffersGPU(gpu::cmd::Context* _ctx);
+	void BuildMultiDrawBuffersGPU(gpu::cmd::Context* _ctx, GPUCullingBuffers& _scratchCullBuffers);
 
 	void RenderInstances(gpu::cmd::Context* _ctx);
 
@@ -42,7 +53,10 @@ private:
 	gfx::ResizableDynamicBufferT<uint32_t> m_instanceIdx_MeshIdx_Buf;
 
 	uint32_t m_numSubmeshesSubmittedThisFrame = 0;
+
 	uint32_t m_batchesBuiltThisFrame = 0;
+
+	bool m_builtThisFrameOnGPU;
 };
 
 }

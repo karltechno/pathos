@@ -6,6 +6,7 @@
 
 #include <core/Memory.h>
 #include <shaderlib/DefinesShared.h>
+#include <shaderlib/CullingShared.h>
 
 #include "Model.h"
 
@@ -28,8 +29,8 @@ static void PackMat44_to_Mat34_Transpose(kt::Mat4 const& _mat4, MeshRenderer::Ma
 MeshRenderer::MeshRenderer()
 {
 	m_instanceXformBuf.Init(gpu::BufferFlags::Dynamic | gpu::BufferFlags::ShaderResource, 4096, gpu::Format::Unknown, "gfx::Scene instance xforms");
-	m_indirectArgsBuf.Init(gpu::BufferFlags::Dynamic, 1024, gpu::Format::Unknown, "gfx::Scene indirect args");
-	m_instanceIdx_MeshIdx_Buf.Init(gpu::BufferFlags::Dynamic | gpu::BufferFlags::Vertex, 4096, gpu::Format::Unknown, "gfx::Scene instanceIdx_meshIdx");
+	m_indirectArgsBuf.Init(gpu::BufferFlags::Dynamic | gpu::BufferFlags::UnorderedAccess, 1024, gpu::Format::Unknown, "gfx::Scene indirect args");
+	m_instanceIdx_MeshIdx_Buf.Init(gpu::BufferFlags::Dynamic | gpu::BufferFlags::Vertex | gpu::BufferFlags::UnorderedAccess, 4096, gpu::Format::Unknown, "gfx::Scene instanceIdx_meshIdx");
 }
 
 void MeshRenderer::Submit(gfx::ResourceManager::MeshIdx _meshIdx, kt::Mat4 const& _mtx)
@@ -67,12 +68,11 @@ void MeshRenderer::BuildMultiDrawBuffersCPU(gpu::cmd::Context* _ctx)
 		kt::RadixSort(sortIndices, sortIndices + m_meshes.Size() - 1, sortIndicesTemp, [this](uint32_t _v) -> uint16_t { return m_meshes[_v].idx; });
 	}
 
-	shaderlib::InstanceData_Xform* xformWrite = m_instanceXformBuf.BeginUpdate(_ctx, numMeshInstances);
-
 	gpu::cmd::ResourceBarrier(_ctx, m_instanceIdx_MeshIdx_Buf.m_buffer, gpu::ResourceState::CopyDest);
 	gpu::cmd::ResourceBarrier(_ctx, m_instanceXformBuf.m_buffer, gpu::ResourceState::CopyDest);
 
 	uint32_t* instanceIdx_meshIdxWrite = m_instanceIdx_MeshIdx_Buf.BeginUpdate(_ctx, m_numSubmeshesSubmittedThisFrame);
+	shaderlib::InstanceData_Xform* xformWrite = m_instanceXformBuf.BeginUpdate(_ctx, numMeshInstances);
 
 	kt::Array<gpu::IndexedDrawArguments> drawArgsData(core::GetThreadFrameAllocator());
 
@@ -112,8 +112,6 @@ void MeshRenderer::BuildMultiDrawBuffersCPU(gpu::cmd::Context* _ctx)
 		gpu::IndexedDrawArguments* drawArgs = drawArgsData.PushBack_Raw(mesh.m_subMeshes.Size());
 
 		uint32_t subMeshGpuOffset = mesh.m_gpuSubMeshDataOffset;
-
-		uint32_t* instanceIdx_meshIdx_write = instanceIdx_meshIdx.PushBack_Raw(numInstancesForThisBatch * mesh.m_subMeshes.Size());
 
 		for (gfx::Mesh::SubMesh const& subMesh : mesh.m_subMeshes)
 		{
@@ -162,7 +160,7 @@ void MeshRenderer::BuildMultiDrawBuffersCPU(gpu::cmd::Context* _ctx)
 	m_batchesBuiltThisFrame = numBatches;
 }
 
-void MeshRenderer::BuildMultiDrawBuffersGPU(gpu::cmd::Context* _ctx)
+void MeshRenderer::BuildMultiDrawBuffersGPU(gpu::cmd::Context* _ctx, GPUCullingBuffers& _scratchCullBuffers)
 {
 	if (m_meshes.Size() == 0)
 	{
@@ -171,7 +169,86 @@ void MeshRenderer::BuildMultiDrawBuffersGPU(gpu::cmd::Context* _ctx)
 	}
 
 	GPU_PROFILE_SCOPE(_ctx, "MeshRenderer::BuildMultiDrawBuffersGPU", GPU_PROFILE_COLOUR(0x00, 0x00, 0xff));
+
+	uint32_t const numMeshInstances = m_meshes.Size();
+
+	gpu::cmd::ResourceBarrier(_ctx, m_instanceXformBuf.m_buffer, gpu::ResourceState::CopyDest);
+	gpu::cmd::ResourceBarrier(_ctx, _scratchCullBuffers.instanceCullingData.m_buffer, gpu::ResourceState::CopyDest);
+
+	shaderlib::InstanceData_Xform* xformWrite = m_instanceXformBuf.BeginUpdate(_ctx, numMeshInstances);
+	uint32_t* cullingDataWrite = _scratchCullBuffers.instanceCullingData.BeginUpdate(_ctx, m_numSubmeshesSubmittedThisFrame);
+
+
+	for (uint32_t transformIdx = 0; transformIdx < m_meshes.Size(); ++transformIdx)
+	{
+		gfx::Mesh const* mesh = gfx::ResourceManager::GetMesh(m_meshes[transformIdx]);
+		Matrix3x4 const& mtx = m_transforms3x4[transformIdx];
+
+		_mm_store_ps((float*)&xformWrite->row0, _mm_load_ps(mtx.data));
+		_mm_store_ps((float*)&xformWrite->row1, _mm_load_ps(mtx.data + 4));
+		_mm_store_ps((float*)&xformWrite->row2, _mm_load_ps(mtx.data + 8));
+		++xformWrite;
+
+		uint32_t submeshIdx = mesh->m_gpuSubMeshDataOffset;
+
+		for (uint32_t j = 0; j < mesh->m_subMeshes.Size(); ++j)
+		{
+			*cullingDataWrite++ = transformIdx | (submeshIdx++ << PATHOS_SUBMESH_ID_REMAP_SHIFT);
+		}
+	}
+
+	gpu::cmd::FlushBarriers(_ctx);
+	m_instanceXformBuf.EndUpdate(_ctx);
+	_scratchCullBuffers.instanceCullingData.EndUpdate(_ctx);
+
+	gpu::cmd::ResourceBarrier(_ctx, m_instanceXformBuf.m_buffer, gpu::ResourceState::ShaderResource);
+	gpu::cmd::ResourceBarrier(_ctx, _scratchCullBuffers.instanceCullingData.m_buffer, gpu::ResourceState::ShaderResource);
+
+	// Both of these are filled by gpu.
+	m_instanceIdx_MeshIdx_Buf.EnsureSize(_ctx, m_numSubmeshesSubmittedThisFrame, false);
+	m_indirectArgsBuf.EnsureSize(_ctx, m_numSubmeshesSubmittedThisFrame + 1, false); // +1 for counter
+
+	gpu::cmd::ResourceBarrier(_ctx, m_instanceIdx_MeshIdx_Buf.m_buffer, gpu::ResourceState::UnorderedAccess);
+	gpu::cmd::ResourceBarrier(_ctx, m_indirectArgsBuf.m_buffer, gpu::ResourceState::UnorderedAccess);
+
+	gpu::DescriptorData srvs[3];
+	gpu::DescriptorData uavs[2];
+	gpu::DescriptorData cbvs[1];
+
+	srvs[0].Set(_scratchCullBuffers.instanceCullingData.m_buffer);
+	srvs[1].Set(m_instanceXformBuf.m_buffer);
+	srvs[2].Set(gfx::ResourceManager::GetUnifiedBuffers().m_submeshGpuBuf.m_buffer);
+
+	uavs[0].Set(m_indirectArgsBuf.m_buffer);
+	uavs[1].Set(m_instanceIdx_MeshIdx_Buf.m_buffer);
+
+	shaderlib::CullingConstants constants;
+	constants.numSubmeshInstances = m_numSubmeshesSubmittedThisFrame;
+	cbvs[0].Set(&constants, sizeof(constants));
+
+	gpu::cmd::SetComputeCBVTable(_ctx, cbvs, PATHOS_PER_BATCH_SPACE);
+	gpu::cmd::SetComputeSRVTable(_ctx, srvs, PATHOS_PER_BATCH_SPACE);
+	gpu::cmd::SetComputeUAVTable(_ctx, uavs, PATHOS_PER_BATCH_SPACE);
+
+	// Clear arg count
+	{
+		gpu::cmd::SetPSO(_ctx, gfx::ResourceManager::GetSharedResources().m_clearDrawCountPso);
+		gpu::cmd::Dispatch(_ctx, 1, 1, 1);
+		gpu::cmd::UAVBarrier(_ctx, m_indirectArgsBuf.m_buffer);
+	}
+
+	{
+		gpu::cmd::SetPSO(_ctx, gfx::ResourceManager::GetSharedResources().m_cullSubmeshPso);
+		gpu::cmd::Dispatch(_ctx, (m_numSubmeshesSubmittedThisFrame + 63) / 64, 1, 1);
+	}
+
+	gpu::cmd::ResourceBarrier(_ctx, m_indirectArgsBuf.m_buffer, gpu::ResourceState::IndirectArg);
+	gpu::cmd::ResourceBarrier(_ctx, m_instanceIdx_MeshIdx_Buf.m_buffer, gpu::ResourceState::ShaderResource);
+
+	m_builtThisFrameOnGPU = true;
+	m_batchesBuiltThisFrame = m_numSubmeshesSubmittedThisFrame;
 }
+
 
 void MeshRenderer::RenderInstances(gpu::cmd::Context* _ctx)
 {
@@ -190,7 +267,14 @@ void MeshRenderer::RenderInstances(gpu::cmd::Context* _ctx)
 	viewDescriptors[0].Set(m_instanceXformBuf.m_buffer);
 	gpu::cmd::SetGraphicsSRVTable(_ctx, viewDescriptors, PATHOS_PER_VIEW_SPACE);
 
-	gpu::cmd::DrawIndexedInstancedIndirect(_ctx, m_indirectArgsBuf.m_buffer, 0, m_batchesBuiltThisFrame);
+	if (m_builtThisFrameOnGPU)
+	{
+		gpu::cmd::DrawIndexedInstancedIndirect(_ctx, m_indirectArgsBuf.m_buffer, sizeof(uint32_t), m_batchesBuiltThisFrame, m_indirectArgsBuf.m_buffer, 0);
+	}
+	else
+	{
+		gpu::cmd::DrawIndexedInstancedIndirect(_ctx, m_indirectArgsBuf.m_buffer, 0, m_batchesBuiltThisFrame);
+	}
 }
 
 
@@ -200,6 +284,8 @@ void MeshRenderer::Clear()
 	m_meshes.Clear();
 
 	m_batchesBuiltThisFrame = 0;
+	m_numSubmeshesSubmittedThisFrame = 0;
+	m_builtThisFrameOnGPU = false;
 }
 
 }

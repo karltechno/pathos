@@ -57,17 +57,24 @@ using ModelIdx = Index<Model>;
 
 struct SharedResources
 {
+	// EnvMap
 	gpu::PSORef m_bakeIrradPso;
 	gpu::PSORef m_bakeGgxPso;
 	gpu::PSORef m_equiRectToCubePso;
+	gpu::TextureRef m_ggxLut;
 
+	// Copying
 	gpu::PSORef m_copyTexturePso;
 	gpu::PSORef m_copyTextureArrayPso;
 
+	// Generic textures
 	TextureIdx m_texBlackIdx;
 	TextureIdx m_texWhiteIdx;
 
-	gpu::TextureRef m_ggxLut;
+
+	// Culling
+	gpu::PSORef m_cullSubmeshPso;
+	gpu::PSORef m_clearDrawCountPso;
 };
 
 SharedResources const& GetSharedResources();

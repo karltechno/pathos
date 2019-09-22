@@ -98,6 +98,12 @@ static void InitSharedResources()
 	gpu::ShaderRef copyTexArrayCs = ResourceManager::LoadShader("shaders/CopyTextureArray.cs.cso", gpu::ShaderType::Compute);
 	s_state.m_sharedResources.m_copyTextureArrayPso = gpu::CreateComputePSO(copyTexArrayCs, "Copy_Texture_Array");
 
+	gpu::ShaderRef cullSubmeshCs = ResourceManager::LoadShader("shaders/gpu_culling/CullSubmeshes.cs.cso", gpu::ShaderType::Compute);
+	s_state.m_sharedResources.m_cullSubmeshPso = gpu::CreateComputePSO(cullSubmeshCs, "Cull_Submeshes");
+
+	gpu::ShaderRef clearDrawCounterCs = ResourceManager::LoadShader("shaders/gpu_culling/ClearDrawCounter.cs.cso", gpu::ShaderType::Compute);
+	s_state.m_sharedResources.m_clearDrawCountPso = gpu::CreateComputePSO(clearDrawCounterCs, "Cull_ClearDrawCounter");
+
 	{
 		uint32_t const c_blackWhiteDim = 4;
 		uint32_t texels[c_blackWhiteDim * c_blackWhiteDim];

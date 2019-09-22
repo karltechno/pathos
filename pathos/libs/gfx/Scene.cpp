@@ -20,9 +20,12 @@
 #include "DebugRender.h"
 #include "ShadowUtils.h"
 #include "Material.h"
+#include "core/CVar.h"
 
 namespace gfx
 {
+
+core::CVar<bool> s_gpuCulling("gfx.gpu_culling", "use gpu culling", false);
 
 static kt::AABB CalcSceneBounds(gfx::Scene const& _scene)
 {
@@ -222,7 +225,14 @@ void Scene::SubmitInstances()
 		}
 	}
 
-	m_meshRenderer.BuildMultiDrawBuffersCPU(gpu::GetMainThreadCommandCtx());
+	if (s_gpuCulling)
+	{
+		m_meshRenderer.BuildMultiDrawBuffersGPU(gpu::GetMainThreadCommandCtx(), m_scratchCullingBuffers);
+	}
+	else
+	{
+		m_meshRenderer.BuildMultiDrawBuffersCPU(gpu::GetMainThreadCommandCtx());
+	}
 }
 
 
@@ -239,7 +249,10 @@ void Scene::RenderCascadeViews(gpu::cmd::Context* _ctx)
 
 	for (uint32_t cascadeIdx = 0; cascadeIdx < c_numShadowCascades; ++cascadeIdx)
 	{
-		gpu::cmd::ClearDepth(_ctx, m_shadowCascadeTex, 1.0f, cascadeIdx);
+		{
+			GPU_PROFILE_SCOPE(_ctx, "Scene::ClearShadowCascade", GPU_PROFILE_COLOUR(0x00, 0xff, 0x00));
+			gpu::cmd::ClearDepth(_ctx, m_shadowCascadeTex, 1.0f, cascadeIdx);
+		}
 		gpu::cmd::SetDepthBuffer(_ctx, m_shadowCascadeTex, cascadeIdx);
 		gpu::DescriptorData cbv;
 		cbv.Set(m_shadowCascades[cascadeIdx].GetViewProj().Data(), sizeof(kt::Mat4));

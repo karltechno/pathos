@@ -80,6 +80,8 @@ public:
 	// TODO: Separate for each view, culling etc.
 	gfx::MeshRenderer m_meshRenderer;
 
+	gfx::GPUCullingBuffers m_scratchCullingBuffers;
+
 	kt::Array<Light> m_lights;
 	gpu::BufferRef m_lightGpuBuf;
 
