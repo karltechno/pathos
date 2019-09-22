@@ -1563,14 +1563,14 @@ void Device_D3D12::Init(void* _nativeWindowHandle, bool _useDebugLayer)
 		{
 			D3D_CHECK(infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE));
 			D3D_CHECK(infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE));
-			D3D_CHECK(infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, TRUE));
+			D3D_CHECK(infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, FALSE));
 
 			D3D12_MESSAGE_ID filteredMessages[] = 
 			{ 
 				// Disabled due to debug layer issue after latest NVidia drivers
 				// CPU descriptors are no longer 'virtualized' for quick conversion into actual pointers.
 				// See: https://www.gamedev.net/forums/topic/701611-copydescriptorssimple-copying-between-heaps/?do=findComment&comment=5403086
-				D3D12_MESSAGE_ID_COPY_DESCRIPTORS_INVALID_RANGES 
+				D3D12_MESSAGE_ID_COPY_DESCRIPTORS_INVALID_RANGES,
 			};
 
 			D3D12_INFO_QUEUE_FILTER filter = {};
@@ -2024,7 +2024,7 @@ bool Init(void* _nwh)
 	// TODO: Toggle debug layer
 	g_device = new Device_D3D12();
 	// TODO
-	g_device->Init(_nwh, false);
+	g_device->Init(_nwh, true);
 	return true;
 }
 
