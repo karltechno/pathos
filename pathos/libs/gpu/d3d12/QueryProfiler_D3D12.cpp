@@ -55,6 +55,8 @@ void QueryProfiler_D3D12::EndQuery(ID3D12GraphicsCommandList* _list, QueryIndex 
 	uint32_t const frameIdx = gpu::CPUFrameIndexWrapped();
 	FrameInfo& frame = m_frames[frameIdx];
 	KT_ASSERT(frame.m_numQueries >= _queryIdx);
+	KT_UNUSED(frame);
+
 	uint32_t const queryIdxOffs = _queryIdx*2;
 	_list->EndQuery(m_queryHeap, D3D12_QUERY_TYPE_TIMESTAMP, queryIdxOffs + 1);
 	uint64_t const byteOffs = (queryIdxOffs + frameIdx * c_maxQueries * 2) * sizeof(uint64_t);
@@ -76,11 +78,16 @@ void QueryProfiler_D3D12::ResolveFrame(uint32_t _frameIdx)
 	}
 
 	uint64_t* data;
-	m_readbackRes->Map(0, nullptr, (void**)&data);
+
+	D3D12_RANGE range;
+	range.Begin = _frameIdx * 2 * c_maxQueries * sizeof(uint64_t);
+	range.End = range.Begin + 2 * c_maxQueries * sizeof(uint64_t);
+
+	m_readbackRes->Map(0, &range, (void**)&data);
 	D3D12_RANGE const rangeEmpty{};
 	KT_SCOPE_EXIT(m_readbackRes->Unmap(0, &rangeEmpty));
 
-	data += _frameIdx * 2 * c_maxQueries;
+	//data += _frameIdx * 2 * c_maxQueries;
 
 	for (uint32_t i = 0; i < frameInfo.m_numQueries; ++i)
 	{
