@@ -21,7 +21,7 @@ struct ResizableDynamicBuffer
 	}
 
 	// Note: Doesn't copy data - add if necessary.
-	void EnsureSize(gpu::cmd::Context* _ctx, uint32_t _numElements)
+	void EnsureSize(gpu::cmd::Context* _ctx, uint32_t _numElements, bool _copy_old_data)
 	{
 		KT_ASSERT(m_buffer.IsValid());
 
@@ -43,15 +43,16 @@ struct ResizableDynamicBuffer
 			desc.m_sizeInBytes = newSize * m_stride;
 			gpu::BufferRef newBuffer = gpu::CreateBuffer(desc, nullptr, name);
 		
-			gpu::cmd::ResourceBarrier(_ctx, m_buffer, gpu::ResourceState::CopySrc);
-			gpu::cmd::ResourceBarrier(_ctx, newBuffer, gpu::ResourceState::CopyDest);
-			gpu::cmd::FlushBarriers(_ctx);
+			if (_copy_old_data)
+			{
+				gpu::cmd::ResourceBarrier(_ctx, m_buffer, gpu::ResourceState::CopySrc);
+				gpu::cmd::ResourceBarrier(_ctx, newBuffer, gpu::ResourceState::CopyDest);
+				gpu::cmd::FlushBarriers(_ctx);
 
-			gpu::cmd::CopyBufferRegion(_ctx, newBuffer, 0, m_buffer, 0, oldSizeInBytes);
+				gpu::cmd::CopyBufferRegion(_ctx, newBuffer, 0, m_buffer, 0, oldSizeInBytes);
+			}
 
-			// TODO: Awkward/unecessary flushes
 			gpu::cmd::ResourceBarrier(_ctx, newBuffer, gpu::ResourceState::CopyDest);
-			gpu::cmd::FlushBarriers(_ctx);
 
 			m_buffer = newBuffer;
 
@@ -63,9 +64,9 @@ struct ResizableDynamicBuffer
 		return BeginUpdate(_ctx, m_size);
 	}
 
-	void* BeginUpdate(gpu::cmd::Context* _ctx, uint32_t _numElements)
+	void* BeginUpdate(gpu::cmd::Context* _ctx, uint32_t _numElements, bool _copy_old_data_on_resize = false)
 	{
-		EnsureSize(_ctx, _numElements);
+		EnsureSize(_ctx, _numElements, _copy_old_data_on_resize);
 
 		if (m_isTransient)
 		{
@@ -89,13 +90,13 @@ struct ResizableDynamicBuffer
 		}
 	}
 
-	void Update(gpu::cmd::Context* _ctx, void* _ptr, uint32_t _numElements)
+	void Update(gpu::cmd::Context* _ctx, void* _ptr, uint32_t _numElements, bool _copy_old_data_on_resize = false)
 	{
 		KT_ASSERT(m_buffer.IsValid());
 
 		if (!m_isTransient)
 		{
-			EnsureSize(_ctx, _numElements);
+			EnsureSize(_ctx, _numElements, _copy_old_data_on_resize);
 		}
 
 		memcpy(BeginUpdate(_ctx, _numElements), _ptr, _numElements * m_stride);
@@ -105,7 +106,7 @@ struct ResizableDynamicBuffer
 	void* BeginUpdateAtOffset(gpu::cmd::Context* _ctx, uint32_t _elementOffset, uint32_t _numElements)
 	{
 		KT_ASSERT(!m_isTransient);
-		EnsureSize(_ctx, m_stride * (_elementOffset + _numElements));
+		EnsureSize(_ctx, _elementOffset + _numElements, true);
 		return gpu::cmd::BeginUpdateDynamicBuffer(_ctx, m_buffer, _numElements * m_stride, _elementOffset * m_stride).Data();
 	}
 
